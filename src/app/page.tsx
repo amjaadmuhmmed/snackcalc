@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -13,53 +14,62 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2 } from "lucide-react";
+import { Plus, Minus, Edit, Trash2, ListOrdered, ClipboardList } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
-import { addSnack, getSnacks, updateSnack, deleteSnack } from "./actions";
+import { addSnack, getSnacks, updateSnack, deleteSnack, saveBill } from "./actions";
+import type { Snack, BillInput } from "@/lib/db"; // Import Snack type from db
+import Link from "next/link";
 
-interface Snack {
-  id: string;
-  name: string;
-  price: number;
-  category: string;
+interface SelectedSnack extends Snack {
+  quantity: number;
 }
 
 const snackSchema = z.object({
   name: z.string().min(3, {
     message: "Name must be at least 3 characters.",
   }),
-  price: z.string().refine((value) => !isNaN(parseFloat(value)), {
-    message: "Price must be a number.",
-  }).transform(value => parseFloat(value)),
+  // Price validation remains the same, ensure parsing happens in the action
+  price: z.string().refine((value) => !isNaN(parseFloat(value)) && parseFloat(value) > 0, {
+    message: "Price must be a positive number.",
+  }),
   category: z.string().min(3, {
     message: "Category must be at least 3 characters.",
   }),
 });
 
-type SnackSchemaType = z.infer<typeof snackSchema>;
+// Type for the form data (matches schema)
+type SnackFormDataType = z.infer<typeof snackSchema>;
 
-interface SelectedSnack extends Snack {
-  quantity: number;
-}
 
 const generatePaymentLink = (total: number) => {
-    const upiLink = `upi://pay?pa=8943145359@ptyes&pn=AMJAD%20K%20M&am=${total}&cu=INR`;
-    const paytmFallback = `https://p.paytm.me/xCTH/xyz?amount=${total}`;
+    const upiId = process.env.NEXT_PUBLIC_UPI_ID || "your-default-upi-id@paytm"; // Fallback UPI ID
+    const upiLink = `upi://pay?pa=${upiId}&pn=YourStoreName&am=${total.toFixed(2)}&cu=INR`;
+    // Fallback link if UPI app is not installed (can be your Paytm payment page link)
+    const paytmFallback = `https://p.paytm.me/xCTH/your-link?amount=${total.toFixed(2)}`; // Replace with your actual Paytm link
 
     return {
       upiLink,
       paytmFallback,
     };
-  };
+};
+
+// Function to generate a random order number (simple example)
+const generateOrderNumber = () => {
+    return `ORD-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+};
 
 export default function Home() {
   const [snacks, setSnacks] = useState<Snack[]>([]);
   const [selectedSnacks, setSelectedSnacks] = useState<SelectedSnack[]>([]);
   const [editingSnackId, setEditingSnackId] = useState<string | null>(null);
-  const [serviceCharge, setServiceCharge] = useState<number>(0); // Added service charge state
+  const [serviceCharge, setServiceCharge] = useState<number>(0); // State for the actual numeric value
+  const [serviceChargeInput, setServiceChargeInput] = useState<string>("0"); // State for the input field's string value
+  const [orderNumber, setOrderNumber] = useState<string>(''); // State for order number
   const { toast } = useToast();
   const [isAdmin, setIsAdmin] = useState(false);
   const [password, setPassword] = useState("");
+  const [isSavingBill, setIsSavingBill] = useState(false);
+  const [isLoadingSnacks, setIsLoadingSnacks] = useState(true); // Loading state for snacks
 
   const {
     register,
@@ -67,33 +77,58 @@ export default function Home() {
     setValue,
     formState: { errors },
     reset
-  } = useForm<SnackSchemaType>({
+  } = useForm<SnackFormDataType>({ // Use the base schema type here
     resolver: zodResolver(snackSchema),
+    defaultValues: {
+      name: "",
+      price: "", // Default price as string
+      category: "",
+    }
   });
 
-  useEffect(() => {
-    const loadSnacks = async () => {
-      try {
-        const snacksFromDb = await getSnacks();
-        setSnacks(snacksFromDb);
-      } catch (error: any) {
-        console.error("Failed to load snacks:", error);
-        toast({
-          variant: "destructive",
-          title: "Failed to load snacks.",
-          description: "Please check your internet connection and Firebase configuration.",
-        });
-        setSnacks([]);
-      }
-    };
+  // Function to load snacks
+  const loadSnacks = async () => {
+    setIsLoadingSnacks(true); // Start loading
+    console.log("Attempting to load snacks...");
+    try {
+      const snacksFromDb = await getSnacks(); // Call the server action
+      console.log("Snacks fetched from action:", snacksFromDb);
+      setSnacks(snacksFromDb || []); // Update state, ensure it's an array
+    } catch (error: any) {
+      console.error("Failed to load snacks:", error);
+      toast({
+        variant: "destructive",
+        title: "Failed to load snacks.",
+        description: error.message || "Please check your connection and configuration.",
+      });
+      setSnacks([]); // Set to empty array on error
+    } finally {
+        setIsLoadingSnacks(false); // Finish loading
+        console.log("Finished loading snacks.");
+    }
+  };
 
+
+  useEffect(() => {
     loadSnacks();
-  }, [toast]);
+    setOrderNumber(generateOrderNumber()); // Generate initial order number
+  }, []); // Empty dependency array means this runs once on mount
+
+  // Update input string state when number state changes (e.g., reset)
+  useEffect(() => {
+    // Avoid resetting input if it's currently focused and empty/invalid
+    if (document.activeElement?.id !== 'service-charge') {
+        setServiceChargeInput(serviceCharge.toString());
+    }
+  }, [serviceCharge]);
+
 
   const calculateTotal = () => {
     const snacksTotal = selectedSnacks.reduce((total, snack) => total + snack.price * snack.quantity, 0);
-    return snacksTotal + serviceCharge; // Add service charge to the total
+    // serviceCharge state (number) is used for calculation
+    return snacksTotal + serviceCharge;
   };
+
 
   const handleSnackIncrement = (snack: Snack) => {
     setSelectedSnacks((prevSelected) => {
@@ -103,7 +138,8 @@ export default function Home() {
           s.id === snack.id ? { ...s, quantity: s.quantity + 1 } : s
         );
       } else {
-        return [...prevSelected, { ...snack, quantity: 1 }];
+        // Ensure price is a number when adding to selected snacks
+        return [...prevSelected, { ...snack, price: Number(snack.price), quantity: 1 }];
       }
     });
   };
@@ -133,52 +169,59 @@ export default function Home() {
   const handleEditSnack = (snack: Snack) => {
     setEditingSnackId(snack.id);
     setValue("name", snack.name);
+    // Price needs to be set as string for the input field
     setValue("price", snack.price.toString());
     setValue("category", snack.category);
   };
 
-  const onSubmit = async (data: SnackSchemaType) => {
+  // Use server action for form submission
+  const handleFormSubmit = async (formData: FormData) => {
+    // setIsSavingBill(true); // Renamed state, maybe use a different state for snack saving?
     try {
       let result;
       if (editingSnackId) {
-        result = await updateSnack(editingSnackId, new FormData(document.querySelector('form')!));
-        setEditingSnackId(null);
+        result = await updateSnack(editingSnackId, formData);
+        setEditingSnackId(null); // Clear editing state on success
       } else {
-        result = await addSnack(new FormData(document.querySelector('form')!));
+        result = await addSnack(formData);
       }
 
       if (result?.success) {
         toast({
           title: result.message,
         });
-        const snacksFromDb = await getSnacks();
-        setSnacks(snacksFromDb);
+        await loadSnacks(); // Reload snacks after successful add/update
+        reset(); // Reset form after successful submission
       } else {
         toast({
           variant: "destructive",
           title: "Uh oh! Something went wrong.",
-          description: result?.message || "There was a problem adding/updating your snack.",
+          description: result?.message || "There was a problem saving the snack.",
         });
       }
-      reset();
     } catch (e: any) {
       toast({
         variant: "destructive",
         title: "Uh oh! Something went wrong.",
-        description: e.message || "There was a problem adding/updating your snack.",
+        description: e.message || "There was a problem saving the snack.",
       });
+    } finally {
+      // setIsSavingBill(false); // Re-enable button
     }
   };
 
+
   const handleDeleteSnack = async (id: string) => {
+     if (!confirm("Are you sure you want to delete this snack?")) {
+       return;
+     }
     try {
       const result = await deleteSnack(id);
       if (result?.success) {
         toast({
           title: result.message,
         });
-        const snacksFromDb = await getSnacks();
-        setSnacks(snacksFromDb);
+        await loadSnacks(); // Reload snacks after deletion
       } else {
         toast({
           variant: "destructive",
@@ -195,12 +238,57 @@ export default function Home() {
     }
   };
 
+  const handleSaveBill = async () => {
+      const currentTotal = calculateTotal(); // Calculate total again to be sure
+      if (currentTotal <= 0 || isSavingBill) return; // Don't save if total is 0 or already saving
+
+      setIsSavingBill(true);
+
+      const billData: BillInput = {
+          orderNumber: orderNumber,
+          items: selectedSnacks.map(s => ({ name: s.name, price: s.price, quantity: s.quantity })),
+          serviceCharge: serviceCharge,
+          totalAmount: currentTotal, // Use the calculated total
+      };
+
+      try {
+          const result = await saveBill(billData);
+          if (result.success) {
+              toast({ title: "Bill saved successfully!" });
+              // Reset the form/selection after saving
+              setSelectedSnacks([]);
+              setServiceCharge(0); // Reset numeric state
+              setServiceChargeInput("0"); // Reset input string state
+              setOrderNumber(generateOrderNumber()); // Generate a new order number for the next bill
+
+          } else {
+              toast({ variant: "destructive", title: "Failed to save bill.", description: result.message });
+          }
+      } catch (error: any) {
+          toast({ variant: "destructive", title: "Error saving bill.", description: error.message });
+      } finally {
+          setIsSavingBill(false);
+      }
+  };
+
+
   const total = calculateTotal();
   const paymentInfo = generatePaymentLink(total);
 
   const handleAdminLogin = () => {
-    if (password === process.env.NEXT_PUBLIC_ADMIN_PASSWORD) {
+    // Use environment variable for password check
+    const adminPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
+    if (!adminPassword) {
+        toast({
+            variant: "destructive",
+            title: "Admin password not configured.",
+            description: "Please set NEXT_PUBLIC_ADMIN_PASSWORD in your environment variables.",
+        });
+        return;
+    }
+    if (password === adminPassword) {
       setIsAdmin(true);
+      setPassword(""); // Clear password field after successful login
     } else {
       toast({
         variant: "destructive",
@@ -209,101 +297,185 @@ export default function Home() {
     }
   };
 
+  // Handles changes to the service charge input
+  const handleServiceChargeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setServiceChargeInput(value); // Update the input string state
+
+    // Allow empty string or valid non-negative decimal numbers (start with digit or .)
+    if (value === "" || /^\d*\.?\d*$/.test(value)) {
+      const parsedValue = parseFloat(value);
+      // If empty string or not a valid number, set numeric state to 0
+      // Otherwise, use the parsed non-negative value
+      setServiceCharge(isNaN(parsedValue) || parsedValue < 0 ? 0 : parsedValue);
+    } else {
+      // If the input is invalid (e.g., contains letters), reset numeric state to 0
+      // but keep the invalid string in the input for user correction
+      setServiceCharge(0);
+    }
+  };
+
+    // Handles blur event for the service charge input
+    const handleServiceChargeInputBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        const parsedValue = parseFloat(value);
+
+        // If the input is empty, or invalid, or negative, reset both states to 0
+        if (value === "" || isNaN(parsedValue) || parsedValue < 0) {
+            setServiceCharge(0);
+            setServiceChargeInput("0");
+        } else {
+            // If valid, ensure the input string matches the numeric state (e.g., remove trailing dot)
+            setServiceCharge(parsedValue);
+            setServiceChargeInput(parsedValue.toString());
+        }
+    };
+
+    // Handles focus event for the service charge input
+    const handleServiceChargeInputFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+        // If the current value is "0", clear the input field
+        if (e.target.value === "0") {
+            setServiceChargeInput("");
+        }
+    };
 
   return (
-    <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-8">
+    <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-4 md:p-8">
+       {/* Header Section */}
+      <div className="w-full max-w-md mb-4 flex justify-between items-center">
+        <CardTitle className="text-lg">SnackCalc</CardTitle>
+        <div className="flex items-center gap-2">
+             <Link href="/bills" passHref>
+                <Button variant="outline" size="icon" aria-label="View Bills">
+                    <ClipboardList className="h-4 w-4" />
+                </Button>
+            </Link>
+            <Badge variant="outline" className="text-sm">
+            Order: {orderNumber}
+            </Badge>
+        </div>
+
+      </div>
+
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-lg">SnackCalc</CardTitle>
+          {/* <CardTitle className="text-lg">SnackCalc</CardTitle> Moved title to top */}
           <CardDescription>Select your snacks and see the total cost.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
+          {/* Snack Selection */}
           <div className="flex flex-wrap gap-2">
-            {snacks.map((snack) => (
-              <div key={snack.id} className="flex items-center space-x-2">
-                <Button
-                  variant="outline"
-                  className="rounded-full"
-                  onClick={() => handleSnackIncrement(snack)}
-                >
-                  {snack.name}
-                </Button>
-                {getSnackQuantity(snack) > 0 && (
-                  <Badge variant="secondary">{getSnackQuantity(snack)}</Badge>
-                )}
-              </div>
-            ))}
+             {isLoadingSnacks ? (
+                 <p className="text-sm text-muted-foreground">Loading snacks...</p>
+             ) : snacks.length === 0 ? (
+                 <p className="text-sm text-muted-foreground">No snacks available. Add snacks below (Admin).</p>
+             ) : (
+                snacks.map((snack) => (
+                  <div key={snack.id} className="flex items-center space-x-1">
+                    <Button
+                      variant="outline"
+                      size="sm" // Smaller buttons for selection
+                      className="rounded-full px-3 py-1 h-auto" // Adjust padding/height
+                      onClick={() => handleSnackIncrement(snack)}
+                    >
+                      {snack.name}
+                    </Button>
+                    {getSnackQuantity(snack) > 0 && (
+                      <Badge variant="secondary" className="text-xs px-1.5 py-0.5"> {/* Smaller badge */}
+                        {getSnackQuantity(snack)}
+                      </Badge>
+                    )}
+                  </div>
+                ))
+             )}
           </div>
           <Separator />
+          {/* Selected Snacks */}
           <div>
-            <h3 className="text-sm font-medium">Selected Snacks</h3>
+            <h3 className="text-sm font-medium mb-2">Selected Snacks</h3>
             {selectedSnacks.length === 0 ? (
-              <p className="text-muted-foreground">No snacks selected.</p>
+              <p className="text-sm text-muted-foreground">No snacks selected.</p>
             ) : (
-              <ul className="mt-2 space-y-1">
+              <ul className="space-y-2">
                 {selectedSnacks.map((snack) => (
-                  <li key={snack.id} className="flex items-center justify-between">
+                  <li key={snack.id} className="flex items-center justify-between text-sm">
                     <div className="flex items-center space-x-2">
                       <span>{snack.name}</span>
-                      <div className="flex items-center">
+                      <div className="flex items-center border rounded-md">
                         <Button
                           variant="ghost"
                           size="icon"
+                          className="h-6 w-6" // Smaller buttons
                           onClick={() => handleSnackDecrement(snack)}
                           disabled={getSnackQuantity(snack) <= 0}
                         >
-                          <Minus className="h-4 w-4" />
+                          <Minus className="h-3 w-3" />
                         </Button>
-                        <Badge variant="secondary">{snack.quantity}</Badge>
+                        <Badge variant="outline" className="text-xs px-1.5 border-none"> {/* No border needed */}
+                          {snack.quantity}
+                        </Badge>
                         <Button
                           variant="ghost"
                           size="icon"
+                           className="h-6 w-6" // Smaller buttons
                           onClick={() => handleSnackIncrement(snack)}
                         >
-                          <Plus className="h-4 w-4" />
+                          <Plus className="h-3 w-3" />
                         </Button>
                       </div>
                     </div>
-                    <span>₹{(snack.price * snack.quantity).toFixed(2)}</span>
+                    {/* Ensure price is displayed correctly */}
+                    <span>₹{typeof snack.price === 'number' ? (snack.price * snack.quantity).toFixed(2) : 'N/A'}</span>
                   </li>
                 ))}
               </ul>
             )}
           </div>
-          {/* Add service charge input field */}
-          <div className="grid gap-2">
-            <Label htmlFor="service-charge">Service Charge</Label>
+          {/* Service Charge Input */}
+          <div className="grid gap-1.5"> {/* Reduced gap */}
+            <Label htmlFor="service-charge" className="text-sm">Service Charge</Label>
             <Input
               id="service-charge"
-              type="number"
+              type="text" // Keep type as text for flexible input
               placeholder="Enter service charge"
-              value={serviceCharge.toString()}
-              onChange={(e) => setServiceCharge(Number(e.target.value))}
+              // Bind value to the input string state
+              value={serviceChargeInput}
+              onChange={handleServiceChargeInputChange}
+              onBlur={handleServiceChargeInputBlur} // Format/reset on blur
+              onFocus={handleServiceChargeInputFocus} // Clear on focus if "0"
+              className="h-9 text-sm" // Smaller input
+              inputMode="decimal" // Hint for mobile keyboards
             />
           </div>
           <Separator />
-          <div className="flex flex-col items-center justify-between">
-            <span className="text-lg font-semibold">Total:</span>
-            <Badge variant="secondary" className="text-lg font-semibold">₹{total.toFixed(2)}</Badge>
+          {/* Total and Payment */}
+          <div className="flex flex-col items-center justify-between gap-3">
+             <div className="flex justify-between w-full items-center">
+                 <span className="text-base font-semibold">Total:</span>
+                 <Badge variant="secondary" className="text-base font-semibold">₹{total.toFixed(2)}</Badge>
+             </div>
 
             {total > 0 && (
-                <>
+                <div className="flex flex-col items-center gap-3 w-full">
                     <QRCodeCanvas value={paymentInfo.upiLink} size={128} level="H" />
-                    <Button asChild>
-                      <a href={`${paymentInfo.paytmFallback}`} target="_blank" rel="noopener noreferrer">
-                        Pay Now
-                      </a>
+                     <Button onClick={handleSaveBill} disabled={isSavingBill || total <= 0} className="w-full">
+                        {isSavingBill ? 'Saving Bill...' : 'Save Bill'}
                     </Button>
-                </>
+                     {/* Optional: Display Paytm fallback link - kept for reference if needed */}
+                     {/* <a href={paymentInfo.paytmFallback} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 underline mt-2">
+                         Pay via Paytm Link (Fallback)
+                     </a> */}
+                </div>
             )}
           </div>
         </CardContent>
       </Card>
+
+      {/* Admin Section */}
       {!isAdmin ? (
         <Card className="w-full max-w-md mt-4">
           <CardHeader>
             <CardTitle className="text-lg">Admin Login</CardTitle>
-            <CardDescription>Enter the admin password to manage snacks.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-2">
@@ -313,70 +485,86 @@ export default function Home() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()} // Login on Enter
               />
             </div>
-            <Button className="mt-4" onClick={handleAdminLogin}>Login</Button>
+            <Button className="mt-4 w-full" onClick={handleAdminLogin}>Login</Button>
           </CardContent>
         </Card>
       ) : (
         <>
+          {/* Add/Update Snack Form */}
           <Card className="w-full max-w-md mt-4">
             <CardHeader>
               <CardTitle className="text-lg">{editingSnackId ? "Update Snack" : "Add a Snack"}</CardTitle>
-              <CardDescription>{editingSnackId ? "Update the snack details." : "Add a new snack to the listing."}</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4">
+              {/* Use form element and server action */}
+              <form action={handleFormSubmit} className="grid gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="name">Name</Label>
-                  <Input id="name" type="text" placeholder="Snack Name" {...register("name")} />
-                  {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
+                  <Input id="name" type="text" placeholder="Snack Name" {...register("name")} required/>
+                  {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="price">Price</Label>
-                  <Input id="price" type="text" placeholder="Snack Price" {...register("price")} />
-                  {errors.price && <p className="text-sm text-red-500">{errors.price.message}</p>}
+                  {/* Ensure price input is type text for better control, validation handles number */}
+                  <Input id="price" type="text" placeholder="Snack Price" {...register("price")} required/>
+                  {errors.price && <p className="text-sm text-destructive">{errors.price.message}</p>}
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="category">Category</Label>
-                  <Input id="category" type="text" placeholder="Snack Category" {...register("category")} />
-                  {errors.category && <p className="text-sm text-red-500">{errors.category.message}</p>}
+                  <Input id="category" type="text" placeholder="Snack Category" {...register("category")} required/>
+                  {errors.category && <p className="text-sm text-destructive">{errors.category.message}</p>}
                 </div>
-                <Button type="submit">{editingSnackId ? "Update Snack" : "Add Snack"}</Button>
+                 <Button type="submit" disabled={isSavingBill}>
+                    {editingSnackId ? "Update Snack" : "Add Snack"}
+                 </Button>
                 {editingSnackId && (
-                  <Button variant="ghost" onClick={() => { setEditingSnackId(null); reset(); }}>
+                  <Button variant="ghost" type="button" onClick={() => { setEditingSnackId(null); reset(); }}>
                     Cancel Edit
                   </Button>
                 )}
               </form>
             </CardContent>
           </Card>
+
+          {/* Manage Snacks List */}
           <Card className="w-full max-w-md mt-4">
             <CardHeader>
               <CardTitle className="text-lg">Manage Snacks</CardTitle>
-              <CardDescription>Edit or delete existing snacks.</CardDescription>
             </CardHeader>
             <CardContent>
-              <ul className="mt-2 space-y-1">
+              {isLoadingSnacks ? (
+                 <p className="text-sm text-muted-foreground">Loading snacks...</p>
+              ) : snacks.length === 0 ? (
+                 <p className="text-sm text-muted-foreground">No snacks added yet.</p>
+              ) : (
+              <ul className="mt-2 space-y-2">
                 {snacks.map((snack) => {
-                  const price = typeof snack.price === 'number' ? snack.price.toFixed(2) : 'N/A';
-                  return (
-                    <li key={snack.id} className="flex items-center justify-between">
-                      <span>{snack.name} - ₹{price} - {snack.category}</span>
+                   const price = typeof snack.price === 'number' ? snack.price.toFixed(2) : 'N/A';
+                   return (
+                    <li key={snack.id} className="flex items-center justify-between p-2 border rounded-md">
+                      <div className="flex flex-col text-sm">
+                         <span className="font-medium">{snack.name}</span>
+                         <span className="text-muted-foreground">₹{price} - {snack.category}</span>
+                      </div>
                       <div className="flex space-x-2">
-                        <Button variant="secondary" size="icon" onClick={() => handleEditSnack(snack)}>
+                        <Button variant="outline" size="icon" onClick={() => handleEditSnack(snack)} aria-label={`Edit ${snack.name}`}>
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="destructive" size="icon" onClick={() => handleDeleteSnack(snack.id)}>
+                        <Button variant="destructive" size="icon" onClick={() => handleDeleteSnack(snack.id)} aria-label={`Delete ${snack.name}`}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
                     </li>
-                  )
+                   )
                 })}
               </ul>
+              )}
             </CardContent>
           </Card>
+           <Button variant="outline" className="mt-4" onClick={() => setIsAdmin(false)}>Logout Admin</Button>
         </>
       )}
       <Toaster />
@@ -384,3 +572,4 @@ export default function Home() {
   );
 }
 
+    

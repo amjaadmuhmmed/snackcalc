@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow read/write access to the snacks collection
+    match /snacks/{snackId} {
+      allow read, write: if true; // For development/testing. Secure this for production.
+    }
+    // Allow read/write access to the bills collection
+    match /bills/{billId} {
+      allow read, write: if true; // For development/testing. Secure this for production.
+    }
+  }
+}
