@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -360,8 +359,15 @@ export default function Home() {
         if (filteredSnacks.length === 1) {
           handleSnackIncrement(filteredSnacks[0]);
           // handleSnackIncrement already clears the search term
+        } else if (filteredSnacks.length === 0) {
+           toast({
+               variant: "default", // or "destructive" if you prefer
+               title: "No snacks found.",
+               description: `No snacks match "${searchTerm}".`,
+           });
+           setSearchTerm(""); // Clear search term after showing message
         } else {
-          // Optionally clear search term even if no single match
+          // Optionally clear search term even if multiple matches
            setSearchTerm("");
         }
       }
