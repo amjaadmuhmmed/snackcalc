@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -14,7 +14,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, ListOrdered, ClipboardList } from "lucide-react";
+import { Plus, Minus, Edit, Trash2, ListOrdered, ClipboardList, Search } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
 import { addSnack, getSnacks, updateSnack, deleteSnack, saveBill } from "./actions";
 import type { Snack, BillInput } from "@/lib/db"; // Import Snack type from db
@@ -70,6 +70,7 @@ export default function Home() {
   const [password, setPassword] = useState("");
   const [isSavingBill, setIsSavingBill] = useState(false);
   const [isLoadingSnacks, setIsLoadingSnacks] = useState(true); // Loading state for snacks
+  const [searchTerm, setSearchTerm] = useState(""); // State for search term
 
   const {
     register,
@@ -260,6 +261,7 @@ export default function Home() {
               setServiceCharge(0); // Reset numeric state
               setServiceChargeInput("0"); // Reset input string state
               setOrderNumber(generateOrderNumber()); // Generate a new order number for the next bill
+              setSearchTerm(""); // Clear search term
 
           } else {
               toast({ variant: "destructive", title: "Failed to save bill.", description: result.message });
@@ -339,6 +341,16 @@ export default function Home() {
         }
     };
 
+     // Memoized filtered snacks based on search term
+    const filteredSnacks = useMemo(() => {
+        if (!searchTerm) {
+            return snacks; // Return all snacks if search term is empty
+        }
+        return snacks.filter(snack =>
+            snack.name.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    }, [snacks, searchTerm]);
+
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-4 md:p-8">
        {/* Header Section */}
@@ -363,14 +375,28 @@ export default function Home() {
           <CardDescription>Select your snacks and see the total cost.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
+         {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search snacks..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 w-full h-9"
+            />
+          </div>
+
           {/* Snack Selection */}
           <div className="flex flex-wrap gap-2">
              {isLoadingSnacks ? (
                  <p className="text-sm text-muted-foreground">Loading snacks...</p>
-             ) : snacks.length === 0 ? (
+             ) : filteredSnacks.length === 0 && snacks.length > 0 ? (
+                  <p className="text-sm text-muted-foreground">No snacks match your search.</p>
+             ) : filteredSnacks.length === 0 && snacks.length === 0 ? (
                  <p className="text-sm text-muted-foreground">No snacks available. Add snacks below (Admin).</p>
              ) : (
-                snacks.map((snack) => (
+                filteredSnacks.map((snack) => (
                   <div key={snack.id} className="flex items-center space-x-1">
                     <Button
                       variant="outline"
@@ -571,5 +597,3 @@ export default function Home() {
     </div>
   );
 }
-
-    
