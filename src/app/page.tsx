@@ -143,6 +143,8 @@ export default function Home() {
         return [...prevSelected, { ...snack, price: Number(snack.price), quantity: 1 }];
       }
     });
+    // Clear search term after selecting a snack
+    setSearchTerm("");
   };
 
   const handleSnackDecrement = (snack: Snack) => {
@@ -351,6 +353,20 @@ export default function Home() {
         );
     }, [snacks, searchTerm]);
 
+    // Handle Enter key press in search bar
+    const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') {
+        event.preventDefault(); // Prevent potential form submission
+        if (filteredSnacks.length === 1) {
+          handleSnackIncrement(filteredSnacks[0]);
+          // handleSnackIncrement already clears the search term
+        } else {
+          // Optionally clear search term even if no single match
+           setSearchTerm("");
+        }
+      }
+    };
+
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-4 md:p-8">
        {/* Header Section */}
@@ -379,11 +395,14 @@ export default function Home() {
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
+              id="search-snacks"
               type="search"
               placeholder="Search snacks..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={handleSearchKeyDown} // Add keydown handler
               className="pl-8 w-full h-9"
+              aria-label="Search snacks"
             />
           </div>
 
@@ -391,9 +410,9 @@ export default function Home() {
           <div className="flex flex-wrap gap-2">
              {isLoadingSnacks ? (
                  <p className="text-sm text-muted-foreground">Loading snacks...</p>
-             ) : filteredSnacks.length === 0 && snacks.length > 0 ? (
+             ) : filteredSnacks.length === 0 && snacks.length > 0 && searchTerm ? (
                   <p className="text-sm text-muted-foreground">No snacks match your search.</p>
-             ) : filteredSnacks.length === 0 && snacks.length === 0 ? (
+             ): filteredSnacks.length === 0 && snacks.length === 0 ? (
                  <p className="text-sm text-muted-foreground">No snacks available. Add snacks below (Admin).</p>
              ) : (
                 filteredSnacks.map((snack) => (
@@ -471,6 +490,7 @@ export default function Home() {
               onFocus={handleServiceChargeInputFocus} // Clear on focus if "0"
               className="h-9 text-sm" // Smaller input
               inputMode="decimal" // Hint for mobile keyboards
+              aria-label="Service Charge"
             />
           </div>
           <Separator />
@@ -512,6 +532,7 @@ export default function Home() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()} // Login on Enter
+                aria-label="Admin Password"
               />
             </div>
             <Button className="mt-4 w-full" onClick={handleAdminLogin}>Login</Button>
@@ -597,3 +618,5 @@ export default function Home() {
     </div>
   );
 }
+
+    
