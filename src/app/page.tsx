@@ -365,7 +365,8 @@ export default function Home() {
                title: "No snacks found.",
                description: `No snacks match "${searchTerm}".`,
            });
-           setSearchTerm(""); // Clear search term after showing message
+           // Do not clear search term here
+           // setSearchTerm("");
         } else {
           // Optionally clear search term even if multiple matches
            setSearchTerm("");
