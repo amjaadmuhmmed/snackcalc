@@ -102,7 +102,7 @@ export async function getSnacks() { // Renamed to avoid conflict if needed elsew
 
 export async function saveBill(billData: BillInput) {
     try {
-        const result = await addBillToDb(billData);
+        const result = await addBillToDb(billData); // BillInput now includes optional customerName and customerPhoneNumber
         if (result.success) {
             revalidatePath('/bills'); // Revalidate the bills page to show the new bill
             return { success: true, message: 'Bill saved successfully!' };
