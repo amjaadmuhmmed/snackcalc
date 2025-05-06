@@ -92,7 +92,7 @@ export default function BillsPage() {
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-4 md:p-8">
-       <div className="w-full max-w-4xl mb-4 flex justify-between items-center">
+       <div className="w-full max-w-5xl mb-4 flex justify-between items-center"> {/* Increased max-width */}
              <Button variant="outline" size="icon" asChild>
                 <Link href="/" aria-label="Back to SnackCalc">
                     <ArrowLeft className="h-4 w-4" />
@@ -102,7 +102,7 @@ export default function BillsPage() {
             <div style={{ width: '36px' }}></div> {/* Spacer */}
         </div>
 
-      <Card className="w-full max-w-4xl">
+      <Card className="w-full max-w-5xl"> {/* Increased max-width */}
         <CardHeader>
           {/* <CardTitle>Transaction History</CardTitle> */}
           <CardDescription>View all previously generated bills.</CardDescription>
@@ -121,6 +121,7 @@ export default function BillsPage() {
                 <TableRow>
                   <TableHead>Order #</TableHead>
                   <TableHead>Date</TableHead>
+                  <TableHead>Customer</TableHead> {/* Added Customer column */}
                   <TableHead>Items</TableHead>
                   <TableHead className="text-right">Service Ch.</TableHead>
                   <TableHead className="text-right">Total</TableHead>
@@ -130,8 +131,11 @@ export default function BillsPage() {
                 {bills.map((bill) => (
                   <TableRow key={bill.id}>
                     <TableCell className="font-medium">{bill.orderNumber}</TableCell>
-                    {/* Updated date formatting call */}
                     <TableCell className="text-xs text-muted-foreground">{formatFirestoreTimestamp(bill.createdAt)}</TableCell>
+                    <TableCell>
+                        {bill.customerName || '-'} <br />
+                        <span className="text-xs text-muted-foreground">{bill.customerPhoneNumber || '-'}</span>
+                    </TableCell>
                     <TableCell>
                       <ul className="list-disc list-inside text-sm">
                         {bill.items.map((item, index) => (
