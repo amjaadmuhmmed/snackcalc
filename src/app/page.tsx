@@ -449,40 +449,6 @@ export default function Home() {
              )}
           </div>
           <Separator />
-          {/* Customer Details */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="grid gap-1.5">
-              <Label htmlFor="customer-name" className="text-sm">Customer Name</Label>
-              <div className="relative">
-                <UserIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="customer-name"
-                  type="text"
-                  placeholder="Enter customer name"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  className="pl-8 h-9 text-sm"
-                  aria-label="Customer Name"
-                />
-              </div>
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="customer-phone" className="text-sm">Customer Phone</Label>
-              <div className="relative">
-                <Phone className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="customer-phone"
-                  type="tel"
-                  placeholder="Enter customer phone"
-                  value={customerPhoneNumber}
-                  onChange={(e) => setCustomerPhoneNumber(e.target.value)}
-                  className="pl-8 h-9 text-sm"
-                  aria-label="Customer Phone Number"
-                />
-              </div>
-            </div>
-          </div>
-          <Separator />
           {/* Selected Snacks */}
           <div>
             <h3 className="text-sm font-medium mb-2">Selected Snacks</h3>
@@ -523,6 +489,40 @@ export default function Home() {
                 ))}
               </ul>
             )}
+          </div>
+           <Separator />
+          {/* Customer Details */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid gap-1.5">
+              <Label htmlFor="customer-name" className="text-sm">Customer Name</Label>
+              <div className="relative">
+                <UserIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="customer-name"
+                  type="text"
+                  placeholder="Enter customer name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="pl-8 h-9 text-sm"
+                  aria-label="Customer Name"
+                />
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="customer-phone" className="text-sm">Customer Phone</Label>
+              <div className="relative">
+                <Phone className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="customer-phone"
+                  type="tel"
+                  placeholder="Enter customer phone"
+                  value={customerPhoneNumber}
+                  onChange={(e) => setCustomerPhoneNumber(e.target.value)}
+                  className="pl-8 h-9 text-sm"
+                  aria-label="Customer Phone Number"
+                />
+              </div>
+            </div>
           </div>
           {/* Service Charge Input */}
           <div className="grid gap-1.5"> {/* Reduced gap */}
