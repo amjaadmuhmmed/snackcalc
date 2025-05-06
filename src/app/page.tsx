@@ -1,3 +1,4 @@
+// src/app/page.tsx
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -13,7 +14,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, ListOrdered, ClipboardList, Search } from "lucide-react";
+import { Plus, Minus, Edit, Trash2, ListOrdered, ClipboardList, Search, User as UserIcon, Phone } from "lucide-react"; // Added UserIcon and Phone
 import { QRCodeCanvas } from 'qrcode.react';
 import { addSnack, getSnacks, updateSnack, deleteSnack, saveBill } from "./actions";
 import type { Snack, BillInput } from "@/lib/db"; // Import Snack type from db
@@ -64,6 +65,8 @@ export default function Home() {
   const [serviceCharge, setServiceCharge] = useState<number>(0); // State for the actual numeric value
   const [serviceChargeInput, setServiceChargeInput] = useState<string>("0"); // State for the input field's string value
   const [orderNumber, setOrderNumber] = useState<string>(''); // State for order number
+  const [customerName, setCustomerName] = useState<string>("");
+  const [customerPhoneNumber, setCustomerPhoneNumber] = useState<string>("");
   const { toast } = useToast();
   const [isAdmin, setIsAdmin] = useState(false);
   const [password, setPassword] = useState("");
@@ -248,6 +251,8 @@ export default function Home() {
 
       const billData: BillInput = {
           orderNumber: orderNumber,
+          customerName: customerName,
+          customerPhoneNumber: customerPhoneNumber,
           items: selectedSnacks.map(s => ({ name: s.name, price: s.price, quantity: s.quantity })),
           serviceCharge: serviceCharge,
           totalAmount: currentTotal, // Use the calculated total
@@ -261,6 +266,8 @@ export default function Home() {
               setSelectedSnacks([]);
               setServiceCharge(0); // Reset numeric state
               setServiceChargeInput("0"); // Reset input string state
+              setCustomerName("");
+              setCustomerPhoneNumber("");
               setOrderNumber(generateOrderNumber()); // Generate a new order number for the next bill
               setSearchTerm(""); // Clear search term
 
@@ -483,6 +490,40 @@ export default function Home() {
               </ul>
             )}
           </div>
+           <Separator />
+          {/* Customer Details */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid gap-1.5">
+              <Label htmlFor="customer-name" className="text-sm">Customer Name</Label>
+              <div className="relative">
+                <UserIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="customer-name"
+                  type="text"
+                  placeholder="Enter customer name"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="pl-8 h-9 text-sm"
+                  aria-label="Customer Name"
+                />
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="customer-phone" className="text-sm">Customer Phone</Label>
+              <div className="relative">
+                <Phone className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="customer-phone"
+                  type="tel"
+                  placeholder="Enter customer phone"
+                  value={customerPhoneNumber}
+                  onChange={(e) => setCustomerPhoneNumber(e.target.value)}
+                  className="pl-8 h-9 text-sm"
+                  aria-label="Customer Phone Number"
+                />
+              </div>
+            </div>
+          </div>
           {/* Service Charge Input */}
           <div className="grid gap-1.5"> {/* Reduced gap */}
             <Label htmlFor="service-charge" className="text-sm">Service Charge</Label>
@@ -625,5 +666,3 @@ export default function Home() {
     </div>
   );
 }
-
-    
