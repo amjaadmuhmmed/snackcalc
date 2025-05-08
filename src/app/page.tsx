@@ -111,7 +111,7 @@ export default function Home() {
     if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
     }
-  }, [loadSnacks, orderNumber]); // Added loadSnacks and orderNumber
+  }, [loadSnacks, orderNumber]);
 
   useEffect(() => {
     if (document.activeElement?.id !== 'service-charge') {
@@ -121,19 +121,11 @@ export default function Home() {
 
   // Effect to process URL parameters for sharing (points to /orders/[orderId] now)
   useEffect(() => {
-    // This page (/) no longer directly loads shared bills from URL parameters for editing.
-    // It only generates a new shareable link.
-    // The /orders/[orderNumber] page will handle loading and real-time sync.
-    // We can keep the logic that if this page receives old-style params, it could redirect,
-    // but for now, let's simplify and assume sharing always goes to the new /orders page.
-
     const params = new URLSearchParams(window.location.search);
     const legacyOrder = params.get('order');
     const legacyItems = params.get('items');
 
     if (legacyOrder && legacyItems && typeof window !== "undefined") {
-        // Optionally, redirect to the new /orders/ page or inform user
-        // For now, just clear them to avoid confusion if user bookmarks old link
         toast({
             title: "Shared link format updated",
             description: "Please use new share links for real-time collaboration.",
@@ -288,7 +280,6 @@ export default function Home() {
   };
 
   const total = calculateTotal();
-   // Generate UPI link, but payment is not handled on this page directly after saving
   const upiId = process.env.NEXT_PUBLIC_UPI_ID || "your-default-upi-id@paytm";
   const upiLink = `upi://pay?pa=${upiId}&pn=SnackCalc&am=${total.toFixed(2)}&cu=INR&tn=Order%20${orderNumber}`;
 
@@ -322,8 +313,6 @@ export default function Home() {
       const parsedValue = parseFloat(value);
       setServiceCharge(isNaN(parsedValue) || parsedValue < 0 ? 0 : parsedValue);
     } else {
-      // If not a valid number format, reset to 0 or previous valid state
-      // For simplicity, resetting to 0. Could be improved.
       setServiceCharge(0);
     }
   };
@@ -337,7 +326,7 @@ export default function Home() {
           setServiceChargeInput("0");
       } else {
           setServiceCharge(parsedValue);
-          setServiceChargeInput(parsedValue.toFixed(2)); // Format to 2 decimal places on blur
+          setServiceChargeInput(parsedValue.toFixed(2)); 
       }
   };
 
@@ -361,25 +350,22 @@ export default function Home() {
       event.preventDefault();
       if (filteredSnacks.length === 1) {
         handleSnackIncrement(filteredSnacks[0]);
-        // setSearchTerm(""); // Clearing search term moved to handleSnackIncrement
       } else if (filteredSnacks.length === 0 && searchTerm) {
          toast({
              variant: "default",
              title: "No snacks found.",
              description: `No snacks match "${searchTerm}". Try a different term.`,
          });
-         // setSearchTerm(""); // Do not clear search term here
       } else if (filteredSnacks.length > 1) {
         toast({
             title: "Multiple matches",
             description: "Please refine your search or select from the list.",
         });
       }
-      // Do not clear search term if multiple matches or no input
     }
   };
 
-  const handleShareBill = async () => {
+  const handleShareBill = async (currentOrderNumberToUse: string) => {
     if (typeof window === "undefined") return;
 
     const itemsToShare: SharedOrderItem[] = selectedSnacks.map(s => ({
@@ -394,19 +380,18 @@ export default function Home() {
       serviceCharge: serviceCharge,
       customerName: customerName,
       customerPhoneNumber: customerPhoneNumber,
-      // orderNumber is part of the RTDB path, not in the payload itself generally for set
     };
 
     try {
-      await setSharedOrderInRTDB(orderNumber, sharedOrderPayload);
+      await setSharedOrderInRTDB(currentOrderNumberToUse, sharedOrderPayload);
       const baseUrl = window.location.origin;
-      const fullUrl = `${baseUrl}/orders/${orderNumber}`;
+      const fullUrl = `${baseUrl}/orders/${currentOrderNumberToUse}`;
       setShareUrl(fullUrl);
       toast({ title: "Bill ready to share!", description: "Link and QR code updated." });
     } catch (error) {
       console.error("Failed to share bill to RTDB:", error);
       toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
-      setShareUrl(""); // Clear share URL on failure
+      setShareUrl(""); 
     }
   };
 
@@ -416,13 +401,15 @@ export default function Home() {
       <div className="w-full max-w-md mb-4 flex justify-between items-center">
         <CardTitle className="text-lg">SnackCalc</CardTitle>
         <div className="flex items-center gap-2">
-            <Dialog onOpenChange={(open) => {
+            <Dialog onOpenChange={async (open) => {
               if (open) {
-                // Generate new order number if current bill is empty, or use existing one
+                let currentOrderNumberToUse = orderNumber;
                 if (selectedSnacks.length === 0 && total === 0) {
-                    setOrderNumber(generateOrderNumber()); // Generate new one for a fresh share
+                    const newOrderNum = generateOrderNumber();
+                    setOrderNumber(newOrderNum); 
+                    currentOrderNumberToUse = newOrderNum;
                 }
-                handleShareBill(); // This will now also save to RTDB
+                await handleShareBill(currentOrderNumberToUse); 
               }
               setShowShareDialog(open);
             }}>
@@ -439,7 +426,7 @@ export default function Home() {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="flex flex-col items-center gap-4 mt-4">
-                  {shareUrl ? <QRCodeCanvas value={shareUrl} size={160} level="H" className="rounded-md" /> : <p>Generating share link...</p>}
+                  {shareUrl ? <QRCodeCanvas value={shareUrl} size={160} level="H" className="rounded-md" data-ai-hint="sharing qr" /> : <p>Generating share link...</p>}
                   {shareUrl && (
                     <div className="flex w-full items-center space-x-2">
                       <Input value={shareUrl} readOnly className="flex-1" aria-label="Shareable link" />
@@ -600,7 +587,7 @@ export default function Home() {
             <Label htmlFor="service-charge" className="text-sm">Service Charge (₹)</Label>
             <Input
               id="service-charge"
-              type="text" // Using text to allow more flexible input, validation handles number
+              type="text" 
               placeholder="0.00"
               value={serviceChargeInput}
               onChange={handleServiceChargeInputChange}
