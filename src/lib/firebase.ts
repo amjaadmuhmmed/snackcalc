@@ -26,12 +26,10 @@ if (!apiKey) {
 // Firestore infers its URL from projectId.
 // Since RTDB is used by this application, this check is important.
 if (!databaseURL) {
-  // In a production environment or if RTDB is critical, this might also be an error.
-  // For now, a warning during development.
-  console.warn(
-    'FirebaseWarning: NEXT_PUBLIC_FIREBASE_DATABASE_URL is not set. ' +
-    'Firebase Realtime Database may fail to initialize or connect to the correct instance. ' +
-    'Please check your .env.local file or environment configuration.'
+  throw new Error(
+    'FirebaseError: CRITICAL - NEXT_PUBLIC_FIREBASE_DATABASE_URL is not set in environment variables. ' +
+    'Firebase Realtime Database cannot be initialized. Please check your .env file or environment configuration. ' +
+    'It should look like https://your-project-id-default-rtdb.firebaseio.com or https://your-project-id-default-rtdb.region.firebasedatabase.app'
   );
 }
 
@@ -55,3 +53,4 @@ if (!getApps().length) {
 export const firebaseAppInstance: FirebaseApp = app;
 export const db: Firestore = getFirestore(firebaseAppInstance);
 export const rtDb: Database = getDatabase(firebaseAppInstance); // Initialize and export RTDB instance
+
