@@ -1,7 +1,7 @@
 // src/app/orders/[orderNumber]/page.tsx
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,6 +49,7 @@ export default function SharedOrderPage() {
 
   // Debounce timer for RTDB updates
   const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null);
+  const isInitialDataLoaded = useRef(false);
 
 
   const loadAllSnacks = useCallback(async () => {
@@ -74,9 +75,10 @@ export default function SharedOrderPage() {
     if (!orderNumber) return;
 
     setIsLoadingOrder(true);
+    isInitialDataLoaded.current = false; // Reset for new order number or re-subscription
+
     const unsubscribe = subscribeToSharedOrder(orderNumber, (data) => {
       if (data) {
-        // Ensure new array references and correct types for state updates
         setSelectedSnacks(Array.isArray(data.items) ? [...data.items] : []);
         const newServiceCharge = Number(data.serviceCharge) || 0;
         setServiceCharge(newServiceCharge);
@@ -85,20 +87,18 @@ export default function SharedOrderPage() {
         setCustomerPhoneNumber(String(data.customerPhoneNumber) || "");
         setLastUpdated(Number(data.lastUpdatedAt) || Date.now());
         
-        // Only show toast if not the initial load or if data significantly changed
-        // This avoids toast on initial page load if data hasn't changed since last view.
-        if (!isLoadingOrder) {
+        if (isInitialDataLoaded.current) { // Only show toast if not the initial load
              toast({ title: "Order Synced", description: `Order ${orderNumber} updated.` });
         }
       } else {
         toast({ variant: "destructive", title: "Order Not Found", description: `Could not load order ${orderNumber}. It might not exist or there was an error.` });
-        // Consider redirecting or showing a "not found" message
       }
       setIsLoadingOrder(false);
+      isInitialDataLoaded.current = true; // Mark initial data as loaded
     });
 
-    return () => unsubscribe(); // Cleanup subscription on component unmount
-  }, [orderNumber, toast, isLoadingOrder]); // Added isLoadingOrder to dependency array to manage initial toast
+    return () => unsubscribe();
+  }, [orderNumber, toast]);
 
   // Function to push local changes to RTDB
   const updateSharedOrder = useCallback(async () => {
@@ -125,21 +125,23 @@ export default function SharedOrderPage() {
 
   // Debounced RTDB update
   useEffect(() => {
-    if (isLoadingOrder) return; // Don't update while initial load is happening
+    // Don't update while initial load is happening or if it's an update from remote
+    if (isLoadingOrder) return; 
 
     if (debounceTimer) {
       clearTimeout(debounceTimer);
     }
     const timer = setTimeout(() => {
       updateSharedOrder();
-    }, 750); // Adjust debounce delay as needed (e.g., 500ms, 1s)
+    }, 750); 
     setDebounceTimer(timer);
 
     return () => {
-      if (debounceTimer) clearTimeout(debounceTimer);
+      if (timer) clearTimeout(timer); // Clear the correct timer instance
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, isLoadingOrder]); // Added isLoadingOrder
+  // updateSharedOrder is memoized and changes when its own dependencies change.
+  // eslint-disable-next-line react-hooks/exhaustive-deps 
+  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, isLoadingOrder, updateSharedOrder]);
 
 
   const calculateTotal = () => {
