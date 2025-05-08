@@ -1,23 +1,24 @@
 // src/lib/rt_db.ts
 'use client'; // Needed for onValue, set, ref from Firebase SDK client-side
 
-import { ref, onValue, set, serverTimestamp } from 'firebase/database'; // getDatabase removed
+import { ref, onValue, set, serverTimestamp } from 'firebase/database'; 
 import type { Unsubscribe, Database } from 'firebase/database';
 import { rtDb } from './firebase'; // Import the initialized RTDB instance
 
-const SHARED_ORDERS_PATH = 'shared_orders'; // New path for persistent shared orders
+const SHARED_ORDERS_PATH = 'shared_orders'; 
+const RTDB_TIMEOUT_MS = 10000; // 10 seconds timeout for RTDB operations
 
 // Interface for items within a shared order
 export interface SharedOrderItem {
-  id: string; // snackId from Firestore
+  id: string; 
   name: string;
-  price: number; // Price at the time of adding
+  price: number; 
   quantity: number;
 }
 
 // Interface for the entire shared order data stored in RTDB
 export interface SharedOrderData {
-  orderNumber: string; // Should match the key in RTDB
+  orderNumber: string; 
   items: SharedOrderItem[];
   serviceCharge: number;
   customerName: string;
@@ -41,29 +42,36 @@ export function subscribeToSharedOrder(
     if (snapshot.exists()) {
       callback(snapshot.val() as SharedOrderDataSnapshot);
     } else {
-      callback(null); // No data for this order number
+      callback(null); 
     }
   }, (error) => {
     console.error(`Error subscribing to shared order ${orderNumber}:`, error);
-    callback(null); // Propagate error as null state
+    callback(null); 
   });
   return unsubscribe;
 }
 
 // Function to set or update a shared order in RTDB
 export async function setSharedOrderInRTDB(orderNumber: string, billData: Omit<SharedOrderData, 'lastUpdatedAt' | 'orderNumber'>): Promise<void> {
+  console.log("RTDB: Attempting to set data for order:", orderNumber);
   const orderRef = ref(rtDb, `${SHARED_ORDERS_PATH}/${orderNumber}`);
   const dataToSet: SharedOrderData = {
     ...billData,
     orderNumber: orderNumber,
     lastUpdatedAt: serverTimestamp(),
   };
+
+  const setPromise = set(orderRef, dataToSet);
+  const timeoutPromise = new Promise<void>((_, reject) => 
+    setTimeout(() => reject(new Error(`RTDB set operation timed out after ${RTDB_TIMEOUT_MS}ms for order ${orderNumber}`)), RTDB_TIMEOUT_MS)
+  );
+
   try {
-    await set(orderRef, dataToSet);
-    console.log(`Shared order ${orderNumber} updated in RTDB.`);
+    await Promise.race([setPromise, timeoutPromise]);
+    console.log(`RTDB: Shared order ${orderNumber} updated in RTDB.`);
   } catch (error) {
-    console.error(`Failed to update shared order ${orderNumber} in RTDB:`, error);
-    throw error; // Re-throw to be handled by caller
+    console.error(`RTDB: Failed to update shared order ${orderNumber} in RTDB:`, error);
+    throw error; 
   }
 }
 
@@ -88,22 +96,29 @@ export function subscribeToBillState(
     if (snapshot.exists()) {
       callback(snapshot.val() as SharedBillState);
     } else {
-      callback(null); // No data for this order number
+      callback(null); 
     }
   }, (error) => {
     console.error(`Error subscribing to bill ${orderNumber}:`, error);
-    callback(null); // Propagate error as null state
+    callback(null); 
   });
   return unsubscribe;
 }
 
 export async function updateBillInRTDB(orderNumber: string, billData: SharedBillState): Promise<void> {
+  console.log("RTDB: Attempting to set data for (legacy) shared_bill:", orderNumber);
   const billRef = ref(rtDb, `${RTDB_BILLS_PATH}/${orderNumber}`);
+  
+  const setPromise = set(billRef, billData);
+  const timeoutPromise = new Promise<void>((_, reject) => 
+    setTimeout(() => reject(new Error(`RTDB set operation (legacy shared_bill) timed out after ${RTDB_TIMEOUT_MS}ms for order ${orderNumber}`)), RTDB_TIMEOUT_MS)
+  );
+
   try {
-    await set(billRef, billData);
+    await Promise.race([setPromise, timeoutPromise]);
+    console.log(`RTDB: (Legacy) Shared bill ${orderNumber} updated in RTDB.`);
   } catch (error) {
-    console.error(`Failed to update bill ${orderNumber} in RTDB:`, error);
-    // Optionally, re-throw or handle more gracefully
+    console.error(`RTDB: Failed to update (legacy) shared bill ${orderNumber} in RTDB:`, error);
     throw error;
   }
 }
