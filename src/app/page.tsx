@@ -1,7 +1,7 @@
 // src/app/page.tsx
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -14,10 +14,10 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, ListOrdered, ClipboardList, Search, User as UserIcon, Phone, Share2 } from "lucide-react"; // Added Share2
+import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, ArrowLeft } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
 import { addSnack, getSnacks, updateSnack, deleteSnack, saveBill } from "./actions";
-import type { Snack, BillInput } from "@/lib/db"; // Import Snack type from db
+import type { Snack, BillInput } from "@/lib/db";
 import Link from "next/link";
 import {
   Dialog,
@@ -29,6 +29,7 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
+import { setSharedOrderInRTDB, SharedOrderItem } from "@/lib/rt_db";
 
 
 interface SelectedSnack extends Snack {
@@ -49,19 +50,8 @@ const snackSchema = z.object({
 
 type SnackFormDataType = z.infer<typeof snackSchema>;
 
-const generatePaymentLink = (total: number) => {
-    const upiId = process.env.NEXT_PUBLIC_UPI_ID || "your-default-upi-id@paytm";
-    const upiLink = `upi://pay?pa=${upiId}&pn=YourStoreName&am=${total.toFixed(2)}&cu=INR`;
-    const paytmFallback = `https://p.paytm.me/xCTH/your-link?amount=${total.toFixed(2)}`;
-
-    return {
-      upiLink,
-      paytmFallback,
-    };
-};
-
 const generateOrderNumber = () => {
-    return `ORD-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    return `ORD-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 };
 
 export default function Home() {
@@ -98,7 +88,7 @@ export default function Home() {
     }
   });
 
-  const loadSnacks = async () => {
+  const loadSnacks = useCallback(async () => {
     setIsLoadingSnacks(true);
     try {
       const snacksFromDb = await getSnacks();
@@ -114,15 +104,14 @@ export default function Home() {
     } finally {
         setIsLoadingSnacks(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     loadSnacks();
-    // Only set a new order number if one isn't already set (e.g., from URL params)
     if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
     }
-  }, []); // Empty dependency array means this runs once on mount
+  }, [loadSnacks, orderNumber]); // Added loadSnacks and orderNumber
 
   useEffect(() => {
     if (document.activeElement?.id !== 'service-charge') {
@@ -130,74 +119,32 @@ export default function Home() {
     }
   }, [serviceCharge]);
 
-  // Effect to process URL parameters for sharing
+  // Effect to process URL parameters for sharing (points to /orders/[orderId] now)
   useEffect(() => {
-    const processUrlParams = () => {
-      if (snacks.length === 0) return; // Wait for snacks to be loaded
+    // This page (/) no longer directly loads shared bills from URL parameters for editing.
+    // It only generates a new shareable link.
+    // The /orders/[orderNumber] page will handle loading and real-time sync.
+    // We can keep the logic that if this page receives old-style params, it could redirect,
+    // but for now, let's simplify and assume sharing always goes to the new /orders page.
 
-      const params = new URLSearchParams(window.location.search);
-      const sharedOrder = params.get('order');
+    const params = new URLSearchParams(window.location.search);
+    const legacyOrder = params.get('order');
+    const legacyItems = params.get('items');
 
-      if (sharedOrder) {
-        // Reset current bill state before loading shared state
-        setSelectedSnacks([]);
-        setServiceCharge(0);
-        setServiceChargeInput("0");
-        setCustomerName("");
-        setCustomerPhoneNumber("");
-        setSearchTerm("");
-
-        setOrderNumber(sharedOrder);
-
-        const itemsParam = params.get('items');
-        if (itemsParam) {
-          const newSelectedSnacks: SelectedSnack[] = [];
-          const itemPairs = itemsParam.split(',');
-          for (const pair of itemPairs) {
-            const [id, qtyStr] = pair.split(':');
-            const quantity = parseInt(qtyStr, 10);
-            // Ensure snacks are available before finding
-            const snack = snacks.find(s => s.id === id);
-            if (snack && !isNaN(quantity) && quantity > 0) {
-              newSelectedSnacks.push({ ...snack, price: Number(snack.price), quantity });
-            }
-          }
-          setSelectedSnacks(newSelectedSnacks);
-        }
-
-        const chargeParam = params.get('charge');
-        if (chargeParam) {
-          const parsedCharge = parseFloat(chargeParam);
-          if (!isNaN(parsedCharge) && parsedCharge >= 0) {
-            setServiceCharge(parsedCharge);
-            setServiceChargeInput(parsedCharge.toString());
-          }
-        }
-
-        const nameParam = params.get('name');
-        if (nameParam) {
-          setCustomerName(decodeURIComponent(nameParam));
-        }
-
-        const phoneParam = params.get('phone');
-        if (phoneParam) {
-          setCustomerPhoneNumber(decodeURIComponent(phoneParam));
-        }
-        
-        toast({ title: "Bill loaded from shared link!" });
-        // Clear URL params to avoid reprocessing on refresh
+    if (legacyOrder && legacyItems && typeof window !== "undefined") {
+        // Optionally, redirect to the new /orders/ page or inform user
+        // For now, just clear them to avoid confusion if user bookmarks old link
+        toast({
+            title: "Shared link format updated",
+            description: "Please use new share links for real-time collaboration.",
+        });
         window.history.replaceState({}, document.title, window.location.pathname);
-      }
-    };
-
-    if (snacks.length > 0 && window.location.search) {
-        processUrlParams();
     }
-  }, [snacks, toast]);
+  }, [toast]);
 
 
   const calculateTotal = () => {
-    const snacksTotal = selectedSnacks.reduce((total, snack) => total + snack.price * snack.quantity, 0);
+    const snacksTotal = selectedSnacks.reduce((total, snack) => total + Number(snack.price) * snack.quantity, 0);
     return snacksTotal + serviceCharge;
   };
 
@@ -313,7 +260,7 @@ export default function Home() {
           orderNumber: orderNumber,
           customerName: customerName,
           customerPhoneNumber: customerPhoneNumber,
-          items: selectedSnacks.map(s => ({ name: s.name, price: s.price, quantity: s.quantity })),
+          items: selectedSnacks.map(s => ({ name: s.name, price: Number(s.price), quantity: s.quantity })),
           serviceCharge: serviceCharge,
           totalAmount: currentTotal,
       };
@@ -322,12 +269,13 @@ export default function Home() {
           const result = await saveBill(billData);
           if (result.success) {
               toast({ title: "Bill saved successfully!" });
+              // Reset current bill state
               setSelectedSnacks([]);
               setServiceCharge(0);
               setServiceChargeInput("0");
               setCustomerName("");
               setCustomerPhoneNumber("");
-              setOrderNumber(generateOrderNumber());
+              setOrderNumber(generateOrderNumber()); // Generate new order number for next bill
               setSearchTerm("");
           } else {
               toast({ variant: "destructive", title: "Failed to save bill.", description: result.message });
@@ -340,7 +288,10 @@ export default function Home() {
   };
 
   const total = calculateTotal();
-  const paymentInfo = generatePaymentLink(total);
+   // Generate UPI link, but payment is not handled on this page directly after saving
+  const upiId = process.env.NEXT_PUBLIC_UPI_ID || "your-default-upi-id@paytm";
+  const upiLink = `upi://pay?pa=${upiId}&pn=SnackCalc&am=${total.toFixed(2)}&cu=INR&tn=Order%20${orderNumber}`;
+
 
   const handleAdminLogin = () => {
     const adminPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
@@ -371,6 +322,8 @@ export default function Home() {
       const parsedValue = parseFloat(value);
       setServiceCharge(isNaN(parsedValue) || parsedValue < 0 ? 0 : parsedValue);
     } else {
+      // If not a valid number format, reset to 0 or previous valid state
+      // For simplicity, resetting to 0. Could be improved.
       setServiceCharge(0);
     }
   };
@@ -384,12 +337,12 @@ export default function Home() {
           setServiceChargeInput("0");
       } else {
           setServiceCharge(parsedValue);
-          setServiceChargeInput(parsedValue.toString());
+          setServiceChargeInput(parsedValue.toFixed(2)); // Format to 2 decimal places on blur
       }
   };
 
   const handleServiceChargeInputFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-      if (e.target.value === "0") {
+      if (parseFloat(e.target.value) === 0) {
           setServiceChargeInput("");
       }
   };
@@ -408,43 +361,52 @@ export default function Home() {
       event.preventDefault();
       if (filteredSnacks.length === 1) {
         handleSnackIncrement(filteredSnacks[0]);
+        // setSearchTerm(""); // Clearing search term moved to handleSnackIncrement
       } else if (filteredSnacks.length === 0 && searchTerm) {
          toast({
              variant: "default",
              title: "No snacks found.",
-             description: `No snacks match "${searchTerm}".`,
+             description: `No snacks match "${searchTerm}". Try a different term.`,
          });
-      } else {
-         setSearchTerm("");
+         // setSearchTerm(""); // Do not clear search term here
+      } else if (filteredSnacks.length > 1) {
+        toast({
+            title: "Multiple matches",
+            description: "Please refine your search or select from the list.",
+        });
       }
+      // Do not clear search term if multiple matches or no input
     }
   };
 
-  const generateShareUrl = () => {
-    const itemsQueryParam = selectedSnacks
-      .map(s => `${s.id}:${s.quantity}`)
-      .join(',');
+  const handleShareBill = async () => {
+    if (typeof window === "undefined") return;
 
-    const params = new URLSearchParams();
-    params.append('order', orderNumber);
-    if (itemsQueryParam) {
-      params.append('items', itemsQueryParam);
-    }
-    params.append('charge', serviceCharge.toString());
-    if (customerName) {
-      params.append('name', encodeURIComponent(customerName));
-    }
-    if (customerPhoneNumber) {
-      params.append('phone', encodeURIComponent(customerPhoneNumber));
-    }
-    
-    // Ensure window is defined (client-side)
-    if (typeof window !== "undefined") {
-        const baseUrl = window.location.origin + window.location.pathname;
-        const fullUrl = `${baseUrl}?${params.toString()}`;
-        setShareUrl(fullUrl);
-    } else {
-        setShareUrl(""); // Or handle server-side case appropriately
+    const itemsToShare: SharedOrderItem[] = selectedSnacks.map(s => ({
+      id: s.id,
+      name: s.name,
+      price: Number(s.price),
+      quantity: s.quantity,
+    }));
+
+    const sharedOrderPayload = {
+      items: itemsToShare,
+      serviceCharge: serviceCharge,
+      customerName: customerName,
+      customerPhoneNumber: customerPhoneNumber,
+      // orderNumber is part of the RTDB path, not in the payload itself generally for set
+    };
+
+    try {
+      await setSharedOrderInRTDB(orderNumber, sharedOrderPayload);
+      const baseUrl = window.location.origin;
+      const fullUrl = `${baseUrl}/orders/${orderNumber}`;
+      setShareUrl(fullUrl);
+      toast({ title: "Bill ready to share!", description: "Link and QR code updated." });
+    } catch (error) {
+      console.error("Failed to share bill to RTDB:", error);
+      toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
+      setShareUrl(""); // Clear share URL on failure
     }
   };
 
@@ -456,7 +418,11 @@ export default function Home() {
         <div className="flex items-center gap-2">
             <Dialog onOpenChange={(open) => {
               if (open) {
-                generateShareUrl();
+                // Generate new order number if current bill is empty, or use existing one
+                if (selectedSnacks.length === 0 && total === 0) {
+                    setOrderNumber(generateOrderNumber()); // Generate new one for a fresh share
+                }
+                handleShareBill(); // This will now also save to RTDB
               }
               setShowShareDialog(open);
             }}>
@@ -467,20 +433,21 @@ export default function Home() {
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Share Bill</DialogTitle>
+                  <DialogTitle>Share Bill (Real-time)</DialogTitle>
                   <DialogDescription>
-                    Scan the QR code or copy the link to share the current bill with another device.
-                    Changes made on other devices will not sync automatically.
+                    Scan the QR code or copy the link to share and edit this bill in real-time with another device.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="flex flex-col items-center gap-4 mt-4">
-                  {shareUrl && <QRCodeCanvas value={shareUrl} size={160} level="H" className="rounded-md" />}
+                  {shareUrl ? <QRCodeCanvas value={shareUrl} size={160} level="H" className="rounded-md" /> : <p>Generating share link...</p>}
                   {shareUrl && (
                     <div className="flex w-full items-center space-x-2">
                       <Input value={shareUrl} readOnly className="flex-1" aria-label="Shareable link" />
                       <Button onClick={() => {
-                        navigator.clipboard.writeText(shareUrl);
-                        toast({ title: "Link copied to clipboard!" });
+                        if (shareUrl) {
+                            navigator.clipboard.writeText(shareUrl);
+                            toast({ title: "Link copied to clipboard!" });
+                        }
                       }}>
                         Copy
                       </Button>
@@ -502,7 +469,7 @@ export default function Home() {
                     <ClipboardList className="h-4 w-4" />
                 </Button>
             </Link>
-            <Badge variant="outline" className="text-sm">
+            <Badge variant="outline" className="text-sm whitespace-nowrap">
             Order: {orderNumber}
             </Badge>
         </div>
@@ -510,7 +477,7 @@ export default function Home() {
 
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardDescription>Select your snacks and see the total cost.</CardDescription>
+          <CardDescription>Select snacks, add customer details, and calculate the total.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="relative">
@@ -527,23 +494,23 @@ export default function Home() {
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1 rounded-md border bg-muted/20">
              {isLoadingSnacks ? (
-                 <p className="text-sm text-muted-foreground">Loading snacks...</p>
+                 <p className="text-sm text-muted-foreground w-full text-center py-2">Loading snacks...</p>
              ) : filteredSnacks.length === 0 && snacks.length > 0 && searchTerm ? (
-                  <p className="text-sm text-muted-foreground">No snacks match your search.</p>
+                  <p className="text-sm text-muted-foreground w-full text-center py-2">No snacks match your search.</p>
              ): filteredSnacks.length === 0 && snacks.length === 0 ? (
-                 <p className="text-sm text-muted-foreground">No snacks available. Add snacks below (Admin).</p>
+                 <p className="text-sm text-muted-foreground w-full text-center py-2">No snacks available. Add snacks below (Admin).</p>
              ) : (
                 filteredSnacks.map((snack) => (
                   <div key={snack.id} className="flex items-center space-x-1">
                     <Button
                       variant="outline"
                       size="sm"
-                      className="rounded-full px-3 py-1 h-auto"
+                      className="rounded-full px-3 py-1 h-auto text-xs"
                       onClick={() => handleSnackIncrement(snack)}
                     >
-                      {snack.name}
+                      {snack.name} (₹{Number(snack.price).toFixed(2)})
                     </Button>
                     {getSnackQuantity(snack) > 0 && (
                       <Badge variant="secondary" className="text-xs px-1.5 py-0.5">
@@ -560,9 +527,9 @@ export default function Home() {
             {selectedSnacks.length === 0 ? (
               <p className="text-sm text-muted-foreground">No snacks selected.</p>
             ) : (
-              <ul className="space-y-2">
+              <ul className="space-y-2 max-h-48 overflow-y-auto">
                 {selectedSnacks.map((snack) => (
-                  <li key={snack.id} className="flex items-center justify-between text-sm">
+                  <li key={snack.id} className="flex items-center justify-between text-sm p-1.5 rounded-md hover:bg-muted/50">
                     <div className="flex items-center space-x-2">
                       <span>{snack.name}</span>
                       <div className="flex items-center border rounded-md">
@@ -572,10 +539,11 @@ export default function Home() {
                           className="h-6 w-6"
                           onClick={() => handleSnackDecrement(snack)}
                           disabled={getSnackQuantity(snack) <= 0}
+                          aria-label={`Decrease quantity of ${snack.name}`}
                         >
                           <Minus className="h-3 w-3" />
                         </Button>
-                        <Badge variant="outline" className="text-xs px-1.5 border-none">
+                        <Badge variant="outline" className="text-xs px-1.5 border-none tabular-nums">
                           {snack.quantity}
                         </Badge>
                         <Button
@@ -583,12 +551,13 @@ export default function Home() {
                           size="icon"
                            className="h-6 w-6"
                           onClick={() => handleSnackIncrement(snack)}
+                           aria-label={`Increase quantity of ${snack.name}`}
                         >
                           <Plus className="h-3 w-3" />
                         </Button>
                       </div>
                     </div>
-                    <span>₹{typeof snack.price === 'number' ? (snack.price * snack.quantity).toFixed(2) : 'N/A'}</span>
+                    <span className="font-medium tabular-nums">₹{typeof snack.price === 'number' ? (snack.price * snack.quantity).toFixed(2) : 'N/A'}</span>
                   </li>
                 ))}
               </ul>
@@ -603,7 +572,7 @@ export default function Home() {
                 <Input
                   id="customer-name"
                   type="text"
-                  placeholder="Enter customer name"
+                  placeholder="Optional"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   className="pl-8 h-9 text-sm"
@@ -618,7 +587,7 @@ export default function Home() {
                 <Input
                   id="customer-phone"
                   type="tel"
-                  placeholder="Enter customer phone"
+                  placeholder="Optional"
                   value={customerPhoneNumber}
                   onChange={(e) => setCustomerPhoneNumber(e.target.value)}
                   className="pl-8 h-9 text-sm"
@@ -628,11 +597,11 @@ export default function Home() {
             </div>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="service-charge" className="text-sm">Service Charge</Label>
+            <Label htmlFor="service-charge" className="text-sm">Service Charge (₹)</Label>
             <Input
               id="service-charge"
-              type="text"
-              placeholder="Enter service charge"
+              type="text" // Using text to allow more flexible input, validation handles number
+              placeholder="0.00"
               value={serviceChargeInput}
               onChange={handleServiceChargeInputChange}
               onBlur={handleServiceChargeInputBlur}
@@ -646,14 +615,14 @@ export default function Home() {
           <div className="flex flex-col items-center justify-between gap-3">
              <div className="flex justify-between w-full items-center">
                  <span className="text-base font-semibold">Total:</span>
-                 <Badge variant="secondary" className="text-base font-semibold">₹{total.toFixed(2)}</Badge>
+                 <Badge variant="secondary" className="text-base font-semibold tabular-nums">₹{total.toFixed(2)}</Badge>
              </div>
 
             {total > 0 && (
                 <div className="flex flex-col items-center gap-3 w-full">
-                    <QRCodeCanvas value={paymentInfo.upiLink} size={128} level="H" />
+                    <QRCodeCanvas value={upiLink} size={128} level="H" data-ai-hint="payment qr" />
                      <Button onClick={handleSaveBill} disabled={isSavingBill || total <= 0} className="w-full">
-                        {isSavingBill ? 'Saving Bill...' : 'Save Bill'}
+                        {isSavingBill ? 'Saving Bill...' : 'Save Bill & New Order'}
                     </Button>
                 </div>
             )}
@@ -695,8 +664,8 @@ export default function Home() {
                   {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="price">Price</Label>
-                  <Input id="price" type="text" placeholder="Snack Price" {...register("price")} required/>
+                  <Label htmlFor="price">Price (₹)</Label>
+                  <Input id="price" type="text" placeholder="Snack Price" {...register("price")} required inputMode="decimal"/>
                   {errors.price && <p className="text-sm text-destructive">{errors.price.message}</p>}
                 </div>
                 <div className="grid gap-2">
@@ -726,14 +695,14 @@ export default function Home() {
               ) : snacks.length === 0 ? (
                  <p className="text-sm text-muted-foreground">No snacks added yet.</p>
               ) : (
-              <ul className="mt-2 space-y-2">
+              <ul className="mt-2 space-y-2 max-h-60 overflow-y-auto">
                 {snacks.map((snack) => {
                    const price = typeof snack.price === 'number' ? snack.price.toFixed(2) : 'N/A';
                    return (
-                    <li key={snack.id} className="flex items-center justify-between p-2 border rounded-md">
+                    <li key={snack.id} className="flex items-center justify-between p-2 border rounded-md hover:bg-muted/30">
                       <div className="flex flex-col text-sm">
                          <span className="font-medium">{snack.name}</span>
-                         <span className="text-muted-foreground">₹{price} - {snack.category}</span>
+                         <span className="text-xs text-muted-foreground">₹{price} - {snack.category}</span>
                       </div>
                       <div className="flex space-x-2">
                         <Button variant="outline" size="icon" onClick={() => handleEditSnack(snack)} aria-label={`Edit ${snack.name}`}>
