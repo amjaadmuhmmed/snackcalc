@@ -71,6 +71,7 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
+  const [isGeneratingShareUrl, setIsGeneratingShareUrl] = useState(false);
 
 
   const {
@@ -114,8 +115,8 @@ export default function Home() {
   }, [loadSnacks, orderNumber]);
 
   useEffect(() => {
-    if (document.activeElement?.id !== 'service-charge') {
-        setServiceChargeInput(serviceCharge.toString());
+    if (document.activeElement?.id !== 'service-charge' && document.activeElement?.id !== 'shared-service-charge') {
+        setServiceChargeInput(serviceCharge.toFixed(2));
     }
   }, [serviceCharge]);
 
@@ -264,7 +265,7 @@ export default function Home() {
               // Reset current bill state
               setSelectedSnacks([]);
               setServiceCharge(0);
-              setServiceChargeInput("0");
+              // setServiceChargeInput("0"); // This will be handled by useEffect for serviceCharge
               setCustomerName("");
               setCustomerPhoneNumber("");
               setOrderNumber(generateOrderNumber()); // Generate new order number for next bill
@@ -313,7 +314,7 @@ export default function Home() {
       const parsedValue = parseFloat(value);
       setServiceCharge(isNaN(parsedValue) || parsedValue < 0 ? 0 : parsedValue);
     } else {
-      setServiceCharge(0);
+      setServiceCharge(0); // If invalid chars, set to 0
     }
   };
 
@@ -323,10 +324,10 @@ export default function Home() {
 
       if (value === "" || isNaN(parsedValue) || parsedValue < 0) {
           setServiceCharge(0);
-          setServiceChargeInput("0");
+          setServiceChargeInput("0.00");
       } else {
           setServiceCharge(parsedValue);
-          setServiceChargeInput(parsedValue.toFixed(2)); 
+          setServiceChargeInput(parsedValue.toFixed(2));
       }
   };
 
@@ -365,8 +366,14 @@ export default function Home() {
     }
   };
 
-  const handleShareBill = async (currentOrderNumberToUse: string) => {
-    if (typeof window === "undefined") return;
+ const handleShareBill = async (currentOrderNumberToUse: string) => {
+    if (typeof window === "undefined") {
+        setShareUrl("");
+        setIsGeneratingShareUrl(false);
+        return;
+    }
+    setIsGeneratingShareUrl(true);
+    setShareUrl(""); // Clear previous URL while generating new one
 
     const itemsToShare: SharedOrderItem[] = selectedSnacks.map(s => ({
       id: s.id,
@@ -391,7 +398,9 @@ export default function Home() {
     } catch (error) {
       console.error("Failed to share bill to RTDB:", error);
       toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
-      setShareUrl(""); 
+      setShareUrl(""); // Ensure URL is cleared on error
+    } finally {
+      setIsGeneratingShareUrl(false);
     }
   };
 
@@ -401,17 +410,17 @@ export default function Home() {
       <div className="w-full max-w-md mb-4 flex justify-between items-center">
         <CardTitle className="text-lg">SnackCalc</CardTitle>
         <div className="flex items-center gap-2">
-            <Dialog onOpenChange={async (open) => {
+            <Dialog open={showShareDialog} onOpenChange={async (open) => {
+              setShowShareDialog(open);
               if (open) {
                 let currentOrderNumberToUse = orderNumber;
                 if (selectedSnacks.length === 0 && total === 0) {
                     const newOrderNum = generateOrderNumber();
-                    setOrderNumber(newOrderNum); 
+                    setOrderNumber(newOrderNum);
                     currentOrderNumberToUse = newOrderNum;
                 }
-                await handleShareBill(currentOrderNumberToUse); 
+                await handleShareBill(currentOrderNumberToUse);
               }
-              setShowShareDialog(open);
             }}>
               <DialogTrigger asChild>
                 <Button variant="outline" size="icon" aria-label="Share Bill">
@@ -426,19 +435,25 @@ export default function Home() {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="flex flex-col items-center gap-4 mt-4">
-                  {shareUrl ? <QRCodeCanvas value={shareUrl} size={160} level="H" className="rounded-md" data-ai-hint="sharing qr" /> : <p>Generating share link...</p>}
-                  {shareUrl && (
-                    <div className="flex w-full items-center space-x-2">
-                      <Input value={shareUrl} readOnly className="flex-1" aria-label="Shareable link" />
-                      <Button onClick={() => {
-                        if (shareUrl) {
-                            navigator.clipboard.writeText(shareUrl);
-                            toast({ title: "Link copied to clipboard!" });
-                        }
-                      }}>
-                        Copy
-                      </Button>
-                    </div>
+                  {isGeneratingShareUrl ? (
+                    <p>Generating share link...</p>
+                  ) : shareUrl ? (
+                    <>
+                      <QRCodeCanvas value={shareUrl} size={160} level="H" className="rounded-md" data-ai-hint="sharing qr" />
+                      <div className="flex w-full items-center space-x-2">
+                        <Input value={shareUrl} readOnly className="flex-1" aria-label="Shareable link" />
+                        <Button onClick={() => {
+                          if (shareUrl) {
+                              navigator.clipboard.writeText(shareUrl);
+                              toast({ title: "Link copied to clipboard!" });
+                          }
+                        }}>
+                          Copy
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                     <p className="text-destructive">Failed to generate share link. Check connection or try again.</p>
                   )}
                 </div>
                 <DialogFooter className="mt-4">
@@ -587,7 +602,7 @@ export default function Home() {
             <Label htmlFor="service-charge" className="text-sm">Service Charge (₹)</Label>
             <Input
               id="service-charge"
-              type="text" 
+              type="text"
               placeholder="0.00"
               value={serviceChargeInput}
               onChange={handleServiceChargeInputChange}
@@ -684,7 +699,7 @@ export default function Home() {
               ) : (
               <ul className="mt-2 space-y-2 max-h-60 overflow-y-auto">
                 {snacks.map((snack) => {
-                   const price = typeof snack.price === 'number' ? snack.price.toFixed(2) : 'N/A';
+                   const price = typeof snack.price === 'number' ? snack.price.toFixed(2) : (typeof snack.price === 'string' ? parseFloat(snack.price).toFixed(2) : 'N/A');
                    return (
                     <li key={snack.id} className="flex items-center justify-between p-2 border rounded-md hover:bg-muted/30">
                       <div className="flex flex-col text-sm">
