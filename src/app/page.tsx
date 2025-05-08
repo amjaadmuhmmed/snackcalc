@@ -1,7 +1,7 @@
 // src/app/page.tsx
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -29,7 +29,7 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
-import { setSharedOrderInRTDB, SharedOrderItem } from "@/lib/rt_db";
+import { setSharedOrderInRTDB, SharedOrderItem, SharedOrderData } from "@/lib/rt_db";
 
 
 interface SelectedSnack extends Snack {
@@ -72,6 +72,11 @@ export default function Home() {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [isGeneratingShareUrl, setIsGeneratingShareUrl] = useState(false);
+
+  // State for managing RTDB updates from main page
+  const [activeSharedOrderNumber, setActiveSharedOrderNumber] = useState<string | null>(null);
+  const [isUpdatingRTDBFromMain, setIsUpdatingRTDBFromMain] = useState(false);
+  const [mainDebounceTimer, setMainDebounceTimer] = useState<NodeJS.Timeout | null>(null);
 
 
   const {
@@ -270,6 +275,8 @@ export default function Home() {
               setCustomerPhoneNumber("");
               setOrderNumber(generateOrderNumber()); // Generate new order number for next bill
               setSearchTerm("");
+              setActiveSharedOrderNumber(null); // Deactivate sharing for the new order
+              setShareUrl(""); // Clear share URL
           } else {
               toast({ variant: "destructive", title: "Failed to save bill.", description: result.message });
           }
@@ -370,10 +377,11 @@ export default function Home() {
     if (typeof window === "undefined") {
         setShareUrl("");
         setIsGeneratingShareUrl(false);
+        setActiveSharedOrderNumber(null);
         return;
     }
     setIsGeneratingShareUrl(true);
-    setShareUrl(""); // Clear previous URL while generating new one
+    setShareUrl(""); 
 
     const itemsToShare: SharedOrderItem[] = selectedSnacks.map(s => ({
       id: s.id,
@@ -382,7 +390,7 @@ export default function Home() {
       quantity: s.quantity,
     }));
 
-    const sharedOrderPayload = {
+    const sharedOrderPayload: Omit<SharedOrderData, 'lastUpdatedAt' | 'orderNumber'> = {
       items: itemsToShare,
       serviceCharge: serviceCharge,
       customerName: customerName,
@@ -394,15 +402,78 @@ export default function Home() {
       const baseUrl = window.location.origin;
       const fullUrl = `${baseUrl}/orders/${currentOrderNumberToUse}`;
       setShareUrl(fullUrl);
+      setActiveSharedOrderNumber(currentOrderNumberToUse); // Activate sharing for this order
       toast({ title: "Bill ready to share!", description: "Link and QR code updated." });
     } catch (error) {
       console.error("Failed to share bill to RTDB:", error);
       toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
-      setShareUrl(""); // Ensure URL is cleared on error
+      setShareUrl(""); 
+      setActiveSharedOrderNumber(null); // Deactivate sharing on error
     } finally {
       setIsGeneratingShareUrl(false);
     }
   };
+
+  // useEffect for pushing updates from main page to RTDB
+  useEffect(() => {
+    if (!activeSharedOrderNumber || isLoadingSnacks || isUpdatingRTDBFromMain) {
+      return;
+    }
+    // Ensure this effect pertains to the *currently active shared order*
+    if (orderNumber !== activeSharedOrderNumber) {
+        return;
+    }
+
+    if (mainDebounceTimer) {
+      clearTimeout(mainDebounceTimer);
+    }
+
+    const timer = setTimeout(async () => {
+      // Final check for active shared order, in case state changed during timeout
+      if (orderNumber !== activeSharedOrderNumber || !activeSharedOrderNumber) return;
+
+      setIsUpdatingRTDBFromMain(true);
+      const itemsToShare: SharedOrderItem[] = selectedSnacks.map(s => ({
+        id: s.id,
+        name: s.name,
+        price: Number(s.price),
+        quantity: s.quantity,
+      }));
+
+      const currentOrderData: Omit<SharedOrderData, 'lastUpdatedAt' | 'orderNumber'> = {
+        items: itemsToShare,
+        serviceCharge: serviceCharge,
+        customerName: customerName,
+        customerPhoneNumber: customerPhoneNumber,
+      };
+
+      try {
+        await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
+        // console.log("Main page auto-synced order:", activeSharedOrderNumber);
+      } catch (error) {
+        console.error("Failed to auto-update RTDB from main page:", error);
+        toast({ variant: "destructive", title: "Sync Error (Auto)", description: "Failed to save changes automatically." });
+      } finally {
+        setIsUpdatingRTDBFromMain(false);
+      }
+    }, 750); // Debounce time: 750ms
+
+    setMainDebounceTimer(timer);
+
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [
+    selectedSnacks,
+    serviceCharge,
+    customerName,
+    customerPhoneNumber,
+    orderNumber, // Current order number on page.tsx
+    activeSharedOrderNumber, // The order number for which sharing is active
+    isLoadingSnacks,
+    isUpdatingRTDBFromMain,
+    toast
+  ]);
 
 
   return (
@@ -414,12 +485,17 @@ export default function Home() {
               setShowShareDialog(open);
               if (open) {
                 let currentOrderNumberToUse = orderNumber;
-                if (selectedSnacks.length === 0 && total === 0) {
+                // If the current bill is empty and not yet actively shared, generate a new order number for sharing.
+                // Otherwise, use the existing orderNumber.
+                if (selectedSnacks.length === 0 && total === 0 && activeSharedOrderNumber !== orderNumber) {
                     const newOrderNum = generateOrderNumber();
-                    setOrderNumber(newOrderNum);
+                    setOrderNumber(newOrderNum); // Update the main orderNumber state
                     currentOrderNumberToUse = newOrderNum;
                 }
                 await handleShareBill(currentOrderNumberToUse);
+              } else {
+                // Optionally, you might want to clear activeSharedOrderNumber if the dialog is closed
+                // without navigating, but current logic might be fine.
               }
             }}>
               <DialogTrigger asChild>
@@ -432,6 +508,7 @@ export default function Home() {
                   <DialogTitle>Share Bill (Real-time)</DialogTitle>
                   <DialogDescription>
                     Scan the QR code or copy the link to share and edit this bill in real-time with another device.
+                    The order number for sharing is <strong>{activeSharedOrderNumber || orderNumber}</strong>.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="flex flex-col items-center gap-4 mt-4">
