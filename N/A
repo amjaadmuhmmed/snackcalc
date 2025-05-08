@@ -1,0 +1,23 @@
+No code changes are required at this time. The error you're encountering with the 'Share Bill' functionality is likely due to the Firebase Realtime Database security rules or an incorrect Realtime Database URL.
+
+Please check the following:
+
+1.  **Firebase Realtime Database Rules**:
+    *   Go to your Firebase project in the Firebase Console.
+    *   In the left sidebar, under "Build", click on "Realtime Database".
+    *   Select the "Rules" tab.
+    *   Ensure your rules allow write access to the `shared_orders` path. For development and testing, you can use the following rules, which grant open access. **Remember to secure these rules before going to production.**
+        ```json
+        {
+          "rules": {
+            ".read": true,
+            ".write": true
+          }
+        }
+        ```
+    *   Click "Publish" to save the rules.
+
+2.  **Realtime Database URL in `.env` file**:
+    *   Verify that the `NEXT_PUBLIC_FIREBASE_DATABASE_URL` in your `.env` file is the correct URL for your Firebase Realtime Database. It should look like `https://your-project-id-default-rtdb.firebaseio.com` or `https://your-project-id-default-rtdb.your-region.firebasedatabase.app`. This is different from your Firestore database or Firebase Hosting URL.
+
+If these settings are correct and you still face issues, please provide the specific error message you see in the browser's console when you try to share a bill.
