@@ -76,13 +76,20 @@ export default function SharedOrderPage() {
     setIsLoadingOrder(true);
     const unsubscribe = subscribeToSharedOrder(orderNumber, (data) => {
       if (data) {
-        setSelectedSnacks(data.items || []);
-        setServiceCharge(data.serviceCharge || 0);
-        setServiceChargeInput((data.serviceCharge || 0).toString());
-        setCustomerName(data.customerName || "");
-        setCustomerPhoneNumber(data.customerPhoneNumber || "");
-        setLastUpdated(data.lastUpdatedAt || Date.now()); // Use local time if RTDB one is missing
-        toast({ title: "Order Synced", description: `Order ${orderNumber} updated.` });
+        // Ensure new array references and correct types for state updates
+        setSelectedSnacks(Array.isArray(data.items) ? [...data.items] : []);
+        const newServiceCharge = Number(data.serviceCharge) || 0;
+        setServiceCharge(newServiceCharge);
+        setServiceChargeInput(newServiceCharge.toString());
+        setCustomerName(String(data.customerName) || "");
+        setCustomerPhoneNumber(String(data.customerPhoneNumber) || "");
+        setLastUpdated(Number(data.lastUpdatedAt) || Date.now());
+        
+        // Only show toast if not the initial load or if data significantly changed
+        // This avoids toast on initial page load if data hasn't changed since last view.
+        if (!isLoadingOrder) {
+             toast({ title: "Order Synced", description: `Order ${orderNumber} updated.` });
+        }
       } else {
         toast({ variant: "destructive", title: "Order Not Found", description: `Could not load order ${orderNumber}. It might not exist or there was an error.` });
         // Consider redirecting or showing a "not found" message
@@ -91,7 +98,7 @@ export default function SharedOrderPage() {
     });
 
     return () => unsubscribe(); // Cleanup subscription on component unmount
-  }, [orderNumber, toast]);
+  }, [orderNumber, toast, isLoadingOrder]); // Added isLoadingOrder to dependency array to manage initial toast
 
   // Function to push local changes to RTDB
   const updateSharedOrder = useCallback(async () => {
@@ -132,7 +139,7 @@ export default function SharedOrderPage() {
       if (debounceTimer) clearTimeout(debounceTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber]); // Dependencies that trigger RTDB update
+  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, isLoadingOrder]); // Added isLoadingOrder
 
 
   const calculateTotal = () => {
@@ -191,7 +198,7 @@ export default function SharedOrderPage() {
       const parsedValue = parseFloat(value);
       if (value === "" || isNaN(parsedValue) || parsedValue < 0) {
           setServiceCharge(0);
-          setServiceChargeInput("0");
+          setServiceChargeInput("0.00");
       } else {
           setServiceCharge(parsedValue);
           setServiceChargeInput(parsedValue.toFixed(2));
@@ -383,3 +390,4 @@ export default function SharedOrderPage() {
     </div>
   );
 }
+
