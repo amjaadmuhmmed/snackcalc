@@ -14,7 +14,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Minus, Search, User as UserIcon, Phone, ArrowLeft, CopyIcon } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
-import type { Unsubscribe } from 'firebase/database';
 
 import { getSnacks } from "@/app/actions"; // Server action to get all available snacks
 import type { Snack } from "@/lib/db";
@@ -44,7 +43,7 @@ export default function SharedOrderPage() {
   const [isLoadingSnacks, setIsLoadingSnacks] = useState(true);
   const [isLoadingOrder, setIsLoadingOrder] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  // const [lastUpdated, setLastUpdated] = useState<number | null>(null); // No longer displayed
   const [isUpdatingRTDB, setIsUpdatingRTDB] = useState(false);
 
   // Debounce timer for RTDB updates
@@ -85,11 +84,12 @@ export default function SharedOrderPage() {
         setServiceChargeInput(newServiceCharge.toString());
         setCustomerName(String(data.customerName) || "");
         setCustomerPhoneNumber(String(data.customerPhoneNumber) || "");
-        setLastUpdated(Number(data.lastUpdatedAt) || Date.now());
-        
-        if (isInitialDataLoaded.current) { // Only show toast if not the initial load
-             toast({ title: "Order Synced", description: `Order ${orderNumber} updated.` });
-        }
+        // setLastUpdated(Number(data.lastUpdatedAt) || Date.now()); // No longer displayed
+
+        // Removed the frequent "Order Synced" toast
+        // if (isInitialDataLoaded.current) {
+        //      toast({ title: "Order Synced", description: `Order ${orderNumber} updated.` });
+        // }
       } else {
         toast({ variant: "destructive", title: "Order Not Found", description: `Could not load order ${orderNumber}. It might not exist or there was an error.` });
       }
@@ -125,23 +125,22 @@ export default function SharedOrderPage() {
 
   // Debounced RTDB update
   useEffect(() => {
-    // Don't update while initial load is happening or if it's an update from remote
-    if (isLoadingOrder) return; 
+    // Don't update while initial load is happening
+    if (isLoadingOrder) return;
 
     if (debounceTimer) {
       clearTimeout(debounceTimer);
     }
     const timer = setTimeout(() => {
       updateSharedOrder();
-    }, 750); 
+    }, 750);
     setDebounceTimer(timer);
 
     return () => {
-      if (timer) clearTimeout(timer); // Clear the correct timer instance
+      if (timer) clearTimeout(timer);
     };
-  // updateSharedOrder is memoized and changes when its own dependencies change.
-  // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, isLoadingOrder, updateSharedOrder]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, isLoadingOrder]); // Removed updateSharedOrder from deps to avoid re-triggering on its own memoization change
 
 
   const calculateTotal = () => {
@@ -267,7 +266,7 @@ export default function SharedOrderPage() {
         <CardHeader>
           <CardDescription className="text-center">
             Editing bill <strong className="text-primary">{orderNumber}</strong> in real-time.
-            {lastUpdated && <p className="text-xs text-muted-foreground mt-1">Last synced: {new Date(lastUpdated).toLocaleTimeString()}</p>}
+            {/* Removed lastUpdated display */}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
