@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, Minus, Search, User as UserIcon, Phone, ArrowLeft, CopyIcon } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
 
-import { getSnacks } from "@/app/actions"; // Server action to get all available snacks
+import { getSnacks } from "@/app/actions"; 
 import type { Snack } from "@/lib/db";
 import {
   SharedOrderData,
@@ -25,7 +25,7 @@ import {
   SharedOrderDataSnapshot,
 } from "@/lib/rt_db";
 
-interface SelectedSnackForOrder extends SharedOrderItem {} // Reuse SharedOrderItem
+interface SelectedSnackForOrder extends SharedOrderItem {} 
 
 export default function SharedOrderPage() {
   const params = useParams();
@@ -34,7 +34,7 @@ export default function SharedOrderPage() {
 
   const orderNumber = typeof params.orderNumber === 'string' ? params.orderNumber : '';
 
-  const [allSnacks, setAllSnacks] = useState<Snack[]>([]); // All available snacks from Firestore
+  const [allSnacks, setAllSnacks] = useState<Snack[]>([]); 
   const [selectedSnacks, setSelectedSnacks] = useState<SelectedSnackForOrder[]>([]);
   const [serviceCharge, setServiceCharge] = useState<number>(0);
   const [serviceChargeInput, setServiceChargeInput] = useState<string>("0");
@@ -43,10 +43,10 @@ export default function SharedOrderPage() {
   const [isLoadingSnacks, setIsLoadingSnacks] = useState(true);
   const [isLoadingOrder, setIsLoadingOrder] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  // const [lastUpdated, setLastUpdated] = useState<number | null>(null); // No longer displayed
   const [isUpdatingRTDB, setIsUpdatingRTDB] = useState(false);
+  const [isUpdatingFromRTDBSync, setIsUpdatingFromRTDBSync] = useState(false);
 
-  // Debounce timer for RTDB updates
+
   const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null);
   const isInitialDataLoaded = useRef(false);
 
@@ -64,45 +64,65 @@ export default function SharedOrderPage() {
     }
   }, [toast]);
 
-  // Effect to load all available snacks once
   useEffect(() => {
     loadAllSnacks();
   }, [loadAllSnacks]);
 
-  // Effect to subscribe to the shared order in RTDB
   useEffect(() => {
     if (!orderNumber) return;
 
     setIsLoadingOrder(true);
-    isInitialDataLoaded.current = false; // Reset for new order number or re-subscription
+    isInitialDataLoaded.current = false; 
 
+    console.log(`SharedOrderPage subscribing to RTDB for order: ${orderNumber}`);
     const unsubscribe = subscribeToSharedOrder(orderNumber, (data) => {
       if (data) {
-        setSelectedSnacks(Array.isArray(data.items) ? [...data.items] : []);
-        const newServiceCharge = Number(data.serviceCharge) || 0;
-        setServiceCharge(newServiceCharge);
-        setServiceChargeInput(newServiceCharge.toString());
-        setCustomerName(String(data.customerName) || "");
-        setCustomerPhoneNumber(String(data.customerPhoneNumber) || "");
-        // setLastUpdated(Number(data.lastUpdatedAt) || Date.now()); // No longer displayed
+        console.log(`SharedOrderPage received RTDB update for ${orderNumber}:`, data);
+        setIsUpdatingFromRTDBSync(true);
 
-        // Removed the frequent "Order Synced" toast
-        // if (isInitialDataLoaded.current) {
-        //      toast({ title: "Order Synced", description: `Order ${orderNumber} updated.` });
-        // }
+        const newSelectedSnacks = Array.isArray(data.items) ? [...data.items] : [];
+        const currentSimpleSelected = selectedSnacks.map(s => ({id: s.id, quantity: s.quantity, price: s.price, name: s.name}));
+        const newSimpleSelected = newSelectedSnacks.map(s => ({id: s.id, quantity: s.quantity, price: s.price, name: s.name}));
+
+
+        if (JSON.stringify(currentSimpleSelected) !== JSON.stringify(newSimpleSelected)) {
+            setSelectedSnacks(newSelectedSnacks);
+        }
+        
+        const newServiceCharge = Number(data.serviceCharge) || 0;
+        if (newServiceCharge !== serviceCharge) {
+            setServiceCharge(newServiceCharge);
+            // serviceChargeInput is updated by its own useEffect based on serviceCharge
+        }
+
+        if (String(data.customerName || "") !== customerName) {
+            setCustomerName(String(data.customerName) || "");
+        }
+        if (String(data.customerPhoneNumber || "") !== customerPhoneNumber) {
+            setCustomerPhoneNumber(String(data.customerPhoneNumber) || "");
+        }
+        
+        if (!isInitialDataLoaded.current) {
+             isInitialDataLoaded.current = true;
+        }
+         requestAnimationFrame(() => {
+            setIsUpdatingFromRTDBSync(false);
+        });
       } else {
         toast({ variant: "destructive", title: "Order Not Found", description: `Could not load order ${orderNumber}. It might not exist or there was an error.` });
       }
       setIsLoadingOrder(false);
-      isInitialDataLoaded.current = true; // Mark initial data as loaded
     });
 
-    return () => unsubscribe();
-  }, [orderNumber, toast]);
+    return () => {
+        console.log(`SharedOrderPage unsubscribing from RTDB for order: ${orderNumber}`);
+        unsubscribe()
+    };
+  }, [orderNumber, toast]); // Dependencies: orderNumber, toast. Avoid adding local states that are set by this effect.
 
-  // Function to push local changes to RTDB
   const updateSharedOrder = useCallback(async () => {
     if (!orderNumber || isUpdatingRTDB) return;
+    console.log(`SharedOrderPage pushing update to RTDB for ${orderNumber}`);
     setIsUpdatingRTDB(true);
 
     const currentOrderData: Omit<SharedOrderData, 'lastUpdatedAt' | 'orderNumber'> = {
@@ -114,7 +134,6 @@ export default function SharedOrderPage() {
 
     try {
       await setSharedOrderInRTDB(orderNumber, currentOrderData);
-      // toast({ title: "Order Updated in Real-time", description: "Changes saved." });
     } catch (error) {
       console.error("Failed to update RTDB:", error);
       toast({ variant: "destructive", title: "Sync Error", description: "Failed to save changes." });
@@ -123,24 +142,32 @@ export default function SharedOrderPage() {
     }
   }, [orderNumber, selectedSnacks, serviceCharge, customerName, customerPhoneNumber, toast, isUpdatingRTDB]);
 
-  // Debounced RTDB update
   useEffect(() => {
-    // Don't update while initial load is happening
-    if (isLoadingOrder) return;
+    if (isLoadingOrder || !isInitialDataLoaded.current || isUpdatingFromRTDBSync || isUpdatingRTDB) {
+      return;
+    }
 
     if (debounceTimer) {
       clearTimeout(debounceTimer);
     }
     const timer = setTimeout(() => {
-      updateSharedOrder();
+      if (!isUpdatingFromRTDBSync) { // Double check before pushing
+          updateSharedOrder();
+      }
     }, 750);
     setDebounceTimer(timer);
 
     return () => {
       if (timer) clearTimeout(timer);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, isLoadingOrder]); // Removed updateSharedOrder from deps to avoid re-triggering on its own memoization change
+  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, isLoadingOrder, updateSharedOrder, isUpdatingFromRTDBSync, isUpdatingRTDB]);
+  
+   useEffect(() => {
+    // Update serviceChargeInput when serviceCharge changes, unless the input is focused
+    if (document.activeElement?.id !== 'shared-service-charge') {
+      setServiceChargeInput(serviceCharge.toFixed(2));
+    }
+  }, [serviceCharge]);
 
 
   const calculateTotal = () => {
@@ -148,7 +175,7 @@ export default function SharedOrderPage() {
     return snacksTotal + serviceCharge;
   };
 
-  const handleSnackIncrement = (snack: Snack) => { // Takes a base Snack object
+  const handleSnackIncrement = (snack: Snack) => { 
     setSelectedSnacks((prevSelected) => {
       const alreadySelected = prevSelected.find((s) => s.id === snack.id);
       if (alreadySelected) {
@@ -156,7 +183,6 @@ export default function SharedOrderPage() {
           s.id === snack.id ? { ...s, quantity: s.quantity + 1 } : s
         );
       } else {
-        // Add as new SharedOrderItem
         return [...prevSelected, { id: snack.id, name: snack.name, price: Number(snack.price), quantity: 1 }];
       }
     });
@@ -266,11 +292,9 @@ export default function SharedOrderPage() {
         <CardHeader>
           <CardDescription className="text-center">
             Editing bill <strong className="text-primary">{orderNumber}</strong> in real-time.
-            {/* Removed lastUpdated display */}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
-          {/* Search and Snack Selection from allSnacks */}
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -307,7 +331,6 @@ export default function SharedOrderPage() {
           </div>
           <Separator />
 
-          {/* Display Selected Snacks */}
           <div>
             <h3 className="text-sm font-medium mb-2">Items in this Order</h3>
             {selectedSnacks.length === 0 ? (
@@ -323,7 +346,6 @@ export default function SharedOrderPage() {
                           <Minus className="h-3 w-3" />
                         </Button>
                         <Badge variant="outline" className="text-xs px-1.5 border-none tabular-nums">{item.quantity}</Badge>
-                        {/* Find original snack to increment. This assumes allSnacks is loaded. */}
                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {
                             const originalSnack = allSnacks.find(s => s.id === item.id);
                             if (originalSnack) handleSnackIncrement(originalSnack);
@@ -340,7 +362,6 @@ export default function SharedOrderPage() {
           </div>
           <Separator />
 
-          {/* Customer Details */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="grid gap-1.5">
               <Label htmlFor="shared-customer-name" className="text-sm">Customer Name</Label>
@@ -358,14 +379,12 @@ export default function SharedOrderPage() {
             </div>
           </div>
 
-          {/* Service Charge */}
           <div className="grid gap-1.5">
             <Label htmlFor="shared-service-charge" className="text-sm">Service Charge (₹)</Label>
             <Input id="shared-service-charge" type="text" placeholder="0.00" value={serviceChargeInput} onChange={handleServiceChargeInputChange} onBlur={handleServiceChargeInputBlur} onFocus={handleServiceChargeInputFocus} className="h-9 text-sm" inputMode="decimal" />
           </div>
           <Separator />
 
-          {/* Total and QR Code */}
           <div className="flex flex-col items-center justify-between gap-3">
             <div className="flex justify-between w-full items-center">
               <span className="text-base font-semibold">Total:</span>
@@ -391,4 +410,3 @@ export default function SharedOrderPage() {
     </div>
   );
 }
-
