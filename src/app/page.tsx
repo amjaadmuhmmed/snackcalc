@@ -77,6 +77,7 @@ export default function Home() {
   const [isUpdatingRTDBFromMain, setIsUpdatingRTDBFromMain] = useState(false);
   const [mainDebounceTimer, setMainDebounceTimer] = useState<NodeJS.Timeout | null>(null);
   const [isUpdatingFromRTDBSync, setIsUpdatingFromRTDBSync] = useState(false);
+  const [isLocalDirty, setIsLocalDirty] = useState(false);
 
 
   const {
@@ -144,10 +145,19 @@ export default function Home() {
     if (!activeSharedOrderNumber || snacks.length === 0) {
       return;
     }
+     // If local state is dirty, don't process incoming RTDB updates yet
+    if (isLocalDirty) {
+        console.log("Main page: Local state is dirty, skipping RTDB sync for now.");
+        return;
+    }
 
     console.log(`Main page subscribing to RTDB for order: ${activeSharedOrderNumber}`);
     const unsubscribe = subscribeToSharedOrder(activeSharedOrderNumber, (data: SharedOrderDataSnapshot | null) => {
       if (data && data.orderNumber === activeSharedOrderNumber) {
+        if (isLocalDirty) {
+            console.log(`Main page: Received RTDB update for ${activeSharedOrderNumber}, but local is dirty. Ignoring.`);
+            return;
+        }
         console.log(`Main page received RTDB update for ${activeSharedOrderNumber}:`, data);
         setIsUpdatingFromRTDBSync(true);
 
@@ -193,7 +203,7 @@ export default function Home() {
       console.log(`Main page unsubscribing from RTDB for order: ${activeSharedOrderNumber}`);
       unsubscribe();
     };
-  }, [activeSharedOrderNumber, snacks]); // Removed serviceCharge, customerName, customerPhoneNumber, selectedSnacks from deps to prevent potential loops. Relies on comparison inside.
+  }, [activeSharedOrderNumber, snacks, isLocalDirty]); // Added isLocalDirty
 
 
   const calculateTotal = () => {
@@ -202,6 +212,7 @@ export default function Home() {
   };
 
   const handleSnackIncrement = (snack: Snack) => {
+    setIsLocalDirty(true);
     setSelectedSnacks((prevSelected) => {
       const alreadySelected = prevSelected.find((s) => s.id === snack.id);
       if (alreadySelected) {
@@ -216,6 +227,7 @@ export default function Home() {
   };
 
   const handleSnackDecrement = (snack: Snack) => {
+    setIsLocalDirty(true);
     setSelectedSnacks((prevSelected) => {
       const alreadySelected = prevSelected.find((s) => s.id === snack.id);
       if (!alreadySelected) {
@@ -330,6 +342,7 @@ export default function Home() {
               setSearchTerm("");
               setActiveSharedOrderNumber(null); 
               setShareUrl(""); 
+              setIsLocalDirty(false); // Reset dirty flag after successful save
           } else {
               toast({ variant: "destructive", title: "Failed to save bill.", description: result.message });
           }
@@ -367,6 +380,7 @@ export default function Home() {
   };
 
   const handleServiceChargeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsLocalDirty(true);
     const value = e.target.value;
     setServiceChargeInput(value);
 
@@ -451,8 +465,9 @@ export default function Home() {
     };
 
     try {
-      setActiveSharedOrderNumber(orderNumberToShare); // Set active before pushing
+      setActiveSharedOrderNumber(orderNumberToShare); 
       await setSharedOrderInRTDB(orderNumberToShare, sharedOrderPayload);
+      setIsLocalDirty(false); // Clear dirty flag after successful initial share push
       const baseUrl = window.location.origin;
       const fullUrl = `${baseUrl}/orders/${orderNumberToShare}`;
       setShareUrl(fullUrl);
@@ -469,7 +484,8 @@ export default function Home() {
 
   // useEffect for pushing updates from main page to RTDB
   useEffect(() => {
-    if (isUpdatingFromRTDBSync || !activeSharedOrderNumber || orderNumber !== activeSharedOrderNumber || isLoadingSnacks || isUpdatingRTDBFromMain) {
+    if (isUpdatingFromRTDBSync || !activeSharedOrderNumber || orderNumber !== activeSharedOrderNumber || isLoadingSnacks || isUpdatingRTDBFromMain || !isLocalDirty) {
+      // Only push if local is dirty and other conditions are met
       return;
     }
     
@@ -478,9 +494,9 @@ export default function Home() {
     }
 
     const timer = setTimeout(async () => {
-      if (isUpdatingFromRTDBSync || orderNumber !== activeSharedOrderNumber || !activeSharedOrderNumber) return;
+      if (isUpdatingFromRTDBSync || orderNumber !== activeSharedOrderNumber || !activeSharedOrderNumber || !isLocalDirty) return;
 
-      console.log(`Main page pushing update to RTDB for ${activeSharedOrderNumber}`);
+      console.log(`Main page pushing update to RTDB for ${activeSharedOrderNumber} (local is dirty)`);
       setIsUpdatingRTDBFromMain(true);
       const itemsToShare: SharedOrderItem[] = selectedSnacks.map(s => ({
         id: s.id,
@@ -498,9 +514,11 @@ export default function Home() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
+        setIsLocalDirty(false); // Reset dirty flag after successful push
       } catch (error) {
         console.error("Failed to auto-update RTDB from main page:", error);
         toast({ variant: "destructive", title: "Sync Error (Auto)", description: "Failed to save changes automatically." });
+        // Note: isLocalDirty remains true here, so the user's changes are still prioritized
       } finally {
         setIsUpdatingRTDBFromMain(false);
       }
@@ -521,8 +539,19 @@ export default function Home() {
     isLoadingSnacks,
     isUpdatingRTDBFromMain,
     isUpdatingFromRTDBSync, 
+    isLocalDirty, // Add isLocalDirty to dependency array
     toast
   ]);
+
+  const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsLocalDirty(true);
+    setCustomerName(e.target.value);
+  };
+
+  const handleCustomerPhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsLocalDirty(true);
+    setCustomerPhoneNumber(e.target.value);
+  };
 
 
   return (
@@ -533,8 +562,10 @@ export default function Home() {
             <Dialog open={showShareDialog} onOpenChange={async (open) => {
               setShowShareDialog(open);
               if (open) {
-                // Always use the current page's orderNumber for initiating or continuing a share.
                 await handleShareBill(orderNumber);
+              } else {
+                // Optionally, when closing the share dialog, if you want to stop "active sharing"
+                // setActiveSharedOrderNumber(null); // This depends on desired behavior
               }
             }}>
               <DialogTrigger asChild>
@@ -692,7 +723,7 @@ export default function Home() {
                   type="text"
                   placeholder="Optional"
                   value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
+                  onChange={handleCustomerNameChange}
                   className="pl-8 h-9 text-sm"
                   aria-label="Customer Name"
                 />
@@ -707,7 +738,7 @@ export default function Home() {
                   type="tel"
                   placeholder="Optional"
                   value={customerPhoneNumber}
-                  onChange={(e) => setCustomerPhoneNumber(e.target.value)}
+                  onChange={handleCustomerPhoneNumberChange}
                   className="pl-8 h-9 text-sm"
                   aria-label="Customer Phone Number"
                 />
@@ -844,3 +875,4 @@ export default function Home() {
     </div>
   );
 }
+

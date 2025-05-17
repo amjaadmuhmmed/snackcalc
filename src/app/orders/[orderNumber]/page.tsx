@@ -45,6 +45,7 @@ export default function SharedOrderPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isUpdatingRTDB, setIsUpdatingRTDB] = useState(false);
   const [isUpdatingFromRTDBSync, setIsUpdatingFromRTDBSync] = useState(false);
+  const [isLocalDirty, setIsLocalDirty] = useState(false);
 
 
   const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null);
@@ -70,6 +71,12 @@ export default function SharedOrderPage() {
 
   useEffect(() => {
     if (!orderNumber) return;
+    
+    // If local state is dirty, don't process incoming RTDB updates yet
+    if (isLocalDirty) {
+        console.log(`SharedOrderPage: Local state is dirty for ${orderNumber}, skipping RTDB sync for now.`);
+        return;
+    }
 
     setIsLoadingOrder(true);
     isInitialDataLoaded.current = false; 
@@ -77,6 +84,10 @@ export default function SharedOrderPage() {
     console.log(`SharedOrderPage subscribing to RTDB for order: ${orderNumber}`);
     const unsubscribe = subscribeToSharedOrder(orderNumber, (data) => {
       if (data) {
+        if (isLocalDirty) {
+            console.log(`SharedOrderPage: Received RTDB update for ${orderNumber}, but local is dirty. Ignoring.`);
+            return;
+        }
         console.log(`SharedOrderPage received RTDB update for ${orderNumber}:`, data);
         setIsUpdatingFromRTDBSync(true);
 
@@ -92,7 +103,6 @@ export default function SharedOrderPage() {
         const newServiceCharge = Number(data.serviceCharge) || 0;
         if (newServiceCharge !== serviceCharge) {
             setServiceCharge(newServiceCharge);
-            // serviceChargeInput is updated by its own useEffect based on serviceCharge
         }
 
         if (String(data.customerName || "") !== customerName) {
@@ -118,11 +128,13 @@ export default function SharedOrderPage() {
         console.log(`SharedOrderPage unsubscribing from RTDB for order: ${orderNumber}`);
         unsubscribe()
     };
-  }, [orderNumber, toast]); // Dependencies: orderNumber, toast. Avoid adding local states that are set by this effect.
+  }, [orderNumber, toast, isLocalDirty]); // Added isLocalDirty
 
   const updateSharedOrder = useCallback(async () => {
-    if (!orderNumber || isUpdatingRTDB) return;
-    console.log(`SharedOrderPage pushing update to RTDB for ${orderNumber}`);
+    if (!orderNumber || isUpdatingRTDB || !isLocalDirty) { // Only push if local is dirty
+        return;
+    }
+    console.log(`SharedOrderPage pushing update to RTDB for ${orderNumber} (local is dirty)`);
     setIsUpdatingRTDB(true);
 
     const currentOrderData: Omit<SharedOrderData, 'lastUpdatedAt' | 'orderNumber'> = {
@@ -134,16 +146,18 @@ export default function SharedOrderPage() {
 
     try {
       await setSharedOrderInRTDB(orderNumber, currentOrderData);
+      setIsLocalDirty(false); // Reset dirty flag after successful push
     } catch (error) {
       console.error("Failed to update RTDB:", error);
       toast({ variant: "destructive", title: "Sync Error", description: "Failed to save changes." });
+      // Note: isLocalDirty remains true here, so the user's changes are still prioritized
     } finally {
         setIsUpdatingRTDB(false);
     }
-  }, [orderNumber, selectedSnacks, serviceCharge, customerName, customerPhoneNumber, toast, isUpdatingRTDB]);
+  }, [orderNumber, selectedSnacks, serviceCharge, customerName, customerPhoneNumber, toast, isUpdatingRTDB, isLocalDirty]); // Added isLocalDirty
 
   useEffect(() => {
-    if (isLoadingOrder || !isInitialDataLoaded.current || isUpdatingFromRTDBSync || isUpdatingRTDB) {
+    if (isLoadingOrder || !isInitialDataLoaded.current || isUpdatingFromRTDBSync || isUpdatingRTDB || !isLocalDirty) {
       return;
     }
 
@@ -151,7 +165,7 @@ export default function SharedOrderPage() {
       clearTimeout(debounceTimer);
     }
     const timer = setTimeout(() => {
-      if (!isUpdatingFromRTDBSync) { // Double check before pushing
+      if (!isUpdatingFromRTDBSync && isLocalDirty) { // Double check before pushing, and ensure local is dirty
           updateSharedOrder();
       }
     }, 750);
@@ -160,10 +174,9 @@ export default function SharedOrderPage() {
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, isLoadingOrder, updateSharedOrder, isUpdatingFromRTDBSync, isUpdatingRTDB]);
+  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, isLoadingOrder, updateSharedOrder, isUpdatingFromRTDBSync, isUpdatingRTDB, isLocalDirty]); // Added isLocalDirty
   
    useEffect(() => {
-    // Update serviceChargeInput when serviceCharge changes, unless the input is focused
     if (document.activeElement?.id !== 'shared-service-charge') {
       setServiceChargeInput(serviceCharge.toFixed(2));
     }
@@ -176,6 +189,7 @@ export default function SharedOrderPage() {
   };
 
   const handleSnackIncrement = (snack: Snack) => { 
+    setIsLocalDirty(true);
     setSelectedSnacks((prevSelected) => {
       const alreadySelected = prevSelected.find((s) => s.id === snack.id);
       if (alreadySelected) {
@@ -190,6 +204,7 @@ export default function SharedOrderPage() {
   };
 
   const handleSnackDecrement = (snackId: string) => {
+    setIsLocalDirty(true);
     setSelectedSnacks((prevSelected) => {
       const itemToDecrement = prevSelected.find((s) => s.id === snackId);
       if (!itemToDecrement) return prevSelected;
@@ -210,6 +225,7 @@ export default function SharedOrderPage() {
   };
 
   const handleServiceChargeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsLocalDirty(true);
     const value = e.target.value;
     setServiceChargeInput(value);
     if (value === "" || /^\d*\.?\d*$/.test(value)) {
@@ -236,6 +252,16 @@ export default function SharedOrderPage() {
       if (parseFloat(e.target.value) === 0) {
           setServiceChargeInput("");
       }
+  };
+
+  const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsLocalDirty(true);
+    setCustomerName(e.target.value);
+  };
+
+  const handleCustomerPhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsLocalDirty(true);
+    setCustomerPhoneNumber(e.target.value);
   };
 
   const filteredAllSnacks = useMemo(() => {
@@ -367,14 +393,14 @@ export default function SharedOrderPage() {
               <Label htmlFor="shared-customer-name" className="text-sm">Customer Name</Label>
               <div className="relative">
                 <UserIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input id="shared-customer-name" type="text" placeholder="Optional" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="pl-8 h-9 text-sm" />
+                <Input id="shared-customer-name" type="text" placeholder="Optional" value={customerName} onChange={handleCustomerNameChange} className="pl-8 h-9 text-sm" />
               </div>
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="shared-customer-phone" className="text-sm">Customer Phone</Label>
               <div className="relative">
                 <Phone className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input id="shared-customer-phone" type="tel" placeholder="Optional" value={customerPhoneNumber} onChange={(e) => setCustomerPhoneNumber(e.target.value)} className="pl-8 h-9 text-sm" />
+                <Input id="shared-customer-phone" type="tel" placeholder="Optional" value={customerPhoneNumber} onChange={handleCustomerPhoneNumberChange} className="pl-8 h-9 text-sm" />
               </div>
             </div>
           </div>
@@ -410,3 +436,4 @@ export default function SharedOrderPage() {
     </div>
   );
 }
+
