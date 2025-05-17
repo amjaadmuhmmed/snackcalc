@@ -1,3 +1,4 @@
+
 import type {Metadata} from 'next';
 import {Geist, Geist_Mono} from 'next/font/google';
 import './globals.css';
@@ -13,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'SnackCalc', // Updated title here
-  description: 'A simple snack calculation app built with Firebase Studio',
+  title: 'Snackulator', // Updated title here
+  description: 'A simple snack calculation app',
 };
 
 export default function RootLayout({

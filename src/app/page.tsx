@@ -1,3 +1,4 @@
+
 // src/app/page.tsx
 "use client";
 
@@ -233,7 +234,7 @@ export default function Home() {
     setSearchTerm("");
   };
 
-  const handleSnackDecrement = (snack: SelectedSnack) => { // Changed parameter to SelectedSnack
+  const handleSnackDecrement = (snack: SelectedSnack) => { 
     setIsLocalDirty(true);
     lastInteractedSnackIdRef.current = snack.id;
     setSelectedSnacks((prevSelected) => {
@@ -257,7 +258,7 @@ export default function Home() {
     });
   };
 
-  const getSnackQuantity = (snackId: string) => { // Changed parameter to snackId
+  const getSnackQuantity = (snackId: string) => { 
     const selected = selectedSnacks.find((s) => s.id === snackId);
     return selected ? selected.quantity : 0;
   };
@@ -378,7 +379,7 @@ export default function Home() {
 
   const total = calculateTotal();
   const upiId = process.env.NEXT_PUBLIC_UPI_ID || "your-default-upi-id@paytm";
-  const upiLink = `upi://pay?pa=${upiId}&pn=SnackCalc&am=${total.toFixed(2)}&cu=INR&tn=Order%20${orderNumber}`;
+  const upiLink = `upi://pay?pa=${upiId}&pn=Snackulator&am=${total.toFixed(2)}&cu=INR&tn=Order%20${orderNumber}`;
 
 
   const handleAdminLogin = () => {
@@ -503,7 +504,7 @@ export default function Home() {
     } finally {
       setIsGeneratingShareUrl(false);
     }
-  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, toast]); // Added toast
+  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, toast]); 
 
   useEffect(() => {
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
@@ -586,7 +587,7 @@ export default function Home() {
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-4 md:p-8">
       <div className="w-full max-w-md mb-4 flex justify-between items-center">
-        <CardTitle className="text-lg">SnackCalc</CardTitle>
+        <CardTitle className="text-lg">Snackulator</CardTitle>
         <div className="flex items-center gap-2">
             <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
               <DialogTrigger asChild>
@@ -900,4 +901,3 @@ export default function Home() {
     </div>
   );
 }
-

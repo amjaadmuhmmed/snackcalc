@@ -1,3 +1,4 @@
+
 // src/app/bills/page.tsx
 "use client";
 
@@ -94,7 +95,7 @@ export default function BillsPage() {
     <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-4 md:p-8">
        <div className="w-full max-w-5xl mb-4 flex justify-between items-center"> {/* Increased max-width */}
              <Button variant="outline" size="icon" asChild>
-                <Link href="/" aria-label="Back to SnackCalc">
+                <Link href="/" aria-label="Back to Snackulator">
                     <ArrowLeft className="h-4 w-4" />
                 </Link>
             </Button>

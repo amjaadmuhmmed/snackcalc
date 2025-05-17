@@ -1,3 +1,4 @@
+
 // src/app/orders/[orderNumber]/page.tsx
 "use client";
 
@@ -312,7 +313,7 @@ export default function SharedOrderPage() {
 
   const total = calculateTotal();
   const upiId = process.env.NEXT_PUBLIC_UPI_ID || "your-default-upi-id@paytm";
-  const upiLink = `upi://pay?pa=${upiId}&pn=SnackCalcShared&am=${total.toFixed(2)}&cu=INR&tn=Order%20${orderNumber}`;
+  const upiLink = `upi://pay?pa=${upiId}&pn=SnackulatorShared&am=${total.toFixed(2)}&cu=INR&tn=Order%20${orderNumber}`;
   const shareablePageLink = typeof window !== "undefined" ? window.location.href : "";
 
 
@@ -464,4 +465,3 @@ export default function SharedOrderPage() {
     </div>
   );
 }
-
