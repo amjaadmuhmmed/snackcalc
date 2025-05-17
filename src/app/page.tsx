@@ -79,6 +79,10 @@ export default function Home() {
   const [isUpdatingFromRTDBSync, setIsUpdatingFromRTDBSync] = useState(false);
   const [isLocalDirty, setIsLocalDirty] = useState(false);
 
+  const itemRefs = useRef<Record<string, HTMLLIElement | null>>({});
+  const lastInteractedSnackIdRef = useRef<string | null>(null);
+  const prevShowShareDialogRef = useRef<boolean | undefined>();
+
 
   const {
     register,
@@ -168,7 +172,7 @@ export default function Home() {
             name: item.name,
             price: Number(item.price),
             quantity: item.quantity,
-            category: baseSnack?.category || 'Unknown',
+            category: baseSnack?.category || 'Unknown', // Ensure category is present
           };
         });
         
@@ -203,7 +207,7 @@ export default function Home() {
       console.log(`Main page unsubscribing from RTDB for order: ${activeSharedOrderNumber}`);
       unsubscribe();
     };
-  }, [activeSharedOrderNumber, snacks, isLocalDirty]); // Added isLocalDirty
+  }, [activeSharedOrderNumber, snacks, isLocalDirty, customerName, customerPhoneNumber, selectedSnacks, serviceCharge]);
 
 
   const calculateTotal = () => {
@@ -213,41 +217,60 @@ export default function Home() {
 
   const handleSnackIncrement = (snack: Snack) => {
     setIsLocalDirty(true);
+    lastInteractedSnackIdRef.current = snack.id;
     setSelectedSnacks((prevSelected) => {
-      const alreadySelected = prevSelected.find((s) => s.id === snack.id);
-      if (alreadySelected) {
-        return prevSelected.map((s) =>
-          s.id === snack.id ? { ...s, quantity: s.quantity + 1 } : s
-        );
+      const existingSnackIndex = prevSelected.findIndex((s) => s.id === snack.id);
+      if (existingSnackIndex > -1) {
+        const updatedSnack = { ...prevSelected[existingSnackIndex], quantity: prevSelected[existingSnackIndex].quantity + 1 };
+        const newSelected = [...prevSelected];
+        newSelected.splice(existingSnackIndex, 1); // Remove old
+        return [updatedSnack, ...newSelected]; // Add updated to front
       } else {
-        return [...prevSelected, { ...snack, price: Number(snack.price), quantity: 1 }];
+        // Ensure price is a number when adding a new snack
+        return [{ ...snack, price: Number(snack.price), quantity: 1 }, ...prevSelected];
       }
     });
     setSearchTerm("");
   };
 
-  const handleSnackDecrement = (snack: Snack) => {
+  const handleSnackDecrement = (snack: SelectedSnack) => { // Changed parameter to SelectedSnack
     setIsLocalDirty(true);
+    lastInteractedSnackIdRef.current = snack.id;
     setSelectedSnacks((prevSelected) => {
-      const alreadySelected = prevSelected.find((s) => s.id === snack.id);
-      if (!alreadySelected) {
-        return prevSelected;
-      }
+      const currentSnackIndex = prevSelected.findIndex((s) => s.id === snack.id);
+      if (currentSnackIndex === -1) return prevSelected;
 
-      if (alreadySelected.quantity === 1) {
-        return prevSelected.filter((s) => s.id !== snack.id);
+      const currentSnack = prevSelected[currentSnackIndex];
+
+      if (currentSnack.quantity === 1) {
+        // Remove the item
+        const newSelected = [...prevSelected];
+        newSelected.splice(currentSnackIndex, 1);
+        return newSelected;
       } else {
-        return prevSelected.map((s) =>
-          s.id === snack.id ? { ...s, quantity: s.quantity - 1 } : s
-        );
+        // Decrement quantity and move to top
+        const updatedSnack = { ...currentSnack, quantity: currentSnack.quantity - 1 };
+        const newSelected = [...prevSelected];
+        newSelected.splice(currentSnackIndex, 1); // Remove old
+        return [updatedSnack, ...newSelected]; // Add updated to front
       }
     });
   };
 
-  const getSnackQuantity = (snack: Snack) => {
-    const selected = selectedSnacks.find((s) => s.id === snack.id);
+  const getSnackQuantity = (snackId: string) => { // Changed parameter to snackId
+    const selected = selectedSnacks.find((s) => s.id === snackId);
     return selected ? selected.quantity : 0;
   };
+
+  useEffect(() => {
+    if (lastInteractedSnackIdRef.current && itemRefs.current[lastInteractedSnackIdRef.current]) {
+      itemRefs.current[lastInteractedSnackIdRef.current]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      });
+    }
+  }, [selectedSnacks]);
+
 
   const handleEditSnack = (snack: Snack) => {
     setEditingSnackId(snack.id);
@@ -342,7 +365,7 @@ export default function Home() {
               setSearchTerm("");
               setActiveSharedOrderNumber(null); 
               setShareUrl(""); 
-              setIsLocalDirty(false); // Reset dirty flag after successful save
+              setIsLocalDirty(false); 
           } else {
               toast({ variant: "destructive", title: "Failed to save bill.", description: result.message });
           }
@@ -440,7 +463,7 @@ export default function Home() {
     }
   };
 
- const handleShareBill = async (orderNumberToShare: string) => {
+ const handleShareBill = useCallback(async (orderNumberToShare: string) => {
     if (typeof window === "undefined") {
         setShareUrl("");
         setIsGeneratingShareUrl(false);
@@ -467,7 +490,7 @@ export default function Home() {
     try {
       setActiveSharedOrderNumber(orderNumberToShare); 
       await setSharedOrderInRTDB(orderNumberToShare, sharedOrderPayload);
-      setIsLocalDirty(false); // Clear dirty flag after successful initial share push
+      setIsLocalDirty(false); 
       const baseUrl = window.location.origin;
       const fullUrl = `${baseUrl}/orders/${orderNumberToShare}`;
       setShareUrl(fullUrl);
@@ -480,12 +503,19 @@ export default function Home() {
     } finally {
       setIsGeneratingShareUrl(false);
     }
-  };
+  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, toast]); // Added toast
+
+  useEffect(() => {
+    if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
+      handleShareBill(orderNumber);
+    }
+    prevShowShareDialogRef.current = showShareDialog;
+  }, [showShareDialog, orderNumber, handleShareBill]);
+
 
   // useEffect for pushing updates from main page to RTDB
   useEffect(() => {
     if (isUpdatingFromRTDBSync || !activeSharedOrderNumber || orderNumber !== activeSharedOrderNumber || isLoadingSnacks || isUpdatingRTDBFromMain || !isLocalDirty) {
-      // Only push if local is dirty and other conditions are met
       return;
     }
     
@@ -514,11 +544,10 @@ export default function Home() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
-        setIsLocalDirty(false); // Reset dirty flag after successful push
+        setIsLocalDirty(false); 
       } catch (error) {
         console.error("Failed to auto-update RTDB from main page:", error);
         toast({ variant: "destructive", title: "Sync Error (Auto)", description: "Failed to save changes automatically." });
-        // Note: isLocalDirty remains true here, so the user's changes are still prioritized
       } finally {
         setIsUpdatingRTDBFromMain(false);
       }
@@ -539,7 +568,7 @@ export default function Home() {
     isLoadingSnacks,
     isUpdatingRTDBFromMain,
     isUpdatingFromRTDBSync, 
-    isLocalDirty, // Add isLocalDirty to dependency array
+    isLocalDirty, 
     toast
   ]);
 
@@ -559,15 +588,7 @@ export default function Home() {
       <div className="w-full max-w-md mb-4 flex justify-between items-center">
         <CardTitle className="text-lg">SnackCalc</CardTitle>
         <div className="flex items-center gap-2">
-            <Dialog open={showShareDialog} onOpenChange={async (open) => {
-              setShowShareDialog(open);
-              if (open) {
-                await handleShareBill(orderNumber);
-              } else {
-                // Optionally, when closing the share dialog, if you want to stop "active sharing"
-                // setActiveSharedOrderNumber(null); // This depends on desired behavior
-              }
-            }}>
+            <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
               <DialogTrigger asChild>
                 <Button variant="outline" size="icon" aria-label="Share Bill">
                   <Share2 className="h-4 w-4" />
@@ -661,9 +682,9 @@ export default function Home() {
                     >
                       {snack.name} (₹{Number(snack.price).toFixed(2)})
                     </Button>
-                    {getSnackQuantity(snack) > 0 && (
+                    {getSnackQuantity(snack.id) > 0 && (
                       <Badge variant="secondary" className="text-xs px-1.5 py-0.5">
-                        {getSnackQuantity(snack)}
+                        {getSnackQuantity(snack.id)}
                       </Badge>
                     )}
                   </div>
@@ -678,7 +699,11 @@ export default function Home() {
             ) : (
               <ul className="space-y-2 max-h-48 overflow-y-auto">
                 {selectedSnacks.map((snack) => (
-                  <li key={snack.id} className="flex items-center justify-between text-sm p-1.5 rounded-md hover:bg-muted/50">
+                  <li 
+                    key={snack.id} 
+                    ref={(el) => itemRefs.current[snack.id] = el}
+                    className="flex items-center justify-between text-sm p-1.5 rounded-md hover:bg-muted/50"
+                  >
                     <div className="flex items-center space-x-2">
                       <span>{snack.name}</span>
                       <div className="flex items-center border rounded-md">
@@ -687,7 +712,7 @@ export default function Home() {
                           size="icon"
                           className="h-6 w-6"
                           onClick={() => handleSnackDecrement(snack)}
-                          disabled={getSnackQuantity(snack) <= 0}
+                          disabled={snack.quantity <= 0}
                           aria-label={`Decrease quantity of ${snack.name}`}
                         >
                           <Minus className="h-3 w-3" />

@@ -51,6 +51,9 @@ export default function SharedOrderPage() {
   const [debounceTimer, setDebounceTimer] = useState<NodeJS.Timeout | null>(null);
   const isInitialDataLoaded = useRef(false);
 
+  const itemRefs = useRef<Record<string, HTMLLIElement | null>>({});
+  const lastInteractedSnackIdRef = useRef<string | null>(null);
+
 
   const loadAllSnacks = useCallback(async () => {
     setIsLoadingSnacks(true);
@@ -72,7 +75,6 @@ export default function SharedOrderPage() {
   useEffect(() => {
     if (!orderNumber) return;
     
-    // If local state is dirty, don't process incoming RTDB updates yet
     if (isLocalDirty) {
         console.log(`SharedOrderPage: Local state is dirty for ${orderNumber}, skipping RTDB sync for now.`);
         return;
@@ -128,10 +130,10 @@ export default function SharedOrderPage() {
         console.log(`SharedOrderPage unsubscribing from RTDB for order: ${orderNumber}`);
         unsubscribe()
     };
-  }, [orderNumber, toast, isLocalDirty]); // Added isLocalDirty
+  }, [orderNumber, toast, isLocalDirty, customerName, customerPhoneNumber, selectedSnacks, serviceCharge]); 
 
   const updateSharedOrder = useCallback(async () => {
-    if (!orderNumber || isUpdatingRTDB || !isLocalDirty) { // Only push if local is dirty
+    if (!orderNumber || isUpdatingRTDB || !isLocalDirty) { 
         return;
     }
     console.log(`SharedOrderPage pushing update to RTDB for ${orderNumber} (local is dirty)`);
@@ -146,15 +148,14 @@ export default function SharedOrderPage() {
 
     try {
       await setSharedOrderInRTDB(orderNumber, currentOrderData);
-      setIsLocalDirty(false); // Reset dirty flag after successful push
+      setIsLocalDirty(false); 
     } catch (error) {
       console.error("Failed to update RTDB:", error);
       toast({ variant: "destructive", title: "Sync Error", description: "Failed to save changes." });
-      // Note: isLocalDirty remains true here, so the user's changes are still prioritized
     } finally {
         setIsUpdatingRTDB(false);
     }
-  }, [orderNumber, selectedSnacks, serviceCharge, customerName, customerPhoneNumber, toast, isUpdatingRTDB, isLocalDirty]); // Added isLocalDirty
+  }, [orderNumber, selectedSnacks, serviceCharge, customerName, customerPhoneNumber, toast, isUpdatingRTDB, isLocalDirty]);
 
   useEffect(() => {
     if (isLoadingOrder || !isInitialDataLoaded.current || isUpdatingFromRTDBSync || isUpdatingRTDB || !isLocalDirty) {
@@ -165,7 +166,7 @@ export default function SharedOrderPage() {
       clearTimeout(debounceTimer);
     }
     const timer = setTimeout(() => {
-      if (!isUpdatingFromRTDBSync && isLocalDirty) { // Double check before pushing, and ensure local is dirty
+      if (!isUpdatingFromRTDBSync && isLocalDirty) { 
           updateSharedOrder();
       }
     }, 750);
@@ -174,13 +175,22 @@ export default function SharedOrderPage() {
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, isLoadingOrder, updateSharedOrder, isUpdatingFromRTDBSync, isUpdatingRTDB, isLocalDirty]); // Added isLocalDirty
+  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, isLoadingOrder, updateSharedOrder, isUpdatingFromRTDBSync, isUpdatingRTDB, isLocalDirty]); 
   
    useEffect(() => {
     if (document.activeElement?.id !== 'shared-service-charge') {
       setServiceChargeInput(serviceCharge.toFixed(2));
     }
   }, [serviceCharge]);
+
+  useEffect(() => {
+    if (lastInteractedSnackIdRef.current && itemRefs.current[lastInteractedSnackIdRef.current]) {
+      itemRefs.current[lastInteractedSnackIdRef.current]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      });
+    }
+  }, [selectedSnacks]);
 
 
   const calculateTotal = () => {
@@ -190,14 +200,22 @@ export default function SharedOrderPage() {
 
   const handleSnackIncrement = (snack: Snack) => { 
     setIsLocalDirty(true);
+    lastInteractedSnackIdRef.current = snack.id;
     setSelectedSnacks((prevSelected) => {
-      const alreadySelected = prevSelected.find((s) => s.id === snack.id);
-      if (alreadySelected) {
-        return prevSelected.map((s) =>
-          s.id === snack.id ? { ...s, quantity: s.quantity + 1 } : s
-        );
+      const existingSnackIndex = prevSelected.findIndex((s) => s.id === snack.id);
+      if (existingSnackIndex > -1) {
+        const updatedSnack = { ...prevSelected[existingSnackIndex], quantity: prevSelected[existingSnackIndex].quantity + 1 };
+        const newSelected = [...prevSelected];
+        newSelected.splice(existingSnackIndex, 1);
+        return [updatedSnack, ...newSelected];
       } else {
-        return [...prevSelected, { id: snack.id, name: snack.name, price: Number(snack.price), quantity: 1 }];
+        const newItem: SelectedSnackForOrder = {
+            id: snack.id,
+            name: snack.name,
+            price: Number(snack.price),
+            quantity: 1
+        };
+        return [newItem, ...prevSelected];
       }
     });
     setSearchTerm("");
@@ -205,16 +223,22 @@ export default function SharedOrderPage() {
 
   const handleSnackDecrement = (snackId: string) => {
     setIsLocalDirty(true);
+    lastInteractedSnackIdRef.current = snackId;
     setSelectedSnacks((prevSelected) => {
-      const itemToDecrement = prevSelected.find((s) => s.id === snackId);
-      if (!itemToDecrement) return prevSelected;
+      const itemToDecrementIndex = prevSelected.findIndex((s) => s.id === snackId);
+      if (itemToDecrementIndex === -1) return prevSelected;
+
+      const itemToDecrement = prevSelected[itemToDecrementIndex];
 
       if (itemToDecrement.quantity === 1) {
-        return prevSelected.filter((s) => s.id !== snackId);
+        const newSelected = [...prevSelected];
+        newSelected.splice(itemToDecrementIndex, 1);
+        return newSelected;
       } else {
-        return prevSelected.map((s) =>
-          s.id === snackId ? { ...s, quantity: s.quantity - 1 } : s
-        );
+        const updatedSnack = { ...itemToDecrement, quantity: itemToDecrement.quantity - 1 };
+        const newSelected = [...prevSelected];
+        newSelected.splice(itemToDecrementIndex, 1);
+        return [updatedSnack, ...newSelected];
       }
     });
   };
@@ -364,7 +388,11 @@ export default function SharedOrderPage() {
             ) : (
               <ul className="space-y-2 max-h-48 overflow-y-auto">
                 {selectedSnacks.map((item) => (
-                  <li key={item.id} className="flex items-center justify-between text-sm p-1.5 rounded-md hover:bg-muted/50">
+                  <li 
+                    key={item.id} 
+                    ref={(el) => itemRefs.current[item.id] = el}
+                    className="flex items-center justify-between text-sm p-1.5 rounded-md hover:bg-muted/50"
+                  >
                     <div className="flex items-center space-x-2">
                       <span>{item.name}</span>
                       <div className="flex items-center border rounded-md">
