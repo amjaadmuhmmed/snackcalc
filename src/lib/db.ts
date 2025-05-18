@@ -1,3 +1,4 @@
+
 'use server';
 
 import {db} from './firebase';
@@ -103,6 +104,7 @@ export interface Bill {
     orderNumber: string;
     customerName?: string; // Optional customer name
     customerPhoneNumber?: string; // Optional customer phone number
+    tableNumber?: string; // Optional table number
     items: BillItem[];
     serviceCharge: number;
     totalAmount: number;
@@ -119,6 +121,7 @@ export async function addBillToDb(bill: BillInput) {
         ...bill,
         customerName: bill.customerName || '',
         customerPhoneNumber: bill.customerPhoneNumber || '',
+        tableNumber: bill.tableNumber || '',
         createdAt: serverTimestamp() // Add server timestamp
       });
       return {success: true};
@@ -140,6 +143,7 @@ export async function getBillsFromDb(): Promise<Bill[]> {
           orderNumber: data.orderNumber,
           customerName: data.customerName || '',
           customerPhoneNumber: data.customerPhoneNumber || '',
+          tableNumber: data.tableNumber || '',
           items: data.items,
           serviceCharge: data.serviceCharge,
           totalAmount: data.totalAmount,

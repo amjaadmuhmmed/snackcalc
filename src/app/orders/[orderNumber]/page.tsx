@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Minus, Search, User as UserIcon, Phone, ArrowLeft, CopyIcon } from "lucide-react";
+import { Plus, Minus, Search, User as UserIcon, Phone, ArrowLeft, CopyIcon, Hash } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
 
 import { getSnacks } from "@/app/actions"; 
@@ -41,6 +41,7 @@ export default function SharedOrderPage() {
   const [serviceChargeInput, setServiceChargeInput] = useState<string>("0");
   const [customerName, setCustomerName] = useState<string>("");
   const [customerPhoneNumber, setCustomerPhoneNumber] = useState<string>("");
+  const [tableNumber, setTableNumber] = useState<string>("");
   const [isLoadingSnacks, setIsLoadingSnacks] = useState(true);
   const [isLoadingOrder, setIsLoadingOrder] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -114,6 +115,9 @@ export default function SharedOrderPage() {
         if (String(data.customerPhoneNumber || "") !== customerPhoneNumber) {
             setCustomerPhoneNumber(String(data.customerPhoneNumber) || "");
         }
+        if (String(data.tableNumber || "") !== tableNumber) {
+            setTableNumber(String(data.tableNumber || ""));
+        }
         
         if (!isInitialDataLoaded.current) {
              isInitialDataLoaded.current = true;
@@ -131,7 +135,7 @@ export default function SharedOrderPage() {
         console.log(`SharedOrderPage unsubscribing from RTDB for order: ${orderNumber}`);
         unsubscribe()
     };
-  }, [orderNumber, toast, isLocalDirty, customerName, customerPhoneNumber, selectedSnacks, serviceCharge]); 
+  }, [orderNumber, toast, isLocalDirty, customerName, customerPhoneNumber, tableNumber, selectedSnacks, serviceCharge]); 
 
   const updateSharedOrder = useCallback(async () => {
     if (!orderNumber || isUpdatingRTDB || !isLocalDirty) { 
@@ -145,6 +149,7 @@ export default function SharedOrderPage() {
       serviceCharge: serviceCharge,
       customerName: customerName,
       customerPhoneNumber: customerPhoneNumber,
+      tableNumber: tableNumber,
     };
 
     try {
@@ -156,7 +161,7 @@ export default function SharedOrderPage() {
     } finally {
         setIsUpdatingRTDB(false);
     }
-  }, [orderNumber, selectedSnacks, serviceCharge, customerName, customerPhoneNumber, toast, isUpdatingRTDB, isLocalDirty]);
+  }, [orderNumber, selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, toast, isUpdatingRTDB, isLocalDirty]);
 
   useEffect(() => {
     if (isLoadingOrder || !isInitialDataLoaded.current || isUpdatingFromRTDBSync || isUpdatingRTDB || !isLocalDirty) {
@@ -176,7 +181,7 @@ export default function SharedOrderPage() {
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, isLoadingOrder, updateSharedOrder, isUpdatingFromRTDBSync, isUpdatingRTDB, isLocalDirty]); 
+  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, isLoadingOrder, updateSharedOrder, isUpdatingFromRTDBSync, isUpdatingRTDB, isLocalDirty]); 
   
    useEffect(() => {
     if (document.activeElement?.id !== 'shared-service-charge') {
@@ -288,6 +293,12 @@ export default function SharedOrderPage() {
     setIsLocalDirty(true);
     setCustomerPhoneNumber(e.target.value);
   };
+
+  const handleTableNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsLocalDirty(true);
+    setTableNumber(e.target.value);
+  };
+
 
   const filteredAllSnacks = useMemo(() => {
     if (!searchTerm) {
@@ -437,6 +448,13 @@ export default function SharedOrderPage() {
           <div className="grid gap-1.5">
             <Label htmlFor="shared-service-charge" className="text-sm">Service Charge (₹)</Label>
             <Input id="shared-service-charge" type="text" placeholder="0.00" value={serviceChargeInput} onChange={handleServiceChargeInputChange} onBlur={handleServiceChargeInputBlur} onFocus={handleServiceChargeInputFocus} className="h-9 text-sm" inputMode="decimal" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="shared-table-number" className="text-sm">Table Number</Label>
+             <div className="relative">
+                <Hash className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input id="shared-table-number" type="text" placeholder="Optional" value={tableNumber} onChange={handleTableNumberChange} className="pl-8 h-9 text-sm" />
+              </div>
           </div>
           <Separator />
 

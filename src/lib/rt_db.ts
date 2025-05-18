@@ -1,3 +1,4 @@
+
 // src/lib/rt_db.ts
 'use client'; // Needed for onValue, set, ref from Firebase SDK client-side
 
@@ -23,6 +24,7 @@ export interface SharedOrderData {
   serviceCharge: number;
   customerName: string;
   customerPhoneNumber: string;
+  tableNumber?: string;
   lastUpdatedAt: object; // Firebase server timestamp placeholder
 }
 
@@ -58,6 +60,7 @@ export async function setSharedOrderInRTDB(orderNumber: string, billData: Omit<S
   const dataToSet: SharedOrderData = {
     ...billData,
     orderNumber: orderNumber,
+    tableNumber: billData.tableNumber || '',
     lastUpdatedAt: serverTimestamp(),
   };
 
@@ -84,6 +87,7 @@ export interface SharedBillState {
   serviceCharge: number;
   customerName: string;
   customerPhoneNumber: string;
+  tableNumber?: string;
   orderNumber: string; // This is also the key in RTDB
 }
 

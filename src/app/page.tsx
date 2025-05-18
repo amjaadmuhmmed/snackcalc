@@ -15,7 +15,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, ArrowLeft } from "lucide-react";
+import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
 import { addSnack, getSnacks, updateSnack, deleteSnack, saveBill } from "./actions";
 import type { Snack, BillInput } from "@/lib/db";
@@ -64,6 +64,7 @@ export default function Home() {
   const [orderNumber, setOrderNumber] = useState<string>('');
   const [customerName, setCustomerName] = useState<string>("");
   const [customerPhoneNumber, setCustomerPhoneNumber] = useState<string>("");
+  const [tableNumber, setTableNumber] = useState<string>("");
   const { toast } = useToast();
   const [isAdmin, setIsAdmin] = useState(false);
   const [password, setPassword] = useState("");
@@ -194,6 +195,9 @@ export default function Home() {
         if (String(data.customerPhoneNumber || "") !== customerPhoneNumber) {
           setCustomerPhoneNumber(String(data.customerPhoneNumber || ""));
         }
+        if (String(data.tableNumber || "") !== tableNumber) {
+          setTableNumber(String(data.tableNumber || ""));
+        }
         
         requestAnimationFrame(() => {
             setIsUpdatingFromRTDBSync(false);
@@ -208,7 +212,7 @@ export default function Home() {
       console.log(`Main page unsubscribing from RTDB for order: ${activeSharedOrderNumber}`);
       unsubscribe();
     };
-  }, [activeSharedOrderNumber, snacks, isLocalDirty, customerName, customerPhoneNumber, selectedSnacks, serviceCharge]);
+  }, [activeSharedOrderNumber, snacks, isLocalDirty, customerName, customerPhoneNumber, tableNumber, selectedSnacks, serviceCharge]);
 
 
   const calculateTotal = () => {
@@ -349,6 +353,7 @@ export default function Home() {
           orderNumber: orderNumber,
           customerName: customerName,
           customerPhoneNumber: customerPhoneNumber,
+          tableNumber: tableNumber,
           items: selectedSnacks.map(s => ({ name: s.name, price: Number(s.price), quantity: s.quantity })),
           serviceCharge: serviceCharge,
           totalAmount: currentTotal,
@@ -362,6 +367,7 @@ export default function Home() {
               setServiceCharge(0);
               setCustomerName("");
               setCustomerPhoneNumber("");
+              setTableNumber("");
               setOrderNumber(generateOrderNumber()); 
               setSearchTerm("");
               setActiveSharedOrderNumber(null); 
@@ -486,6 +492,7 @@ export default function Home() {
       serviceCharge: serviceCharge,
       customerName: customerName,
       customerPhoneNumber: customerPhoneNumber,
+      tableNumber: tableNumber,
     };
 
     try {
@@ -504,7 +511,7 @@ export default function Home() {
     } finally {
       setIsGeneratingShareUrl(false);
     }
-  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, toast]); 
+  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, toast]); 
 
   useEffect(() => {
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
@@ -541,6 +548,7 @@ export default function Home() {
         serviceCharge: serviceCharge,
         customerName: customerName,
         customerPhoneNumber: customerPhoneNumber,
+        tableNumber: tableNumber,
       };
 
       try {
@@ -564,6 +572,7 @@ export default function Home() {
     serviceCharge,
     customerName,
     customerPhoneNumber,
+    tableNumber,
     orderNumber, 
     activeSharedOrderNumber, 
     isLoadingSnacks,
@@ -581,6 +590,11 @@ export default function Home() {
   const handleCustomerPhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setIsLocalDirty(true);
     setCustomerPhoneNumber(e.target.value);
+  };
+
+  const handleTableNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsLocalDirty(true);
+    setTableNumber(e.target.value);
   };
 
 
@@ -785,6 +799,21 @@ export default function Home() {
               inputMode="decimal"
               aria-label="Service Charge"
             />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="table-number" className="text-sm">Table Number</Label>
+            <div className="relative">
+                <Hash className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="table-number"
+                  type="text"
+                  placeholder="Optional"
+                  value={tableNumber}
+                  onChange={handleTableNumberChange}
+                  className="pl-8 h-9 text-sm"
+                  aria-label="Table Number"
+                />
+              </div>
           </div>
           <Separator />
           <div className="flex flex-col items-center justify-between gap-3">
