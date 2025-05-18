@@ -151,7 +151,7 @@ export default function BillsPage() {
                     </TableCell>
                     <TableCell className="text-right">₹{bill.serviceCharge.toFixed(2)}</TableCell>
                     <TableCell className="text-right font-semibold">₹{bill.totalAmount.toFixed(2)}</TableCell>
-                    <TableCell className="text-xs truncate max-w-[150px] md:max-w-[200px]">{bill.notes || '-'}</TableCell>
+                    <TableCell className="text-xs whitespace-pre-wrap">{bill.notes || '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
