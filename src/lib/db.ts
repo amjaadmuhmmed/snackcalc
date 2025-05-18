@@ -105,6 +105,7 @@ export interface Bill {
     customerName?: string; // Optional customer name
     customerPhoneNumber?: string; // Optional customer phone number
     tableNumber?: string; // Optional table number
+    notes?: string; // Optional notes
     items: BillItem[];
     serviceCharge: number;
     totalAmount: number;
@@ -122,6 +123,7 @@ export async function addBillToDb(bill: BillInput) {
         customerName: bill.customerName || '',
         customerPhoneNumber: bill.customerPhoneNumber || '',
         tableNumber: bill.tableNumber || '',
+        notes: bill.notes || '', // Save notes
         createdAt: serverTimestamp() // Add server timestamp
       });
       return {success: true};
@@ -144,6 +146,7 @@ export async function getBillsFromDb(): Promise<Bill[]> {
           customerName: data.customerName || '',
           customerPhoneNumber: data.customerPhoneNumber || '',
           tableNumber: data.tableNumber || '',
+          notes: data.notes || '', // Retrieve notes
           items: data.items,
           serviceCharge: data.serviceCharge,
           totalAmount: data.totalAmount,

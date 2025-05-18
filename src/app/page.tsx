@@ -9,13 +9,14 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea"; // Import Textarea
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash } from "lucide-react";
+import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText } from "lucide-react"; // Added FileText
 import { QRCodeCanvas } from 'qrcode.react';
 import { addSnack, getSnacks, updateSnack, deleteSnack, saveBill } from "./actions";
 import type { Snack, BillInput } from "@/lib/db";
@@ -65,6 +66,7 @@ export default function Home() {
   const [customerName, setCustomerName] = useState<string>("");
   const [customerPhoneNumber, setCustomerPhoneNumber] = useState<string>("");
   const [tableNumber, setTableNumber] = useState<string>("");
+  const [notes, setNotes] = useState<string>(""); // State for notes
   const { toast } = useToast();
   const [isAdmin, setIsAdmin] = useState(false);
   const [password, setPassword] = useState("");
@@ -198,6 +200,9 @@ export default function Home() {
         if (String(data.tableNumber || "") !== tableNumber) {
           setTableNumber(String(data.tableNumber || ""));
         }
+        if (String(data.notes || "") !== notes) { // Sync notes
+          setNotes(String(data.notes || ""));
+        }
         
         requestAnimationFrame(() => {
             setIsUpdatingFromRTDBSync(false);
@@ -212,7 +217,7 @@ export default function Home() {
       console.log(`Main page unsubscribing from RTDB for order: ${activeSharedOrderNumber}`);
       unsubscribe();
     };
-  }, [activeSharedOrderNumber, snacks, isLocalDirty, customerName, customerPhoneNumber, tableNumber, selectedSnacks, serviceCharge]);
+  }, [activeSharedOrderNumber, snacks, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, selectedSnacks, serviceCharge]);
 
 
   const calculateTotal = () => {
@@ -354,6 +359,7 @@ export default function Home() {
           customerName: customerName,
           customerPhoneNumber: customerPhoneNumber,
           tableNumber: tableNumber,
+          notes: notes, // Include notes
           items: selectedSnacks.map(s => ({ name: s.name, price: Number(s.price), quantity: s.quantity })),
           serviceCharge: serviceCharge,
           totalAmount: currentTotal,
@@ -368,6 +374,7 @@ export default function Home() {
               setCustomerName("");
               setCustomerPhoneNumber("");
               setTableNumber("");
+              setNotes(""); // Reset notes
               setOrderNumber(generateOrderNumber()); 
               setSearchTerm("");
               setActiveSharedOrderNumber(null); 
@@ -493,6 +500,7 @@ export default function Home() {
       customerName: customerName,
       customerPhoneNumber: customerPhoneNumber,
       tableNumber: tableNumber,
+      notes: notes, // Include notes
     };
 
     try {
@@ -511,7 +519,7 @@ export default function Home() {
     } finally {
       setIsGeneratingShareUrl(false);
     }
-  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, toast]); 
+  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, toast]); 
 
   useEffect(() => {
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
@@ -549,6 +557,7 @@ export default function Home() {
         customerName: customerName,
         customerPhoneNumber: customerPhoneNumber,
         tableNumber: tableNumber,
+        notes: notes, // Include notes
       };
 
       try {
@@ -573,6 +582,7 @@ export default function Home() {
     customerName,
     customerPhoneNumber,
     tableNumber,
+    notes, // Add notes to dependency array
     orderNumber, 
     activeSharedOrderNumber, 
     isLoadingSnacks,
@@ -595,6 +605,11 @@ export default function Home() {
   const handleTableNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setIsLocalDirty(true);
     setTableNumber(e.target.value);
+  };
+
+  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => { // Handler for notes
+    setIsLocalDirty(true);
+    setNotes(e.target.value);
   };
 
 
@@ -814,6 +829,20 @@ export default function Home() {
                   aria-label="Table Number"
                 />
               </div>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="notes" className="text-sm">Notes</Label>
+            <div className="relative">
+              <FileText className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Textarea
+                id="notes"
+                placeholder="Optional: e.g., less spicy, no onions..."
+                value={notes}
+                onChange={handleNotesChange}
+                className="pl-8 text-sm min-h-[60px]" 
+                aria-label="Notes"
+              />
+            </div>
           </div>
           <Separator />
           <div className="flex flex-col items-center justify-between gap-3">

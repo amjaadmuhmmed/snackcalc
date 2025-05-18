@@ -11,9 +11,10 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea"; // Import Textarea
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Minus, Search, User as UserIcon, Phone, ArrowLeft, CopyIcon, Hash } from "lucide-react";
+import { Plus, Minus, Search, User as UserIcon, Phone, ArrowLeft, CopyIcon, Hash, FileText } from "lucide-react"; // Added FileText
 import { QRCodeCanvas } from 'qrcode.react';
 
 import { getSnacks } from "@/app/actions"; 
@@ -42,6 +43,7 @@ export default function SharedOrderPage() {
   const [customerName, setCustomerName] = useState<string>("");
   const [customerPhoneNumber, setCustomerPhoneNumber] = useState<string>("");
   const [tableNumber, setTableNumber] = useState<string>("");
+  const [notes, setNotes] = useState<string>(""); // State for notes
   const [isLoadingSnacks, setIsLoadingSnacks] = useState(true);
   const [isLoadingOrder, setIsLoadingOrder] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -118,6 +120,9 @@ export default function SharedOrderPage() {
         if (String(data.tableNumber || "") !== tableNumber) {
             setTableNumber(String(data.tableNumber || ""));
         }
+        if (String(data.notes || "") !== notes) { // Sync notes
+            setNotes(String(data.notes || ""));
+        }
         
         if (!isInitialDataLoaded.current) {
              isInitialDataLoaded.current = true;
@@ -135,7 +140,7 @@ export default function SharedOrderPage() {
         console.log(`SharedOrderPage unsubscribing from RTDB for order: ${orderNumber}`);
         unsubscribe()
     };
-  }, [orderNumber, toast, isLocalDirty, customerName, customerPhoneNumber, tableNumber, selectedSnacks, serviceCharge]); 
+  }, [orderNumber, toast, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, selectedSnacks, serviceCharge]); 
 
   const updateSharedOrder = useCallback(async () => {
     if (!orderNumber || isUpdatingRTDB || !isLocalDirty) { 
@@ -150,6 +155,7 @@ export default function SharedOrderPage() {
       customerName: customerName,
       customerPhoneNumber: customerPhoneNumber,
       tableNumber: tableNumber,
+      notes: notes, // Include notes
     };
 
     try {
@@ -161,7 +167,7 @@ export default function SharedOrderPage() {
     } finally {
         setIsUpdatingRTDB(false);
     }
-  }, [orderNumber, selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, toast, isUpdatingRTDB, isLocalDirty]);
+  }, [orderNumber, selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, toast, isUpdatingRTDB, isLocalDirty]);
 
   useEffect(() => {
     if (isLoadingOrder || !isInitialDataLoaded.current || isUpdatingFromRTDBSync || isUpdatingRTDB || !isLocalDirty) {
@@ -181,7 +187,7 @@ export default function SharedOrderPage() {
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, isLoadingOrder, updateSharedOrder, isUpdatingFromRTDBSync, isUpdatingRTDB, isLocalDirty]); 
+  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, isLoadingOrder, updateSharedOrder, isUpdatingFromRTDBSync, isUpdatingRTDB, isLocalDirty]); 
   
    useEffect(() => {
     if (document.activeElement?.id !== 'shared-service-charge') {
@@ -297,6 +303,11 @@ export default function SharedOrderPage() {
   const handleTableNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setIsLocalDirty(true);
     setTableNumber(e.target.value);
+  };
+
+  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => { // Handler for notes
+    setIsLocalDirty(true);
+    setNotes(e.target.value);
   };
 
 
@@ -455,6 +466,20 @@ export default function SharedOrderPage() {
                 <Hash className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input id="shared-table-number" type="text" placeholder="Optional" value={tableNumber} onChange={handleTableNumberChange} className="pl-8 h-9 text-sm" />
               </div>
+          </div>
+           <div className="grid gap-1.5">
+            <Label htmlFor="shared-notes" className="text-sm">Notes</Label>
+            <div className="relative">
+              <FileText className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Textarea
+                id="shared-notes"
+                placeholder="Optional: e.g., less spicy..."
+                value={notes}
+                onChange={handleNotesChange}
+                className="pl-8 text-sm min-h-[60px]"
+                aria-label="Notes"
+              />
+            </div>
           </div>
           <Separator />
 

@@ -124,6 +124,7 @@ export default function BillsPage() {
                   <TableHead>Date</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead>Table #</TableHead>
+                  <TableHead>Notes</TableHead>
                   <TableHead>Items</TableHead>
                   <TableHead className="text-right">Service Ch.</TableHead>
                   <TableHead className="text-right">Total</TableHead>
@@ -139,6 +140,7 @@ export default function BillsPage() {
                         <span className="text-xs text-muted-foreground">{bill.customerPhoneNumber || '-'}</span>
                     </TableCell>
                     <TableCell>{bill.tableNumber || '-'}</TableCell>
+                    <TableCell className="text-xs max-w-[150px] truncate">{bill.notes || '-'}</TableCell>
                     <TableCell>
                       <ul className="list-disc list-inside text-sm">
                         {bill.items.map((item, index) => (
