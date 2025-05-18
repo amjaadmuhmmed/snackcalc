@@ -124,10 +124,10 @@ export default function BillsPage() {
                   <TableHead>Date</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead>Table #</TableHead>
-                  <TableHead>Notes</TableHead>
                   <TableHead className="min-w-[200px] sm:min-w-[250px] md:min-w-[300px]">Items</TableHead>
                   <TableHead className="text-right">Service Ch.</TableHead>
                   <TableHead className="text-right">Total</TableHead>
+                  <TableHead>Notes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -140,7 +140,6 @@ export default function BillsPage() {
                         <span className="text-xs text-muted-foreground">{bill.customerPhoneNumber || '-'}</span>
                     </TableCell>
                     <TableCell>{bill.tableNumber || '-'}</TableCell>
-                    <TableCell className="text-xs truncate">{bill.notes || '-'}</TableCell>
                     <TableCell className="min-w-[200px] sm:min-w-[250px] md:min-w-[300px]">
                       <ul className="list-disc list-inside text-sm">
                         {bill.items.map((item, index) => (
@@ -152,6 +151,7 @@ export default function BillsPage() {
                     </TableCell>
                     <TableCell className="text-right">₹{bill.serviceCharge.toFixed(2)}</TableCell>
                     <TableCell className="text-right font-semibold">₹{bill.totalAmount.toFixed(2)}</TableCell>
+                    <TableCell className="text-xs truncate max-w-[150px] md:max-w-[200px]">{bill.notes || '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
