@@ -125,7 +125,7 @@ export default function BillsPage() {
                   <TableHead>Customer</TableHead>
                   <TableHead>Table #</TableHead>
                   <TableHead>Notes</TableHead>
-                  <TableHead>Items</TableHead>
+                  <TableHead className="min-w-[200px] sm:min-w-[250px] md:min-w-[300px]">Items</TableHead>
                   <TableHead className="text-right">Service Ch.</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                 </TableRow>
@@ -140,8 +140,8 @@ export default function BillsPage() {
                         <span className="text-xs text-muted-foreground">{bill.customerPhoneNumber || '-'}</span>
                     </TableCell>
                     <TableCell>{bill.tableNumber || '-'}</TableCell>
-                    <TableCell className="text-xs max-w-[150px] truncate">{bill.notes || '-'}</TableCell>
-                    <TableCell>
+                    <TableCell className="text-xs truncate">{bill.notes || '-'}</TableCell>
+                    <TableCell className="min-w-[200px] sm:min-w-[250px] md:min-w-[300px]">
                       <ul className="list-disc list-inside text-sm">
                         {bill.items.map((item, index) => (
                           <li key={index}>
@@ -162,3 +162,4 @@ export default function BillsPage() {
     </div>
   );
 }
+
