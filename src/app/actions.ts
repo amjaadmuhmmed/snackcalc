@@ -1,6 +1,7 @@
+
 'use server';
 
-import {addSnackToDb, getSnacksFromDb, updateSnackInDb, deleteSnackFromDb, addBillToDb, getBillsFromDb, BillInput} from '@/lib/db';
+import {addSnackToDb, getSnacksFromDb, updateSnackInDb, deleteSnackFromDb, addBillToDb, updateBillInDb, getBillsFromDb, BillInput} from '@/lib/db';
 import {revalidatePath} from 'next/cache';
 
 // --- Snack Actions ---
@@ -100,17 +101,23 @@ export async function getSnacks() { // Renamed to avoid conflict if needed elsew
 
 // --- Bill Actions ---
 
-export async function saveBill(billData: BillInput) {
+export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
     try {
-        const result = await addBillToDb(billData); // BillInput now includes optional customerName and customerPhoneNumber
-        if (result.success) {
-            revalidatePath('/bills'); // Revalidate the bills page to show the new bill
-            return { success: true, message: 'Bill saved successfully!' };
+        let result;
+        if (billIdToUpdate) {
+            result = await updateBillInDb(billIdToUpdate, billData);
         } else {
-            return { success: false, message: result.message || 'Failed to save bill.' };
+            result = await addBillToDb(billData);
+        }
+
+        if (result.success) {
+            revalidatePath('/bills'); // Revalidate the bills page to show the new/updated bill
+            return { success: true, message: billIdToUpdate ? 'Bill updated successfully!' : 'Bill saved successfully!' };
+        } else {
+            return { success: false, message: result.message || (billIdToUpdate ? 'Failed to update bill.' : 'Failed to save bill.') };
         }
     } catch (error: any) {
-        console.error('Error saving bill:', error);
+        console.error('Error saving/updating bill:', error);
         return { success: false, message: error.message || 'An unexpected error occurred.' };
     }
 }
@@ -118,3 +125,4 @@ export async function saveBill(billData: BillInput) {
 export async function getBills() {
     return getBillsFromDb();
 }
+

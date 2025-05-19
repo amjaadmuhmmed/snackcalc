@@ -2,7 +2,7 @@
 'use server';
 
 import {db} from './firebase';
-import {collection, addDoc, getDocs, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy} from 'firebase/firestore';
+import {collection, addDoc, getDocs, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp} from 'firebase/firestore';
 
 // --- Snacks ---
 
@@ -67,15 +67,15 @@ export async function getSnacksFromDb(): Promise<Snack[]> {
     console.log("Attempting to fetch snacks from Firestore collection 'snack'..."); // was 'snacks'
     const snackSnapshot = await getDocs(snacksCollection); // Use 'snack' collection
     console.log(`Fetched ${snackSnapshot.docs.length} snack documents.`);
-    const snacks = snackSnapshot.docs.map(doc => {
-        const data = doc.data();
+    const snacks = snackSnapshot.docs.map(docSnap => { // Renamed doc to docSnap to avoid conflict
+        const data = docSnap.data();
         // Ensure price is treated as a number
         const price = Number(data.price);
         if (isNaN(price)) {
-            console.warn(`Document ${doc.id} has invalid price: ${data.price}. Setting price to 0.`);
+            console.warn(`Document ${docSnap.id} has invalid price: ${data.price}. Setting price to 0.`);
         }
         return {
-          id: doc.id,
+          id: docSnap.id,
           name: data.name || 'Unnamed Snack', // Provide default values if fields are missing
           category: data.category || 'Uncategorized',
           price: isNaN(price) ? 0 : price, // Default to 0 if price is not a valid number
@@ -109,10 +109,11 @@ export interface Bill {
     items: BillItem[];
     serviceCharge: number;
     totalAmount: number;
-    createdAt: any; // Firestore Timestamp
+    createdAt: Timestamp | Date; // Firestore Timestamp or Date
+    lastUpdatedAt?: Timestamp | Date; // Optional: Firestore Timestamp or Date for updates
 }
 
-export interface BillInput extends Omit<Bill, 'id' | 'createdAt'> {}
+export interface BillInput extends Omit<Bill, 'id' | 'createdAt' | 'lastUpdatedAt'> {}
 
 const billsCollection = collection(db, 'bills');
 
@@ -133,15 +134,34 @@ export async function addBillToDb(bill: BillInput) {
     }
 }
 
+export async function updateBillInDb(id: string, bill: BillInput) {
+    try {
+        const billDoc = doc(db, 'bills', id);
+        await updateDoc(billDoc, {
+            ...bill,
+            customerName: bill.customerName || '',
+            customerPhoneNumber: bill.customerPhoneNumber || '',
+            tableNumber: bill.tableNumber || '',
+            notes: bill.notes || '',
+            lastUpdatedAt: serverTimestamp() // Set last updated timestamp
+        });
+        return {success: true};
+    } catch (e: any) {
+        console.error('Error updating bill document: ', e);
+        return {success: false, message: e.message};
+    }
+}
+
+
 export async function getBillsFromDb(): Promise<Bill[]> {
     try {
       // Order bills by creation date, newest first
       const billsQuery = query(billsCollection, orderBy('createdAt', 'desc'));
       const billSnapshot = await getDocs(billsQuery);
-      return billSnapshot.docs.map(doc => {
-        const data = doc.data();
+      return billSnapshot.docs.map(docSnap => { // Renamed doc to docSnap
+        const data = docSnap.data();
         return {
-          id: doc.id,
+          id: docSnap.id,
           orderNumber: data.orderNumber,
           customerName: data.customerName || '',
           customerPhoneNumber: data.customerPhoneNumber || '',
@@ -151,6 +171,7 @@ export async function getBillsFromDb(): Promise<Bill[]> {
           serviceCharge: data.serviceCharge,
           totalAmount: data.totalAmount,
           createdAt: data.createdAt,
+          lastUpdatedAt: data.lastUpdatedAt,
         } as Bill;
       })
     } catch (e: any) {
@@ -158,3 +179,4 @@ export async function getBillsFromDb(): Promise<Bill[]> {
       return [];
     }
 }
+

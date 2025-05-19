@@ -3,23 +3,24 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea"; // Import Textarea
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText } from "lucide-react"; // Added FileText
+import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
 import { addSnack, getSnacks, updateSnack, deleteSnack, saveBill } from "./actions";
-import type { Snack, BillInput } from "@/lib/db";
+import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db";
 import Link from "next/link";
 import {
   Dialog,
@@ -57,6 +58,8 @@ const generateOrderNumber = () => {
 };
 
 export default function Home() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [snacks, setSnacks] = useState<Snack[]>([]);
   const [selectedSnacks, setSelectedSnacks] = useState<SelectedSnack[]>([]);
   const [editingSnackId, setEditingSnackId] = useState<string | null>(null);
@@ -66,7 +69,7 @@ export default function Home() {
   const [customerName, setCustomerName] = useState<string>("");
   const [customerPhoneNumber, setCustomerPhoneNumber] = useState<string>("");
   const [tableNumber, setTableNumber] = useState<string>("");
-  const [notes, setNotes] = useState<string>(""); // State for notes
+  const [notes, setNotes] = useState<string>("");
   const { toast } = useToast();
   const [isAdmin, setIsAdmin] = useState(false);
   const [password, setPassword] = useState("");
@@ -78,6 +81,7 @@ export default function Home() {
   const [isGeneratingShareUrl, setIsGeneratingShareUrl] = useState(false);
 
   const [activeSharedOrderNumber, setActiveSharedOrderNumber] = useState<string | null>(null);
+  const [editingBillId, setEditingBillId] = useState<string | null>(null); // For editing existing Firestore bill
   const [isUpdatingRTDBFromMain, setIsUpdatingRTDBFromMain] = useState(false);
   const [mainDebounceTimer, setMainDebounceTimer] = useState<NodeJS.Timeout | null>(null);
   const [isUpdatingFromRTDBSync, setIsUpdatingFromRTDBSync] = useState(false);
@@ -121,12 +125,26 @@ export default function Home() {
     }
   }, [toast]);
 
+  // Effect for initial setup: loading snacks, processing edit params
   useEffect(() => {
     loadSnacks();
-    if (!orderNumber) {
+
+    const editOrderNum = searchParams.get('editOrder');
+    const editFsBillId = searchParams.get('editBillId');
+
+    if (editOrderNum && editFsBillId) {
+      setOrderNumber(editOrderNum);
+      setEditingBillId(editFsBillId);
+      setActiveSharedOrderNumber(editOrderNum); // This will trigger RTDB subscription
+      // Do NOT push to RTDB here, BillsPage already did.
+      // The RTDB subscription will populate the form.
+      console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
+    } else if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
     }
-  }, [loadSnacks, orderNumber]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadSnacks, searchParams]); // orderNumber removed to prevent re-gen if not editing
+
 
   useEffect(() => {
     if (document.activeElement?.id !== 'service-charge' && document.activeElement?.id !== 'shared-service-charge') {
@@ -136,24 +154,23 @@ export default function Home() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const legacyOrder = params.get('order');
+    const legacyOrder = params.get('order'); // Pre-shared order system
     const legacyItems = params.get('items');
 
-    if (legacyOrder && legacyItems && typeof window !== "undefined") {
+    if (legacyOrder && legacyItems && typeof window !== "undefined" && !searchParams.get('editOrder')) {
         toast({
             title: "Shared link format updated",
             description: "Please use new share links for real-time collaboration.",
         });
         window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [toast]);
+  }, [toast, searchParams]);
 
-  // RTDB Subscription for main page when a bill is actively shared
+  // RTDB Subscription for main page when a bill is actively shared OR being edited
   useEffect(() => {
     if (!activeSharedOrderNumber || snacks.length === 0) {
       return;
     }
-     // If local state is dirty, don't process incoming RTDB updates yet
     if (isLocalDirty) {
         console.log("Main page: Local state is dirty, skipping RTDB sync for now.");
         return;
@@ -170,13 +187,13 @@ export default function Home() {
         setIsUpdatingFromRTDBSync(true);
 
         const newSelectedSnacks = (data.items || []).map(item => {
-          const baseSnack = snacks.find(s => s.id === item.id);
+          const baseSnack = snacks.find(s => s.id === item.id || s.name === item.name); // Match by ID or name for items from DB
           return {
-            id: item.id,
+            id: baseSnack?.id || item.id, // Prioritize baseSnack.id if found
             name: item.name,
             price: Number(item.price),
             quantity: item.quantity,
-            category: baseSnack?.category || 'Unknown', // Ensure category is present
+            category: baseSnack?.category || 'Unknown',
           };
         });
         
@@ -200,7 +217,7 @@ export default function Home() {
         if (String(data.tableNumber || "") !== tableNumber) {
           setTableNumber(String(data.tableNumber || ""));
         }
-        if (String(data.notes || "") !== notes) { // Sync notes
+        if (String(data.notes || "") !== notes) {
           setNotes(String(data.notes || ""));
         }
         
@@ -233,10 +250,9 @@ export default function Home() {
       if (existingSnackIndex > -1) {
         const updatedSnack = { ...prevSelected[existingSnackIndex], quantity: prevSelected[existingSnackIndex].quantity + 1 };
         const newSelected = [...prevSelected];
-        newSelected.splice(existingSnackIndex, 1); // Remove old
-        return [updatedSnack, ...newSelected]; // Add updated to front
+        newSelected.splice(existingSnackIndex, 1);
+        return [updatedSnack, ...newSelected];
       } else {
-        // Ensure price is a number when adding a new snack
         return [{ ...snack, price: Number(snack.price), quantity: 1 }, ...prevSelected];
       }
     });
@@ -253,16 +269,14 @@ export default function Home() {
       const currentSnack = prevSelected[currentSnackIndex];
 
       if (currentSnack.quantity === 1) {
-        // Remove the item
         const newSelected = [...prevSelected];
         newSelected.splice(currentSnackIndex, 1);
         return newSelected;
       } else {
-        // Decrement quantity and move to top
         const updatedSnack = { ...currentSnack, quantity: currentSnack.quantity - 1 };
         const newSelected = [...prevSelected];
-        newSelected.splice(currentSnackIndex, 1); // Remove old
-        return [updatedSnack, ...newSelected]; // Add updated to front
+        newSelected.splice(currentSnackIndex, 1);
+        return [updatedSnack, ...newSelected];
       }
     });
   };
@@ -350,41 +364,57 @@ export default function Home() {
 
   const handleSaveBill = async () => {
       const currentTotal = calculateTotal();
-      if (currentTotal <= 0 || isSavingBill) return;
+      // Allow saving/updating a bill even if total is 0, in case all items were removed during edit
+      if (isSavingBill || (!editingBillId && currentTotal <= 0)) {
+        if (!editingBillId && currentTotal <= 0) {
+          toast({ variant: "default", title: "Cannot save empty bill." });
+        }
+        return;
+      }
 
       setIsSavingBill(true);
 
       const billData: BillInput = {
-          orderNumber: orderNumber,
+          orderNumber: orderNumber, // Use current orderNumber (could be from edit or new)
           customerName: customerName,
           customerPhoneNumber: customerPhoneNumber,
           tableNumber: tableNumber,
-          notes: notes, // Include notes
+          notes: notes,
           items: selectedSnacks.map(s => ({ name: s.name, price: Number(s.price), quantity: s.quantity })),
           serviceCharge: serviceCharge,
           totalAmount: currentTotal,
       };
 
       try {
-          const result = await saveBill(billData);
+          // Pass editingBillId if it exists, otherwise it's undefined (new bill)
+          const result = await saveBill(billData, editingBillId || undefined);
           if (result.success) {
-              toast({ title: "Bill saved successfully!" });
+              toast({ title: result.message }); // Message will be "Bill saved" or "Bill updated"
+              
+              // Reset state for a new order
               setSelectedSnacks([]);
               setServiceCharge(0);
               setCustomerName("");
               setCustomerPhoneNumber("");
               setTableNumber("");
-              setNotes(""); // Reset notes
+              setNotes("");
               setOrderNumber(generateOrderNumber()); 
               setSearchTerm("");
               setActiveSharedOrderNumber(null); 
+              setEditingBillId(null); // Clear editing state
               setShareUrl(""); 
               setIsLocalDirty(false); 
+              
+              // Remove edit query params from URL without full page reload
+              if (searchParams.get('editOrder') || searchParams.get('editBillId')) {
+                router.replace('/', undefined); // Use router.replace to avoid adding to history
+              }
+
           } else {
-              toast({ variant: "destructive", title: "Failed to save bill.", description: result.message });
+              toast({ variant: "destructive", title: editingBillId ? "Failed to update bill." : "Failed to save bill.", description: result.message });
           }
       } catch (error: any) {
-          toast({ variant: "destructive", title: "Error saving bill.", description: error.message });
+          toast({ variant: "destructive", title: editingBillId ? "Error updating bill." : "Error saving bill.", description: error.message });
       } finally {
           setIsSavingBill(false);
       }
@@ -481,7 +511,10 @@ export default function Home() {
     if (typeof window === "undefined") {
         setShareUrl("");
         setIsGeneratingShareUrl(false);
-        setActiveSharedOrderNumber(null);
+        // Only set activeSharedOrderNumber if not editing an existing Firestore bill
+        if (!editingBillId) {
+            setActiveSharedOrderNumber(null);
+        }
         return;
     }
     setIsGeneratingShareUrl(true);
@@ -500,7 +533,7 @@ export default function Home() {
       customerName: customerName,
       customerPhoneNumber: customerPhoneNumber,
       tableNumber: tableNumber,
-      notes: notes, // Include notes
+      notes: notes,
     };
 
     try {
@@ -515,21 +548,22 @@ export default function Home() {
       console.error("Failed to share bill to RTDB:", error);
       toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
       setShareUrl(""); 
-      setActiveSharedOrderNumber(null); 
+      if (!editingBillId) { // Only reset if not in edit mode
+        setActiveSharedOrderNumber(null);
+      }
     } finally {
       setIsGeneratingShareUrl(false);
     }
-  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, toast]); 
+  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, toast, editingBillId]); 
 
   useEffect(() => {
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
-      handleShareBill(orderNumber);
+      handleShareBill(orderNumber); // Always use current orderNumber state for sharing
     }
     prevShowShareDialogRef.current = showShareDialog;
   }, [showShareDialog, orderNumber, handleShareBill]);
 
 
-  // useEffect for pushing updates from main page to RTDB
   useEffect(() => {
     if (isUpdatingFromRTDBSync || !activeSharedOrderNumber || orderNumber !== activeSharedOrderNumber || isLoadingSnacks || isUpdatingRTDBFromMain || !isLocalDirty) {
       return;
@@ -557,7 +591,7 @@ export default function Home() {
         customerName: customerName,
         customerPhoneNumber: customerPhoneNumber,
         tableNumber: tableNumber,
-        notes: notes, // Include notes
+        notes: notes,
       };
 
       try {
@@ -582,7 +616,7 @@ export default function Home() {
     customerName,
     customerPhoneNumber,
     tableNumber,
-    notes, // Add notes to dependency array
+    notes,
     orderNumber, 
     activeSharedOrderNumber, 
     isLoadingSnacks,
@@ -607,7 +641,7 @@ export default function Home() {
     setTableNumber(e.target.value);
   };
 
-  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => { // Handler for notes
+  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setIsLocalDirty(true);
     setNotes(e.target.value);
   };
@@ -677,7 +711,7 @@ export default function Home() {
 
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardDescription>Select snacks, add customer details, and calculate the total.</CardDescription>
+          <CardDescription>{editingBillId ? `Editing Bill (Order: ${orderNumber})` : "Select snacks, add customer details, and calculate the total."}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
           <div className="relative">
@@ -754,7 +788,10 @@ export default function Home() {
                           variant="ghost"
                           size="icon"
                            className="h-6 w-6"
-                          onClick={() => handleSnackIncrement(snack)}
+                          onClick={() => {
+                            const originalSnack = snacks.find(s => s.id === snack.id);
+                            if (originalSnack) handleSnackIncrement(originalSnack);
+                          }}
                            aria-label={`Increase quantity of ${snack.name}`}
                         >
                           <Plus className="h-3 w-3" />
@@ -854,8 +891,8 @@ export default function Home() {
             {total > 0 && (
                 <div className="flex flex-col items-center gap-3 w-full">
                     <QRCodeCanvas value={upiLink} size={128} level="H" data-ai-hint="payment qr" />
-                     <Button onClick={handleSaveBill} disabled={isSavingBill || total <= 0} className="w-full">
-                        {isSavingBill ? 'Saving Bill...' : 'Save Bill & New Order'}
+                     <Button onClick={handleSaveBill} disabled={isSavingBill || (total <= 0 && !editingBillId)} className="w-full">
+                        {isSavingBill ? (editingBillId ? 'Updating Bill...' : 'Saving Bill...') : (editingBillId ? 'Update Bill' : 'Save Bill & New Order')}
                     </Button>
                 </div>
             )}
@@ -959,3 +996,4 @@ export default function Home() {
     </div>
   );
 }
+
