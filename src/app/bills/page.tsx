@@ -101,8 +101,12 @@ export default function BillsPage() {
   const handlePrintBill = (bill: Bill) => {
     const printWindow = window.open('', '_blank');
     if (printWindow) {
-      const receiptHeaderTitle = process.env.NEXT_PUBLIC_RECEIPT_HEADER_TITLE || "Snackulator";
-      const receiptFooterMessage = process.env.NEXT_PUBLIC_RECEIPT_FOOTER_MESSAGE || "Thank you for your order!";
+      const rawHeaderTitle = process.env.NEXT_PUBLIC_RECEIPT_HEADER_TITLE || "Snackulator";
+      const rawFooterMessage = process.env.NEXT_PUBLIC_RECEIPT_FOOTER_MESSAGE || "Thank you for your order!";
+      
+      const receiptHeaderTitle = rawHeaderTitle.replace(/\\n/g, '<br>');
+      const receiptFooterMessage = rawFooterMessage.replace(/\\n/g, '<br>');
+
       const formattedDate = formatFirestoreTimestamp(bill.createdAt);
       let itemsHtml = '';
       let subtotal = 0;
@@ -126,7 +130,7 @@ export default function BillsPage() {
               body { font-family: 'Courier New', Courier, monospace; font-size: 10pt; margin: 0; padding: 5mm; width: 280px; /* Approx 58mm paper width */ }
               .receipt-container { width: 100%; }
               .header { text-align: center; margin-bottom: 10px; }
-              .header h2 { margin: 0; font-size: 14pt; }
+              .header h2 { margin: 0; font-size: 14pt; line-height: 1.2; }
               .info p { margin: 2px 0; }
               .item-table { width: 100%; border-collapse: collapse; margin-top: 5px; margin-bottom: 5px; }
               .item-table th, .item-table td { text-align: left; padding: 1px 0; }
@@ -137,7 +141,7 @@ export default function BillsPage() {
               .totals-table .strong { font-weight: bold; }
               .separator { border-top: 1px dashed #000; margin: 5px 0; }
               .notes { margin-top: 5px; font-size: 9pt; }
-              .footer { text-align: center; margin-top: 10px; font-size: 9pt; }
+              .footer { text-align: center; margin-top: 10px; font-size: 9pt; line-height: 1.2; }
             </style>
           </head>
           <body>
