@@ -101,7 +101,8 @@ export default function BillsPage() {
   const handlePrintBill = (bill: Bill) => {
     const printWindow = window.open('', '_blank');
     if (printWindow) {
-      const receiptTitle = "Snackulator Receipt";
+      const receiptHeaderTitle = process.env.NEXT_PUBLIC_RECEIPT_HEADER_TITLE || "Snackulator";
+      const receiptFooterMessage = process.env.NEXT_PUBLIC_RECEIPT_FOOTER_MESSAGE || "Thank you for your order!";
       const formattedDate = formatFirestoreTimestamp(bill.createdAt);
       let itemsHtml = '';
       let subtotal = 0;
@@ -120,7 +121,7 @@ export default function BillsPage() {
       const receiptHtml = `
         <html>
           <head>
-            <title>${receiptTitle}</title>
+            <title>Receipt - ${bill.orderNumber}</title>
             <style>
               body { font-family: 'Courier New', Courier, monospace; font-size: 10pt; margin: 0; padding: 5mm; width: 280px; /* Approx 58mm paper width */ }
               .receipt-container { width: 100%; }
@@ -142,7 +143,7 @@ export default function BillsPage() {
           <body>
             <div class="receipt-container">
               <div class="header">
-                <h2>Snackulator</h2>
+                <h2>${receiptHeaderTitle}</h2>
               </div>
               <div class="separator"></div>
               <div class="info">
@@ -184,7 +185,7 @@ export default function BillsPage() {
               ${bill.notes ? `<div class="separator"></div><div class="notes"><p><strong>Notes:</strong> ${bill.notes.replace(/\n/g, '<br>')}</p></div>` : ''}
               <div class="separator"></div>
               <div class="footer">
-                <p>Thank you for your order!</p>
+                <p>${receiptFooterMessage}</p>
               </div>
             </div>
           </body>
@@ -284,3 +285,4 @@ export default function BillsPage() {
     </div>
   );
 }
+
