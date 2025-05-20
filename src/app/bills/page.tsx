@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Edit } from "lucide-react";
+import { ArrowLeft, Edit, Printer } from "lucide-react"; // Added Printer icon
 import { format, isValid } from 'date-fns'; // For formatting dates
 import { useToast } from "@/hooks/use-toast";
 import { setSharedOrderInRTDB, SharedOrderItem } from "@/lib/rt_db";
@@ -71,9 +71,8 @@ export default function BillsPage() {
 
   const handleEditBill = async (bill: Bill) => {
     try {
-      // Prepare data for RTDB (SharedOrderItem format)
       const itemsToShare: SharedOrderItem[] = bill.items.map((item: DbBillItem) => ({
-        id: item.name, // Assuming name can act as a temporary ID for matching with snacks list later
+        id: item.name, 
         name: item.name,
         price: Number(item.price),
         quantity: item.quantity,
@@ -95,6 +94,112 @@ export default function BillsPage() {
         variant: "destructive",
         title: "Editing Error",
         description: "Could not prepare bill for editing. " + error.message,
+      });
+    }
+  };
+
+  const handlePrintBill = (bill: Bill) => {
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      const receiptTitle = "Snackulator Receipt";
+      const formattedDate = formatFirestoreTimestamp(bill.createdAt);
+      let itemsHtml = '';
+      let subtotal = 0;
+
+      bill.items.forEach(item => {
+        const itemTotal = item.price * item.quantity;
+        subtotal += itemTotal;
+        itemsHtml += `
+          <tr class="item">
+            <td>${item.name} (x${item.quantity})</td>
+            <td class="text-right">₹${itemTotal.toFixed(2)}</td>
+          </tr>
+        `;
+      });
+
+      const receiptHtml = `
+        <html>
+          <head>
+            <title>${receiptTitle}</title>
+            <style>
+              body { font-family: 'Courier New', Courier, monospace; font-size: 10pt; margin: 0; padding: 5mm; width: 280px; /* Approx 58mm paper width */ }
+              .receipt-container { width: 100%; }
+              .header { text-align: center; margin-bottom: 10px; }
+              .header h2 { margin: 0; font-size: 14pt; }
+              .info p { margin: 2px 0; }
+              .item-table { width: 100%; border-collapse: collapse; margin-top: 5px; margin-bottom: 5px; }
+              .item-table th, .item-table td { text-align: left; padding: 1px 0; }
+              .item-table .text-right { text-align: right; }
+              .totals-table { width: 100%; margin-top: 5px; }
+              .totals-table td { padding: 1px 0; }
+              .totals-table .text-right { text-align: right; }
+              .totals-table .strong { font-weight: bold; }
+              .separator { border-top: 1px dashed #000; margin: 5px 0; }
+              .notes { margin-top: 5px; font-size: 9pt; }
+              .footer { text-align: center; margin-top: 10px; font-size: 9pt; }
+            </style>
+          </head>
+          <body>
+            <div class="receipt-container">
+              <div class="header">
+                <h2>Snackulator</h2>
+              </div>
+              <div class="separator"></div>
+              <div class="info">
+                <p>Order #: ${bill.orderNumber}</p>
+                <p>Date: ${formattedDate}</p>
+                ${bill.tableNumber ? `<p>Table: ${bill.tableNumber}</p>` : ''}
+                ${bill.customerName ? `<p>Customer: ${bill.customerName}</p>` : ''}
+                ${bill.customerPhoneNumber ? `<p>Phone: ${bill.customerPhoneNumber}</p>` : ''}
+              </div>
+              <div class="separator"></div>
+              <table class="item-table">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th class="text-right">Price</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemsHtml}
+                </tbody>
+              </table>
+              <div class="separator"></div>
+              <table class="totals-table">
+                <tbody>
+                  <tr>
+                    <td>Subtotal:</td>
+                    <td class="text-right">₹${subtotal.toFixed(2)}</td>
+                  </tr>
+                  <tr>
+                    <td>Service Charge:</td>
+                    <td class="text-right">₹${bill.serviceCharge.toFixed(2)}</td>
+                  </tr>
+                  <tr class="strong">
+                    <td>TOTAL:</td>
+                    <td class="text-right">₹${bill.totalAmount.toFixed(2)}</td>
+                  </tr>
+                </tbody>
+              </table>
+              ${bill.notes ? `<div class="separator"></div><div class="notes"><p><strong>Notes:</strong> ${bill.notes.replace(/\n/g, '<br>')}</p></div>` : ''}
+              <div class="separator"></div>
+              <div class="footer">
+                <p>Thank you for your order!</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `;
+      printWindow.document.write(receiptHtml);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+      // printWindow.close(); // May not work reliably due to browser restrictions
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Print Error",
+        description: "Could not open print window. Please check your pop-up blocker settings.",
       });
     }
   };
@@ -125,7 +230,7 @@ export default function BillsPage() {
              <p className="text-center text-muted-foreground">No bills recorded yet.</p>
           ) : (
             <Table>
-               <TableCaption>A list of your recent transactions. Click Edit to modify a bill.</TableCaption>
+               <TableCaption>A list of your recent transactions. Click Edit to modify a bill or Print to get a receipt.</TableCaption>
               <TableHeader>
                 <TableRow>
                   <TableHead>Order #</TableHead>
@@ -135,8 +240,8 @@ export default function BillsPage() {
                   <TableHead className="min-w-[200px] sm:min-w-[250px] md:min-w-[300px]">Items</TableHead>
                   <TableHead className="text-right">Service Ch.</TableHead>
                   <TableHead className="text-right">Total</TableHead>
-                  <TableHead>Notes</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
+                  <TableHead>Notes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -160,12 +265,15 @@ export default function BillsPage() {
                     </TableCell>
                     <TableCell className="text-right">₹{bill.serviceCharge.toFixed(2)}</TableCell>
                     <TableCell className="text-right font-semibold">₹{bill.totalAmount.toFixed(2)}</TableCell>
-                    <TableCell className="text-xs whitespace-pre-wrap">{bill.notes || '-'}</TableCell>
-                    <TableCell className="text-center">
-                      <Button variant="outline" size="sm" onClick={() => handleEditBill(bill)}>
+                    <TableCell className="text-center space-x-1">
+                      <Button variant="outline" size="sm" onClick={() => handleEditBill(bill)} aria-label="Edit Bill">
                         <Edit className="h-3 w-3 mr-1" /> Edit
                       </Button>
+                      <Button variant="outline" size="sm" onClick={() => handlePrintBill(bill)} aria-label="Print Bill">
+                        <Printer className="h-3 w-3 mr-1" /> Print
+                      </Button>
                     </TableCell>
+                    <TableCell className="text-xs whitespace-pre-wrap">{bill.notes || '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -176,4 +284,3 @@ export default function BillsPage() {
     </div>
   );
 }
-
