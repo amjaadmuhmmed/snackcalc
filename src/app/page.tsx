@@ -2,7 +2,7 @@
 // src/app/page.tsx
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { Suspense, useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -57,7 +57,8 @@ const generateOrderNumber = () => {
     return `ORD-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 };
 
-export default function Home() {
+// Moved the original Home component's logic into HomeContent
+function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [snacks, setSnacks] = useState<Snack[]>([]);
@@ -81,7 +82,7 @@ export default function Home() {
   const [isGeneratingShareUrl, setIsGeneratingShareUrl] = useState(false);
 
   const [activeSharedOrderNumber, setActiveSharedOrderNumber] = useState<string | null>(null);
-  const [editingBillId, setEditingBillId] = useState<string | null>(null); // For editing existing Firestore bill
+  const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const [isUpdatingRTDBFromMain, setIsUpdatingRTDBFromMain] = useState(false);
   const [mainDebounceTimer, setMainDebounceTimer] = useState<NodeJS.Timeout | null>(null);
   const [isUpdatingFromRTDBSync, setIsUpdatingFromRTDBSync] = useState(false);
@@ -125,7 +126,6 @@ export default function Home() {
     }
   }, [toast]);
 
-  // Effect for initial setup: loading snacks, processing edit params
   useEffect(() => {
     loadSnacks();
 
@@ -135,15 +135,13 @@ export default function Home() {
     if (editOrderNum && editFsBillId) {
       setOrderNumber(editOrderNum);
       setEditingBillId(editFsBillId);
-      setActiveSharedOrderNumber(editOrderNum); // This will trigger RTDB subscription
-      // Do NOT push to RTDB here, BillsPage already did.
-      // The RTDB subscription will populate the form.
+      setActiveSharedOrderNumber(editOrderNum); 
       console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
     } else if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadSnacks, searchParams]); // orderNumber removed to prevent re-gen if not editing
+  }, [loadSnacks, searchParams]);
 
 
   useEffect(() => {
@@ -154,7 +152,7 @@ export default function Home() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const legacyOrder = params.get('order'); // Pre-shared order system
+    const legacyOrder = params.get('order');
     const legacyItems = params.get('items');
 
     if (legacyOrder && legacyItems && typeof window !== "undefined" && !searchParams.get('editOrder')) {
@@ -166,7 +164,6 @@ export default function Home() {
     }
   }, [toast, searchParams]);
 
-  // RTDB Subscription for main page when a bill is actively shared OR being edited
   useEffect(() => {
     if (!activeSharedOrderNumber || snacks.length === 0) {
       return;
@@ -187,9 +184,9 @@ export default function Home() {
         setIsUpdatingFromRTDBSync(true);
 
         const newSelectedSnacks = (data.items || []).map(item => {
-          const baseSnack = snacks.find(s => s.id === item.id || s.name === item.name); // Match by ID or name for items from DB
+          const baseSnack = snacks.find(s => s.id === item.id || s.name === item.name); 
           return {
-            id: baseSnack?.id || item.id, // Prioritize baseSnack.id if found
+            id: baseSnack?.id || item.id, 
             name: item.name,
             price: Number(item.price),
             quantity: item.quantity,
@@ -364,7 +361,6 @@ export default function Home() {
 
   const handleSaveBill = async () => {
       const currentTotal = calculateTotal();
-      // Allow saving/updating a bill even if total is 0, in case all items were removed during edit
       if (isSavingBill || (!editingBillId && currentTotal <= 0)) {
         if (!editingBillId && currentTotal <= 0) {
           toast({ variant: "default", title: "Cannot save empty bill." });
@@ -375,7 +371,7 @@ export default function Home() {
       setIsSavingBill(true);
 
       const billData: BillInput = {
-          orderNumber: orderNumber, // Use current orderNumber (could be from edit or new)
+          orderNumber: orderNumber,
           customerName: customerName,
           customerPhoneNumber: customerPhoneNumber,
           tableNumber: tableNumber,
@@ -386,12 +382,10 @@ export default function Home() {
       };
 
       try {
-          // Pass editingBillId if it exists, otherwise it's undefined (new bill)
           const result = await saveBill(billData, editingBillId || undefined);
           if (result.success) {
-              toast({ title: result.message }); // Message will be "Bill saved" or "Bill updated"
+              toast({ title: result.message }); 
               
-              // Reset state for a new order
               setSelectedSnacks([]);
               setServiceCharge(0);
               setCustomerName("");
@@ -401,13 +395,12 @@ export default function Home() {
               setOrderNumber(generateOrderNumber()); 
               setSearchTerm("");
               setActiveSharedOrderNumber(null); 
-              setEditingBillId(null); // Clear editing state
+              setEditingBillId(null); 
               setShareUrl(""); 
               setIsLocalDirty(false); 
               
-              // Remove edit query params from URL without full page reload
               if (searchParams.get('editOrder') || searchParams.get('editBillId')) {
-                router.replace('/', undefined); // Use router.replace to avoid adding to history
+                router.replace('/', undefined); 
               }
 
           } else {
@@ -511,7 +504,6 @@ export default function Home() {
     if (typeof window === "undefined") {
         setShareUrl("");
         setIsGeneratingShareUrl(false);
-        // Only set activeSharedOrderNumber if not editing an existing Firestore bill
         if (!editingBillId) {
             setActiveSharedOrderNumber(null);
         }
@@ -548,7 +540,7 @@ export default function Home() {
       console.error("Failed to share bill to RTDB:", error);
       toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
       setShareUrl(""); 
-      if (!editingBillId) { // Only reset if not in edit mode
+      if (!editingBillId) { 
         setActiveSharedOrderNumber(null);
       }
     } finally {
@@ -558,7 +550,7 @@ export default function Home() {
 
   useEffect(() => {
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
-      handleShareBill(orderNumber); // Always use current orderNumber state for sharing
+      handleShareBill(orderNumber); 
     }
     prevShowShareDialogRef.current = showShareDialog;
   }, [showShareDialog, orderNumber, handleShareBill]);
@@ -997,3 +989,17 @@ export default function Home() {
   );
 }
 
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center min-h-screen bg-secondary p-4 md:p-8">
+        <p className="text-lg text-muted-foreground">Loading page content...</p>
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
+  );
+}
+
+    
