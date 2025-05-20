@@ -104,8 +104,9 @@ export default function BillsPage() {
       const rawHeaderTitle = process.env.NEXT_PUBLIC_RECEIPT_HEADER_TITLE || "Snackulator";
       const rawFooterMessage = process.env.NEXT_PUBLIC_RECEIPT_FOOTER_MESSAGE || "Thank you for your order!";
       
-      const receiptHeaderTitle = rawHeaderTitle.replace(/\\n/g, '<br>');
-      const receiptFooterMessage = rawFooterMessage.replace(/\\n/g, '<br>');
+      // Corrected regex: replace actual newline characters (\n) with <br>
+      const receiptHeaderTitle = rawHeaderTitle.replace(/\n/g, '<br>');
+      const receiptFooterMessage = rawFooterMessage.replace(/\n/g, '<br>');
 
       const formattedDate = formatFirestoreTimestamp(bill.createdAt);
       let itemsHtml = '';
