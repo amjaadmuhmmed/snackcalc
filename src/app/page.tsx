@@ -711,196 +711,199 @@ function HomeContent() {
         </div>
       </div>
 
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardDescription>{editingBillId ? `Editing Bill (Order: ${orderNumber})` : "Select snacks, add customer details, and calculate the total."}</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              id="search-snacks"
-              type="search"
-              placeholder="Search snacks..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              className="pl-8 w-full h-9"
-              aria-label="Search snacks"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1 rounded-md border bg-muted/20">
-             {isLoadingSnacks ? (
-                 <p className="text-sm text-muted-foreground w-full text-center py-2">Loading snacks...</p>
-             ) : filteredSnacks.length === 0 && snacks.length > 0 && searchTerm ? (
-                  <p className="text-sm text-muted-foreground w-full text-center py-2">No snacks match your search.</p>
-             ): filteredSnacks.length === 0 && snacks.length === 0 ? (
-                 <p className="text-sm text-muted-foreground w-full text-center py-2">No snacks available. Add snacks below (Admin).</p>
-             ) : (
-                filteredSnacks.map((snack) => (
-                  <div key={snack.id} className="flex items-center space-x-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full px-3 py-1 h-auto text-xs"
-                      onClick={() => handleSnackIncrement(snack)}
-                    >
-                      {snack.name} (₹{Number(snack.price).toFixed(2)})
-                    </Button>
-                    {getSnackQuantity(snack.id) > 0 && (
-                      <Badge variant="secondary" className="text-xs px-1.5 py-0.5">
-                        {getSnackQuantity(snack.id)}
-                      </Badge>
-                    )}
-                  </div>
-                ))
-             )}
-          </div>
-          <Separator />
-          <div>
-            <h3 className="text-sm font-medium mb-2">Selected Snacks</h3>
-            {selectedSnacks.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No snacks selected.</p>
-            ) : (
-              <ul className="space-y-2 max-h-48 overflow-y-auto">
-                {selectedSnacks.map((snack) => (
-                  <li 
-                    key={snack.id} 
-                    ref={(el) => itemRefs.current[snack.id] = el}
-                    className="flex items-center justify-between text-sm p-1.5 rounded-md hover:bg-muted/50"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <span>{snack.name}</span>
-                      <div className="flex items-center border rounded-md">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => handleSnackDecrement(snack)}
-                          disabled={snack.quantity <= 0}
-                          aria-label={`Decrease quantity of ${snack.name}`}
-                        >
-                          <Minus className="h-3 w-3" />
-                        </Button>
-                        <Badge variant="outline" className="text-xs px-1.5 border-none tabular-nums">
-                          {snack.quantity}
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                           className="h-6 w-6"
-                          onClick={() => {
-                            const originalSnack = snacks.find(s => s.id === snack.id);
-                            if (originalSnack) handleSnackIncrement(originalSnack);
-                          }}
-                           aria-label={`Increase quantity of ${snack.name}`}
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                    <span className="font-medium tabular-nums">₹{typeof snack.price === 'number' ? (snack.price * snack.quantity).toFixed(2) : 'N/A'}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-           <Separator />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="grid gap-1.5">
-              <Label htmlFor="customer-name" className="text-sm">Customer Name</Label>
-              <div className="relative">
-                <UserIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="customer-name"
-                  type="text"
-                  placeholder="Optional"
-                  value={customerName}
-                  onChange={handleCustomerNameChange}
-                  className="pl-8 h-9 text-sm"
-                  aria-label="Customer Name"
-                />
-              </div>
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="customer-phone" className="text-sm">Customer Phone</Label>
-              <div className="relative">
-                <Phone className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="customer-phone"
-                  type="tel"
-                  placeholder="Optional"
-                  value={customerPhoneNumber}
-                  onChange={handleCustomerPhoneNumberChange}
-                  className="pl-8 h-9 text-sm"
-                  aria-label="Customer Phone Number"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="service-charge" className="text-sm">Service Charge (₹)</Label>
-            <Input
-              id="service-charge"
-              type="text"
-              placeholder="0.00"
-              value={serviceChargeInput}
-              onChange={handleServiceChargeInputChange}
-              onBlur={handleServiceChargeInputBlur}
-              onFocus={handleServiceChargeInputFocus}
-              className="h-9 text-sm"
-              inputMode="decimal"
-              aria-label="Service Charge"
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="table-number" className="text-sm">Table Number</Label>
+      {!showAdminLoginSection && (
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardDescription>{editingBillId ? `Editing Bill (Order: ${orderNumber})` : "Select snacks, add customer details, and calculate the total."}</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
             <div className="relative">
-                <Hash className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="table-number"
-                  type="text"
-                  placeholder="Optional"
-                  value={tableNumber}
-                  onChange={handleTableNumberChange}
-                  className="pl-8 h-9 text-sm"
-                  aria-label="Table Number"
-                />
-              </div>
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="notes" className="text-sm">Notes</Label>
-            <div className="relative">
-              <FileText className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Textarea
-                id="notes"
-                placeholder="Optional: e.g., less spicy, no onions..."
-                value={notes}
-                onChange={handleNotesChange}
-                className="pl-8 text-sm min-h-[60px]" 
-                aria-label="Notes"
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="search-snacks"
+                type="search"
+                placeholder="Search snacks..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                onKeyDown={handleSearchKeyDown}
+                className="pl-8 w-full h-9"
+                aria-label="Search snacks"
               />
             </div>
-          </div>
-          <Separator />
-          <div className="flex flex-col items-center justify-between gap-3">
-             <div className="flex justify-between w-full items-center">
-                 <span className="text-base font-semibold">Total:</span>
-                 <Badge variant="secondary" className="text-base font-semibold tabular-nums">₹{total.toFixed(2)}</Badge>
-             </div>
 
-            {(total > 0 || selectedSnacks.length > 0 || editingBillId) && (
-                <div className="flex flex-col items-center gap-3 w-full">
-                    <QRCodeCanvas value={upiLink} size={128} level="H" data-ai-hint="payment qr" />
-                     <Button onClick={handleSaveBill} disabled={isSavingBill} className="w-full">
-                        {isSavingBill ? (editingBillId ? 'Updating Bill...' : 'Saving Bill...') : (editingBillId ? 'Update Bill' : 'Save Bill & New Order')}
-                    </Button>
+            <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1 rounded-md border bg-muted/20">
+               {isLoadingSnacks ? (
+                   <p className="text-sm text-muted-foreground w-full text-center py-2">Loading snacks...</p>
+               ) : filteredSnacks.length === 0 && snacks.length > 0 && searchTerm ? (
+                    <p className="text-sm text-muted-foreground w-full text-center py-2">No snacks match your search.</p>
+               ): filteredSnacks.length === 0 && snacks.length === 0 ? (
+                   <p className="text-sm text-muted-foreground w-full text-center py-2">No snacks available. Add snacks below (Admin).</p>
+               ) : (
+                  filteredSnacks.map((snack) => (
+                    <div key={snack.id} className="flex items-center space-x-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full px-3 py-1 h-auto text-xs"
+                        onClick={() => handleSnackIncrement(snack)}
+                      >
+                        {snack.name} (₹{Number(snack.price).toFixed(2)})
+                      </Button>
+                      {getSnackQuantity(snack.id) > 0 && (
+                        <Badge variant="secondary" className="text-xs px-1.5 py-0.5">
+                          {getSnackQuantity(snack.id)}
+                        </Badge>
+                      )}
+                    </div>
+                  ))
+               )}
+            </div>
+            <Separator />
+            <div>
+              <h3 className="text-sm font-medium mb-2">Selected Snacks</h3>
+              {selectedSnacks.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No snacks selected.</p>
+              ) : (
+                <ul className="space-y-2 max-h-48 overflow-y-auto">
+                  {selectedSnacks.map((snack) => (
+                    <li 
+                      key={snack.id} 
+                      ref={(el) => itemRefs.current[snack.id] = el}
+                      className="flex items-center justify-between text-sm p-1.5 rounded-md hover:bg-muted/50"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <span>{snack.name}</span>
+                        <div className="flex items-center border rounded-md">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => handleSnackDecrement(snack)}
+                            disabled={snack.quantity <= 0}
+                            aria-label={`Decrease quantity of ${snack.name}`}
+                          >
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <Badge variant="outline" className="text-xs px-1.5 border-none tabular-nums">
+                            {snack.quantity}
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                             className="h-6 w-6"
+                            onClick={() => {
+                              const originalSnack = snacks.find(s => s.id === snack.id);
+                              if (originalSnack) handleSnackIncrement(originalSnack);
+                            }}
+                             aria-label={`Increase quantity of ${snack.name}`}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      <span className="font-medium tabular-nums">₹{typeof snack.price === 'number' ? (snack.price * snack.quantity).toFixed(2) : 'N/A'}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+             <Separator />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="customer-name" className="text-sm">Customer Name</Label>
+                <div className="relative">
+                  <UserIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="customer-name"
+                    type="text"
+                    placeholder="Optional"
+                    value={customerName}
+                    onChange={handleCustomerNameChange}
+                    className="pl-8 h-9 text-sm"
+                    aria-label="Customer Name"
+                  />
                 </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="customer-phone" className="text-sm">Customer Phone</Label>
+                <div className="relative">
+                  <Phone className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="customer-phone"
+                    type="tel"
+                    placeholder="Optional"
+                    value={customerPhoneNumber}
+                    onChange={handleCustomerPhoneNumberChange}
+                    className="pl-8 h-9 text-sm"
+                    aria-label="Customer Phone Number"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="service-charge" className="text-sm">Service Charge (₹)</Label>
+              <Input
+                id="service-charge"
+                type="text"
+                placeholder="0.00"
+                value={serviceChargeInput}
+                onChange={handleServiceChargeInputChange}
+                onBlur={handleServiceChargeInputBlur}
+                onFocus={handleServiceChargeInputFocus}
+                className="h-9 text-sm"
+                inputMode="decimal"
+                aria-label="Service Charge"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="table-number" className="text-sm">Table Number</Label>
+              <div className="relative">
+                  <Hash className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="table-number"
+                    type="text"
+                    placeholder="Optional"
+                    value={tableNumber}
+                    onChange={handleTableNumberChange}
+                    className="pl-8 h-9 text-sm"
+                    aria-label="Table Number"
+                  />
+                </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="notes" className="text-sm">Notes</Label>
+              <div className="relative">
+                <FileText className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Textarea
+                  id="notes"
+                  placeholder="Optional: e.g., less spicy, no onions..."
+                  value={notes}
+                  onChange={handleNotesChange}
+                  className="pl-8 text-sm min-h-[60px]" 
+                  aria-label="Notes"
+                />
+              </div>
+            </div>
+            <Separator />
+            <div className="flex flex-col items-center justify-between gap-3">
+               <div className="flex justify-between w-full items-center">
+                   <span className="text-base font-semibold">Total:</span>
+                   <Badge variant="secondary" className="text-base font-semibold tabular-nums">₹{total.toFixed(2)}</Badge>
+               </div>
+
+              {(total > 0 || selectedSnacks.length > 0 || editingBillId) && (
+                  <div className="flex flex-col items-center gap-3 w-full">
+                      <QRCodeCanvas value={upiLink} size={128} level="H" data-ai-hint="payment qr" />
+                       <Button onClick={handleSaveBill} disabled={isSavingBill} className="w-full">
+                          {isSavingBill ? (editingBillId ? 'Updating Bill...' : 'Saving Bill...') : (editingBillId ? 'Update Bill' : 'Save Bill & New Order')}
+                      </Button>
+                  </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
 
       {!isAdmin && showAdminLoginSection ? (
         <Card className="w-full max-w-md mt-4">
