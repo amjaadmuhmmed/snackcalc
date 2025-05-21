@@ -17,7 +17,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText } from "lucide-react";
+import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
 import { addSnack, getSnacks, updateSnack, deleteSnack, saveBill } from "./actions";
 import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db";
@@ -73,6 +73,7 @@ function HomeContent() {
   const [notes, setNotes] = useState<string>("");
   const { toast } = useToast();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdminLoginSection, setShowAdminLoginSection] = useState(false);
   const [password, setPassword] = useState("");
   const [isSavingBill, setIsSavingBill] = useState(false);
   const [isLoadingSnacks, setIsLoadingSnacks] = useState(true);
@@ -247,10 +248,10 @@ function HomeContent() {
       if (existingSnackIndex > -1) {
         const updatedSnack = { ...prevSelected[existingSnackIndex], quantity: prevSelected[existingSnackIndex].quantity + 1 };
         const newSelected = [...prevSelected];
-        newSelected.splice(existingSnackIndex, 1);
-        return [updatedSnack, ...newSelected];
+        newSelected.splice(existingSnackIndex, 1); // Remove old item
+        return [updatedSnack, ...newSelected]; // Add updated item to the top
       } else {
-        return [{ ...snack, price: Number(snack.price), quantity: 1 }, ...prevSelected];
+        return [{ ...snack, price: Number(snack.price), quantity: 1 }, ...prevSelected]; // Add new item to the top
       }
     });
     setSearchTerm("");
@@ -264,16 +265,15 @@ function HomeContent() {
       if (currentSnackIndex === -1) return prevSelected;
 
       const currentSnack = prevSelected[currentSnackIndex];
+      let newSelected = [...prevSelected];
 
       if (currentSnack.quantity === 1) {
-        const newSelected = [...prevSelected];
-        newSelected.splice(currentSnackIndex, 1);
+        newSelected.splice(currentSnackIndex, 1); // Remove the item
         return newSelected;
       } else {
         const updatedSnack = { ...currentSnack, quantity: currentSnack.quantity - 1 };
-        const newSelected = [...prevSelected];
-        newSelected.splice(currentSnackIndex, 1);
-        return [updatedSnack, ...newSelected];
+        newSelected.splice(currentSnackIndex, 1); // Remove old item
+        return [updatedSnack, ...newSelected]; // Add updated item to the top
       }
     });
   };
@@ -361,8 +361,8 @@ function HomeContent() {
 
   const handleSaveBill = async () => {
       const currentTotal = calculateTotal();
-      if (isSavingBill || (!editingBillId && currentTotal <= 0)) {
-        if (!editingBillId && currentTotal <= 0) {
+      if (isSavingBill || (!editingBillId && currentTotal <= 0 && selectedSnacks.length === 0)) {
+        if (!editingBillId && currentTotal <= 0 && selectedSnacks.length === 0) {
           toast({ variant: "default", title: "Cannot save empty bill." });
         }
         return;
@@ -431,6 +431,7 @@ function HomeContent() {
     if (password === adminPassword) {
       setIsAdmin(true);
       setPassword("");
+      setShowAdminLoginSection(false); // Hide login form after successful login
     } else {
       toast({
         variant: "destructive",
@@ -549,8 +550,9 @@ function HomeContent() {
   }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, toast, editingBillId]); 
 
   useEffect(() => {
+    // Only call handleShareBill when showShareDialog transitions from false to true
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
-      handleShareBill(orderNumber); 
+      handleShareBill(orderNumber);
     }
     prevShowShareDialogRef.current = showShareDialog;
   }, [showShareDialog, orderNumber, handleShareBill]);
@@ -644,6 +646,14 @@ function HomeContent() {
       <div className="w-full max-w-md mb-4 flex justify-between items-center">
         <CardTitle className="text-lg">Snackulator</CardTitle>
         <div className="flex items-center gap-2">
+            <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShowAdminLoginSection(prev => !prev)}
+                aria-label="Toggle Admin Login"
+            >
+                <UserCog className="h-4 w-4" />
+            </Button>
             <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
               <DialogTrigger asChild>
                 <Button variant="outline" size="icon" aria-label="Share Bill">
@@ -880,10 +890,10 @@ function HomeContent() {
                  <Badge variant="secondary" className="text-base font-semibold tabular-nums">₹{total.toFixed(2)}</Badge>
              </div>
 
-            {total > 0 && (
+            {(total > 0 || selectedSnacks.length > 0 || editingBillId) && (
                 <div className="flex flex-col items-center gap-3 w-full">
                     <QRCodeCanvas value={upiLink} size={128} level="H" data-ai-hint="payment qr" />
-                     <Button onClick={handleSaveBill} disabled={isSavingBill || (total <= 0 && !editingBillId)} className="w-full">
+                     <Button onClick={handleSaveBill} disabled={isSavingBill} className="w-full">
                         {isSavingBill ? (editingBillId ? 'Updating Bill...' : 'Saving Bill...') : (editingBillId ? 'Update Bill' : 'Save Bill & New Order')}
                     </Button>
                 </div>
@@ -892,7 +902,7 @@ function HomeContent() {
         </CardContent>
       </Card>
 
-      {!isAdmin ? (
+      {!isAdmin && showAdminLoginSection ? (
         <Card className="w-full max-w-md mt-4">
           <CardHeader>
             <CardTitle className="text-lg">Admin Login</CardTitle>
@@ -912,7 +922,9 @@ function HomeContent() {
             <Button className="mt-4 w-full" onClick={handleAdminLogin}>Login</Button>
           </CardContent>
         </Card>
-      ) : (
+      ) : null}
+
+      {isAdmin ? (
         <>
           <Card className="w-full max-w-md mt-4">
             <CardHeader>
@@ -983,7 +995,7 @@ function HomeContent() {
           </Card>
            <Button variant="outline" className="mt-4" onClick={() => setIsAdmin(false)}>Logout Admin</Button>
         </>
-      )}
+      ) : null}
       <Toaster />
     </div>
   );
