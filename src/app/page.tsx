@@ -1,3 +1,4 @@
+
 // src/app/page.tsx
 "use client";
 
@@ -16,7 +17,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle } from "lucide-react"; // Added Save, PlusCircle icon
+import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
 import { addSnack, getSnacks, updateSnack, deleteSnack, saveBill } from "./actions";
 import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db";
@@ -56,7 +57,6 @@ const generateOrderNumber = () => {
     return `ORD-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 };
 
-// Moved the original Home component's logic into HomeContent
 function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -91,6 +91,8 @@ function HomeContent() {
   const itemRefs = useRef<Record<string, HTMLLIElement | null>>({});
   const lastInteractedSnackIdRef = useRef<string | null>(null);
   const prevShowShareDialogRef = useRef<boolean | undefined>();
+
+  const [snacksVisible, setSnacksVisible] = useState(true);
 
 
   const {
@@ -135,10 +137,12 @@ function HomeContent() {
     if (editOrderNum && editFsBillId) {
       setOrderNumber(editOrderNum);
       setEditingBillId(editFsBillId);
-      setActiveSharedOrderNumber(editOrderNum); 
+      setActiveSharedOrderNumber(editOrderNum);
+      setSnacksVisible(true); // Ensure items are visible when starting an edit
       console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
     } else if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
+      setSnacksVisible(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadSnacks, searchParams]);
@@ -184,9 +188,9 @@ function HomeContent() {
         setIsUpdatingFromRTDBSync(true);
 
         const newSelectedSnacks = (data.items || []).map(item => {
-          const baseSnack = snacks.find(s => s.id === item.id || s.name === item.name); 
+          const baseSnack = snacks.find(s => s.id === item.id || s.name === item.name);
           return {
-            id: baseSnack?.id || item.id, 
+            id: baseSnack?.id || item.id,
             name: item.name,
             price: Number(item.price),
             quantity: item.quantity,
@@ -247,16 +251,16 @@ function HomeContent() {
       if (existingSnackIndex > -1) {
         const updatedSnack = { ...prevSelected[existingSnackIndex], quantity: prevSelected[existingSnackIndex].quantity + 1 };
         const newSelected = [...prevSelected];
-        newSelected.splice(existingSnackIndex, 1); // Remove old item
-        return [updatedSnack, ...newSelected]; // Add updated item to the top
+        newSelected.splice(existingSnackIndex, 1);
+        return [updatedSnack, ...newSelected];
       } else {
-        return [{ ...snack, price: Number(snack.price), quantity: 1 }, ...prevSelected]; // Add new item to the top
+        return [{ ...snack, price: Number(snack.price), quantity: 1 }, ...prevSelected];
       }
     });
     setSearchTerm("");
   };
 
-  const handleSnackDecrement = (snack: SelectedSnack) => { 
+  const handleSnackDecrement = (snack: SelectedSnack) => {
     setIsLocalDirty(true);
     lastInteractedSnackIdRef.current = snack.id;
     setSelectedSnacks((prevSelected) => {
@@ -267,17 +271,17 @@ function HomeContent() {
       let newSelected = [...prevSelected];
 
       if (currentSnack.quantity === 1) {
-        newSelected.splice(currentSnackIndex, 1); // Remove the item
+        newSelected.splice(currentSnackIndex, 1);
         return newSelected;
       } else {
         const updatedSnack = { ...currentSnack, quantity: currentSnack.quantity - 1 };
-        newSelected.splice(currentSnackIndex, 1); // Remove old item
-        return [updatedSnack, ...newSelected]; // Add updated item to the top
+        newSelected.splice(currentSnackIndex, 1);
+        return [updatedSnack, ...newSelected];
       }
     });
   };
 
-  const getSnackQuantity = (snackId: string) => { 
+  const getSnackQuantity = (snackId: string) => {
     const selected = selectedSnacks.find((s) => s.id === snackId);
     return selected ? selected.quantity : 0;
   };
@@ -331,33 +335,6 @@ function HomeContent() {
     }
   };
 
-  const handleDeleteSnack = async (id: string) => {
-     if (!confirm("Are you sure you want to delete this snack?")) {
-       return;
-     }
-    try {
-      const result = await deleteSnack(id);
-      if (result?.success) {
-        toast({
-          title: result.message,
-        });
-        await loadSnacks();
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Uh oh! Something went wrong.",
-          description: result?.message || "There was a problem deleting your snack.",
-        });
-      }
-    } catch (e: any) {
-      toast({
-        variant: "destructive",
-        title: "Uh oh! Something went wrong.",
-        description: e.message || "There was a problem deleting your snack.",
-      });
-    }
-  };
-
   const handleSaveBill = async (resetFormAfterSave: boolean) => {
       const currentTotal = calculateTotal();
       if (isSavingBill || (!editingBillId && currentTotal <= 0 && selectedSnacks.length === 0 && !resetFormAfterSave)) {
@@ -383,8 +360,8 @@ function HomeContent() {
       try {
           const result = await saveBill(billData, editingBillId || undefined);
           if (result.success) {
-              toast({ title: result.message }); 
-              
+              toast({ title: result.message });
+
               if (resetFormAfterSave) {
                 setSelectedSnacks([]);
                 setServiceCharge(0);
@@ -392,21 +369,23 @@ function HomeContent() {
                 setCustomerPhoneNumber("");
                 setTableNumber("");
                 setNotes("");
-                setOrderNumber(generateOrderNumber()); 
+                setOrderNumber(generateOrderNumber());
                 setSearchTerm("");
-                setActiveSharedOrderNumber(null); 
-                setEditingBillId(null); 
-                setShareUrl(""); 
-                setIsLocalDirty(false); 
-                
+                setActiveSharedOrderNumber(null);
+                setEditingBillId(null);
+                setShareUrl("");
+                setIsLocalDirty(false);
+                setSnacksVisible(true);
+
                 if (searchParams.get('editOrder') || searchParams.get('editBillId')) {
-                  router.replace('/', undefined); 
+                  router.replace('/', undefined);
                 }
               } else {
                 if (!editingBillId && result.billId) {
-                  setEditingBillId(result.billId); 
+                  setEditingBillId(result.billId);
                 }
-                setIsLocalDirty(false); 
+                setIsLocalDirty(false);
+                setSnacksVisible(false); // Hide snacks after saving/updating
               }
 
           } else {
@@ -437,7 +416,7 @@ function HomeContent() {
     if (password === adminPassword) {
       setIsAdmin(true);
       setPassword("");
-      setShowAdminLoginSection(false); 
+      setShowAdminLoginSection(false);
     } else {
       toast({
         variant: "destructive",
@@ -455,7 +434,7 @@ function HomeContent() {
       const parsedValue = parseFloat(value);
       setServiceCharge(isNaN(parsedValue) || parsedValue < 0 ? 0 : parsedValue);
     } else {
-      setServiceCharge(0); 
+      setServiceCharge(0);
     }
   };
 
@@ -511,13 +490,13 @@ function HomeContent() {
     if (typeof window === "undefined") {
         setShareUrl("");
         setIsGeneratingShareUrl(false);
-        if (!editingBillId) { 
+        if (!editingBillId) {
             setActiveSharedOrderNumber(null);
         }
         return;
     }
     setIsGeneratingShareUrl(true);
-    setShareUrl(""); 
+    setShareUrl("");
 
     const itemsToShare: SharedOrderItem[] = selectedSnacks.map(s => ({
       id: s.id,
@@ -536,9 +515,9 @@ function HomeContent() {
     };
 
     try {
-      setActiveSharedOrderNumber(orderNumberToShare); 
+      setActiveSharedOrderNumber(orderNumberToShare);
       await setSharedOrderInRTDB(orderNumberToShare, sharedOrderPayload);
-      setIsLocalDirty(false); 
+      setIsLocalDirty(false);
       const baseUrl = window.location.origin;
       const fullUrl = `${baseUrl}/orders/${orderNumberToShare}`;
       setShareUrl(fullUrl);
@@ -546,14 +525,14 @@ function HomeContent() {
     } catch (error) {
       console.error("Failed to share bill to RTDB:", error);
       toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
-      setShareUrl(""); 
-      if (!editingBillId) { 
+      setShareUrl("");
+      if (!editingBillId) {
         setActiveSharedOrderNumber(null);
       }
     } finally {
       setIsGeneratingShareUrl(false);
     }
-  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, toast, editingBillId]); 
+  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, toast, editingBillId]);
 
   useEffect(() => {
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
@@ -567,7 +546,7 @@ function HomeContent() {
     if (isUpdatingFromRTDBSync || !activeSharedOrderNumber || orderNumber !== activeSharedOrderNumber || isLoadingSnacks || isUpdatingRTDBFromMain || !isLocalDirty) {
       return;
     }
-    
+
     if (mainDebounceTimer) {
       clearTimeout(mainDebounceTimer);
     }
@@ -595,14 +574,14 @@ function HomeContent() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
-        setIsLocalDirty(false); 
+        setIsLocalDirty(false);
       } catch (error) {
         console.error("Failed to auto-update RTDB from main page:", error);
         toast({ variant: "destructive", title: "Sync Error (Auto)", description: "Failed to save changes automatically." });
       } finally {
         setIsUpdatingRTDBFromMain(false);
       }
-    }, 750); 
+    }, 750);
 
     setMainDebounceTimer(timer);
 
@@ -616,12 +595,12 @@ function HomeContent() {
     customerPhoneNumber,
     tableNumber,
     notes,
-    orderNumber, 
-    activeSharedOrderNumber, 
+    orderNumber,
+    activeSharedOrderNumber,
     isLoadingSnacks,
     isUpdatingRTDBFromMain,
-    isUpdatingFromRTDBSync, 
-    isLocalDirty, 
+    isUpdatingFromRTDBSync,
+    isLocalDirty,
     toast
   ]);
 
@@ -644,6 +623,18 @@ function HomeContent() {
     setIsLocalDirty(true);
     setNotes(e.target.value);
   };
+
+  const handlePrimaryActionClick = () => {
+    if (!snacksVisible) {
+      setSnacksVisible(true);
+    } else {
+      handleSaveBill(false);
+    }
+  };
+
+  const primaryButtonText = !snacksVisible ? "Edit Items" : (editingBillId ? "Update Bill" : "Save Bill");
+  const PrimaryButtonIcon = !snacksVisible ? Edit : Save;
+  const primaryButtonDisabled = !snacksVisible ? false : (isSavingBill || (editingBillId && !isLocalDirty && snacksVisible));
 
 
   return (
@@ -722,48 +713,52 @@ function HomeContent() {
             <CardDescription>{editingBillId ? `Editing Bill (Order: ${orderNumber})` : "Select snacks, add customer details, and calculate the total."}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                id="search-snacks"
-                type="search"
-                placeholder="Search snacks..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyDown={handleSearchKeyDown}
-                className="pl-8 w-full h-9"
-                aria-label="Search snacks"
-              />
-            </div>
+            {snacksVisible && (
+              <>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="search-snacks"
+                    type="search"
+                    placeholder="Search snacks..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={handleSearchKeyDown}
+                    className="pl-8 w-full h-9"
+                    aria-label="Search snacks"
+                  />
+                </div>
 
-            <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1 rounded-md border bg-muted/20">
-               {isLoadingSnacks ? (
-                   <p className="text-sm text-muted-foreground w-full text-center py-2">Loading snacks...</p>
-               ) : filteredSnacks.length === 0 && snacks.length > 0 && searchTerm ? (
-                    <p className="text-sm text-muted-foreground w-full text-center py-2">No snacks match your search.</p>
-               ): filteredSnacks.length === 0 && snacks.length === 0 ? (
-                   <p className="text-sm text-muted-foreground w-full text-center py-2">No snacks available. Add snacks below (Admin).</p>
-               ) : (
-                  filteredSnacks.map((snack) => (
-                    <div key={snack.id} className="flex items-center space-x-1">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-full px-3 py-1 h-auto text-xs"
-                        onClick={() => handleSnackIncrement(snack)}
-                      >
-                        {snack.name} (₹{Number(snack.price).toFixed(2)})
-                      </Button>
-                      {getSnackQuantity(snack.id) > 0 && (
-                        <Badge variant="secondary" className="text-xs px-1.5 py-0.5">
-                          {getSnackQuantity(snack.id)}
-                        </Badge>
-                      )}
-                    </div>
-                  ))
-               )}
-            </div>
-            <Separator />
+                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1 rounded-md border bg-muted/20">
+                  {isLoadingSnacks ? (
+                      <p className="text-sm text-muted-foreground w-full text-center py-2">Loading snacks...</p>
+                  ) : filteredSnacks.length === 0 && snacks.length > 0 && searchTerm ? (
+                        <p className="text-sm text-muted-foreground w-full text-center py-2">No snacks match your search.</p>
+                  ): filteredSnacks.length === 0 && snacks.length === 0 ? (
+                      <p className="text-sm text-muted-foreground w-full text-center py-2">No snacks available. Add snacks below (Admin).</p>
+                  ) : (
+                      filteredSnacks.map((snack) => (
+                        <div key={snack.id} className="flex items-center space-x-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-full px-3 py-1 h-auto text-xs"
+                            onClick={() => handleSnackIncrement(snack)}
+                          >
+                            {snack.name} (₹{Number(snack.price).toFixed(2)})
+                          </Button>
+                          {getSnackQuantity(snack.id) > 0 && (
+                            <Badge variant="secondary" className="text-xs px-1.5 py-0.5">
+                              {getSnackQuantity(snack.id)}
+                            </Badge>
+                          )}
+                        </div>
+                      ))
+                  )}
+                </div>
+                <Separator />
+              </>
+            )}
             <div>
               <h3 className="text-sm font-medium mb-2">Selected Snacks</h3>
               {selectedSnacks.length === 0 ? (
@@ -771,8 +766,8 @@ function HomeContent() {
               ) : (
                 <ul className="space-y-2 max-h-48 overflow-y-auto">
                   {selectedSnacks.map((snack) => (
-                    <li 
-                      key={snack.id} 
+                    <li
+                      key={snack.id}
                       ref={(el) => itemRefs.current[snack.id] = el}
                       className="flex items-center justify-between text-sm p-1.5 rounded-md hover:bg-muted/50"
                     >
@@ -784,7 +779,7 @@ function HomeContent() {
                             size="icon"
                             className="h-6 w-6"
                             onClick={() => handleSnackDecrement(snack)}
-                            disabled={snack.quantity <= 0}
+                            disabled={snack.quantity <= 0 || !snacksVisible}
                             aria-label={`Decrease quantity of ${snack.name}`}
                           >
                             <Minus className="h-3 w-3" />
@@ -800,6 +795,7 @@ function HomeContent() {
                               const originalSnack = snacks.find(s => s.id === snack.id);
                               if (originalSnack) handleSnackIncrement(originalSnack);
                             }}
+                             disabled={!snacksVisible}
                              aria-label={`Increase quantity of ${snack.name}`}
                           >
                             <Plus className="h-3 w-3" />
@@ -884,7 +880,7 @@ function HomeContent() {
                   placeholder="Optional: e.g., less spicy, no onions..."
                   value={notes}
                   onChange={handleNotesChange}
-                  className="pl-8 text-sm min-h-[60px]" 
+                  className="pl-8 text-sm min-h-[60px]"
                   aria-label="Notes"
                 />
               </div>
@@ -896,19 +892,19 @@ function HomeContent() {
                    <Badge variant="secondary" className="text-base font-semibold tabular-nums">₹{total.toFixed(2)}</Badge>
                </div>
 
-              {(total > 0 || selectedSnacks.length > 0 || editingBillId) && (
+              {(total > 0 || selectedSnacks.length > 0 || editingBillId || !snacksVisible) && (
                   <div className="flex flex-col items-center gap-3 w-full">
                       <QRCodeCanvas value={upiLink} size={128} level="H" data-ai-hint="payment qr" />
                        <div className="flex w-full gap-2">
-                        <Button variant="default" onClick={() => handleSaveBill(false)} disabled={isSavingBill} className="flex-1">
-                           <Save className="mr-2 h-4 w-4" /> Save
+                        <Button variant="default" onClick={handlePrimaryActionClick} disabled={primaryButtonDisabled} className="flex-1">
+                           <PrimaryButtonIcon className="mr-2 h-4 w-4" /> {primaryButtonText}
                         </Button>
                         <Button variant="outline" onClick={() => handleSaveBill(true)} disabled={isSavingBill} className="flex-1">
-                           {isSavingBill ? (editingBillId ? 'Updating...' : 'Saving...') : (
+                           {isSavingBill && !editingBillId && !snacksVisible ? 'Saving...' : (isSavingBill && editingBillId && !snacksVisible ? 'Updating...' : (
                             <>
                               <PlusCircle className="mr-2 h-4 w-4" /> New Order
                             </>
-                           )}
+                           ))}
                         </Button>
                        </div>
                   </div>
