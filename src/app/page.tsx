@@ -711,7 +711,7 @@ function HomeContent() {
         </div>
       </div>
 
-      {!showAdminLoginSection && (
+      {!showAdminLoginSection && !isAdmin && (
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardDescription>{editingBillId ? `Editing Bill (Order: ${orderNumber})` : "Select snacks, add customer details, and calculate the total."}</CardDescription>
