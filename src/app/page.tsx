@@ -16,7 +16,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save } from "lucide-react"; // Added Save icon
+import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle } from "lucide-react"; // Added Save, PlusCircle icon
 import { QRCodeCanvas } from 'qrcode.react';
 import { addSnack, getSnacks, updateSnack, deleteSnack, saveBill } from "./actions";
 import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db";
@@ -361,7 +361,6 @@ function HomeContent() {
   const handleSaveBill = async (resetFormAfterSave: boolean) => {
       const currentTotal = calculateTotal();
       if (isSavingBill || (!editingBillId && currentTotal <= 0 && selectedSnacks.length === 0 && !resetFormAfterSave)) {
-        // Prevent saving an empty bill unless it's an explicit "Save & New Order" which might be used to clear a stale edit state
         if (!editingBillId && currentTotal <= 0 && selectedSnacks.length === 0 && !resetFormAfterSave) {
           toast({ variant: "default", title: "Cannot save an empty bill." });
         }
@@ -400,23 +399,14 @@ function HomeContent() {
                 setShareUrl(""); 
                 setIsLocalDirty(false); 
                 
-                // If was editing via URL, clear query params
                 if (searchParams.get('editOrder') || searchParams.get('editBillId')) {
                   router.replace('/', undefined); 
                 }
               } else {
-                // Save & Continue Editing
                 if (!editingBillId && result.billId) {
-                  setEditingBillId(result.billId); // Set editingBillId if it was a new bill
+                  setEditingBillId(result.billId); 
                 }
-                // Keep activeSharedOrderNumber if it was already set (for ongoing sharing)
-                // If not set, and now we have a billId, we could potentially initiate sharing here
-                // or let the user click share again. For now, keep it simple.
-                if (!activeSharedOrderNumber && result.billId) {
-                   // If user saved a new bill and wants to continue, we might want to enable sharing for it automatically
-                   // This depends on desired UX. For now, user can click share if they want to.
-                }
-                 setIsLocalDirty(false); // Bill is saved, no longer dirty
+                setIsLocalDirty(false); 
               }
 
           } else {
@@ -447,7 +437,7 @@ function HomeContent() {
     if (password === adminPassword) {
       setIsAdmin(true);
       setPassword("");
-      setShowAdminLoginSection(false); // Hide login form after successful login
+      setShowAdminLoginSection(false); 
     } else {
       toast({
         variant: "destructive",
@@ -521,7 +511,7 @@ function HomeContent() {
     if (typeof window === "undefined") {
         setShareUrl("");
         setIsGeneratingShareUrl(false);
-        if (!editingBillId) { // Only clear active shared order if not editing an existing bill
+        if (!editingBillId) { 
             setActiveSharedOrderNumber(null);
         }
         return;
@@ -911,10 +901,14 @@ function HomeContent() {
                       <QRCodeCanvas value={upiLink} size={128} level="H" data-ai-hint="payment qr" />
                        <div className="flex w-full gap-2">
                         <Button onClick={() => handleSaveBill(false)} disabled={isSavingBill} className="flex-1">
-                           <Save className="mr-2 h-4 w-4" /> {editingBillId ? 'Save Changes' : 'Save & Continue'}
+                           <Save className="mr-2 h-4 w-4" /> Save
                         </Button>
                         <Button onClick={() => handleSaveBill(true)} disabled={isSavingBill} className="flex-1">
-                            {isSavingBill ? (editingBillId ? 'Updating...' : 'Saving...') : (editingBillId ? 'Update & New' : 'Save & New Order')}
+                           {isSavingBill ? (editingBillId ? 'Updating...' : 'Saving...') : (
+                            <>
+                              <PlusCircle className="mr-2 h-4 w-4" /> New Order
+                            </>
+                           )}
                         </Button>
                        </div>
                   </div>
@@ -925,29 +919,7 @@ function HomeContent() {
       )}
 
 
-      {!isAdmin && showAdminLoginSection ? (
-        <Card className="w-full max-w-md mt-4">
-          <CardHeader>
-            <CardTitle className="text-lg">Admin Login</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
-                aria-label="Admin Password"
-              />
-            </div>
-            <Button className="mt-4 w-full" onClick={handleAdminLogin}>Login</Button>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {isAdmin ? (
+      {isAdmin && (
         <>
           <Card className="w-full max-w-md mt-4">
             <CardHeader>
@@ -1018,7 +990,29 @@ function HomeContent() {
           </Card>
            <Button variant="outline" className="mt-4" onClick={() => setIsAdmin(false)}>Logout Admin</Button>
         </>
-      ) : null}
+      ) }
+
+      {!isAdmin && showAdminLoginSection && (
+        <Card className="w-full max-w-md mt-4">
+          <CardHeader>
+            <CardTitle className="text-lg">Admin Login</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
+                aria-label="Admin Password"
+              />
+            </div>
+            <Button className="mt-4 w-full" onClick={handleAdminLogin}>Login</Button>
+          </CardContent>
+        </Card>
+      )}
       <Toaster />
     </div>
   );
@@ -1036,3 +1030,4 @@ export default function HomePage() {
     </Suspense>
   );
 }
+
