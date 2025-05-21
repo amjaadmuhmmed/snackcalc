@@ -900,10 +900,10 @@ function HomeContent() {
                   <div className="flex flex-col items-center gap-3 w-full">
                       <QRCodeCanvas value={upiLink} size={128} level="H" data-ai-hint="payment qr" />
                        <div className="flex w-full gap-2">
-                        <Button onClick={() => handleSaveBill(false)} disabled={isSavingBill} className="flex-1">
+                        <Button variant="default" onClick={() => handleSaveBill(false)} disabled={isSavingBill} className="flex-1">
                            <Save className="mr-2 h-4 w-4" /> Save
                         </Button>
-                        <Button onClick={() => handleSaveBill(true)} disabled={isSavingBill} className="flex-1">
+                        <Button variant="outline" onClick={() => handleSaveBill(true)} disabled={isSavingBill} className="flex-1">
                            {isSavingBill ? (editingBillId ? 'Updating...' : 'Saving...') : (
                             <>
                               <PlusCircle className="mr-2 h-4 w-4" /> New Order
