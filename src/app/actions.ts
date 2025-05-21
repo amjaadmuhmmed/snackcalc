@@ -1,4 +1,3 @@
-
 'use server';
 
 import {addSnackToDb, getSnacksFromDb, updateSnackInDb, deleteSnackFromDb, addBillToDb, updateBillInDb, getBillsFromDb, BillInput} from '@/lib/db';
@@ -104,15 +103,24 @@ export async function getSnacks() { // Renamed to avoid conflict if needed elsew
 export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
     try {
         let result;
+        let newBillId: string | undefined = undefined;
         if (billIdToUpdate) {
             result = await updateBillInDb(billIdToUpdate, billData);
         } else {
-            result = await addBillToDb(billData);
+            const addResult = await addBillToDb(billData);
+            result = {success: addResult.success, message: addResult.message};
+            if(addResult.success && addResult.id){
+                newBillId = addResult.id;
+            }
         }
 
         if (result.success) {
             revalidatePath('/bills'); // Revalidate the bills page to show the new/updated bill
-            return { success: true, message: billIdToUpdate ? 'Bill updated successfully!' : 'Bill saved successfully!' };
+            return {
+                success: true,
+                message: billIdToUpdate ? 'Bill updated successfully!' : 'Bill saved successfully!',
+                billId: billIdToUpdate || newBillId // Return existing or new bill ID
+            };
         } else {
             return { success: false, message: result.message || (billIdToUpdate ? 'Failed to update bill.' : 'Failed to save bill.') };
         }
@@ -125,4 +133,3 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
 export async function getBills() {
     return getBillsFromDb();
 }
-

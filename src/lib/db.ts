@@ -1,4 +1,3 @@
-
 'use server';
 
 import {db} from './firebase';
@@ -119,7 +118,7 @@ const billsCollection = collection(db, 'bills');
 
 export async function addBillToDb(bill: BillInput) {
     try {
-      await addDoc(billsCollection, {
+      const docRef = await addDoc(billsCollection, {
         ...bill,
         customerName: bill.customerName || '',
         customerPhoneNumber: bill.customerPhoneNumber || '',
@@ -127,7 +126,7 @@ export async function addBillToDb(bill: BillInput) {
         notes: bill.notes || '', // Save notes
         createdAt: serverTimestamp() // Add server timestamp
       });
-      return {success: true};
+      return {success: true, id: docRef.id}; // Return the new document ID
     } catch (e: any) {
       console.error('Error adding bill document: ', e);
       return {success: false, message: e.message};
@@ -179,4 +178,3 @@ export async function getBillsFromDb(): Promise<Bill[]> {
       return [];
     }
 }
-

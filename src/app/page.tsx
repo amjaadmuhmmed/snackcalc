@@ -1,4 +1,3 @@
-
 // src/app/page.tsx
 "use client";
 
@@ -17,7 +16,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog } from "lucide-react";
+import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save } from "lucide-react"; // Added Save icon
 import { QRCodeCanvas } from 'qrcode.react';
 import { addSnack, getSnacks, updateSnack, deleteSnack, saveBill } from "./actions";
 import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db";
@@ -359,11 +358,12 @@ function HomeContent() {
     }
   };
 
-  const handleSaveBill = async () => {
+  const handleSaveBill = async (resetFormAfterSave: boolean) => {
       const currentTotal = calculateTotal();
-      if (isSavingBill || (!editingBillId && currentTotal <= 0 && selectedSnacks.length === 0)) {
-        if (!editingBillId && currentTotal <= 0 && selectedSnacks.length === 0) {
-          toast({ variant: "default", title: "Cannot save empty bill." });
+      if (isSavingBill || (!editingBillId && currentTotal <= 0 && selectedSnacks.length === 0 && !resetFormAfterSave)) {
+        // Prevent saving an empty bill unless it's an explicit "Save & New Order" which might be used to clear a stale edit state
+        if (!editingBillId && currentTotal <= 0 && selectedSnacks.length === 0 && !resetFormAfterSave) {
+          toast({ variant: "default", title: "Cannot save an empty bill." });
         }
         return;
       }
@@ -386,21 +386,37 @@ function HomeContent() {
           if (result.success) {
               toast({ title: result.message }); 
               
-              setSelectedSnacks([]);
-              setServiceCharge(0);
-              setCustomerName("");
-              setCustomerPhoneNumber("");
-              setTableNumber("");
-              setNotes("");
-              setOrderNumber(generateOrderNumber()); 
-              setSearchTerm("");
-              setActiveSharedOrderNumber(null); 
-              setEditingBillId(null); 
-              setShareUrl(""); 
-              setIsLocalDirty(false); 
-              
-              if (searchParams.get('editOrder') || searchParams.get('editBillId')) {
-                router.replace('/', undefined); 
+              if (resetFormAfterSave) {
+                setSelectedSnacks([]);
+                setServiceCharge(0);
+                setCustomerName("");
+                setCustomerPhoneNumber("");
+                setTableNumber("");
+                setNotes("");
+                setOrderNumber(generateOrderNumber()); 
+                setSearchTerm("");
+                setActiveSharedOrderNumber(null); 
+                setEditingBillId(null); 
+                setShareUrl(""); 
+                setIsLocalDirty(false); 
+                
+                // If was editing via URL, clear query params
+                if (searchParams.get('editOrder') || searchParams.get('editBillId')) {
+                  router.replace('/', undefined); 
+                }
+              } else {
+                // Save & Continue Editing
+                if (!editingBillId && result.billId) {
+                  setEditingBillId(result.billId); // Set editingBillId if it was a new bill
+                }
+                // Keep activeSharedOrderNumber if it was already set (for ongoing sharing)
+                // If not set, and now we have a billId, we could potentially initiate sharing here
+                // or let the user click share again. For now, keep it simple.
+                if (!activeSharedOrderNumber && result.billId) {
+                   // If user saved a new bill and wants to continue, we might want to enable sharing for it automatically
+                   // This depends on desired UX. For now, user can click share if they want to.
+                }
+                 setIsLocalDirty(false); // Bill is saved, no longer dirty
               }
 
           } else {
@@ -505,7 +521,7 @@ function HomeContent() {
     if (typeof window === "undefined") {
         setShareUrl("");
         setIsGeneratingShareUrl(false);
-        if (!editingBillId) {
+        if (!editingBillId) { // Only clear active shared order if not editing an existing bill
             setActiveSharedOrderNumber(null);
         }
         return;
@@ -550,7 +566,6 @@ function HomeContent() {
   }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, toast, editingBillId]); 
 
   useEffect(() => {
-    // Only call handleShareBill when showShareDialog transitions from false to true
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
       handleShareBill(orderNumber);
     }
@@ -894,9 +909,14 @@ function HomeContent() {
               {(total > 0 || selectedSnacks.length > 0 || editingBillId) && (
                   <div className="flex flex-col items-center gap-3 w-full">
                       <QRCodeCanvas value={upiLink} size={128} level="H" data-ai-hint="payment qr" />
-                       <Button onClick={handleSaveBill} disabled={isSavingBill} className="w-full">
-                          {isSavingBill ? (editingBillId ? 'Updating Bill...' : 'Saving Bill...') : (editingBillId ? 'Update Bill' : 'Save Bill & New Order')}
-                      </Button>
+                       <div className="flex w-full gap-2">
+                        <Button onClick={() => handleSaveBill(false)} disabled={isSavingBill} className="flex-1">
+                           <Save className="mr-2 h-4 w-4" /> {editingBillId ? 'Save Changes' : 'Save & Continue'}
+                        </Button>
+                        <Button onClick={() => handleSaveBill(true)} disabled={isSavingBill} className="flex-1">
+                            {isSavingBill ? (editingBillId ? 'Updating...' : 'Saving...') : (editingBillId ? 'Update & New' : 'Save & New Order')}
+                        </Button>
+                       </div>
                   </div>
               )}
             </div>
@@ -1016,5 +1036,3 @@ export default function HomePage() {
     </Suspense>
   );
 }
-
-    
