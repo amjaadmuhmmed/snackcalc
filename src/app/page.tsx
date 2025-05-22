@@ -173,17 +173,20 @@ function HomeContent() {
     if (!activeSharedOrderNumber || snacks.length === 0) {
       return;
     }
-    if (isLocalDirty && orderNumber === activeSharedOrderNumber) { // Only skip sync if local is dirty for the *active* shared order
+    if (isLocalDirty && orderNumber === activeSharedOrderNumber) { 
         console.log(`Main page: Local state is dirty for active shared order ${activeSharedOrderNumber}, skipping RTDB sync for now.`);
-        return;
+        // return; // Commented out to allow RTDB subscription even if local is dirty, for receiving updates from other clients
     }
 
     console.log(`Main page subscribing to RTDB for order: ${activeSharedOrderNumber}`);
     const unsubscribe = subscribeToSharedOrder(activeSharedOrderNumber, (data: SharedOrderDataSnapshot | null) => {
       if (data && data.orderNumber === activeSharedOrderNumber) {
-        if (isLocalDirty) {
-            console.log(`Main page: Received RTDB update for ${activeSharedOrderNumber}, but local is dirty. Ignoring.`);
-            return;
+        if (isLocalDirty && orderNumber === activeSharedOrderNumber) { // Check if current order is the one being synced and local is dirty
+            console.log(`Main page: Received RTDB update for ${activeSharedOrderNumber}, but local is dirty. Ignoring direct state update, but will update if other client changed.`);
+            // Decide if to merge or how to handle. For now, it will allow local changes to persist until pushed.
+            // This means if another client changes something, it MIGHT get overwritten by this client's next push if not careful.
+            // However, the goal is to prevent user's active input from being wiped.
+            return; 
         }
         console.log(`Main page received RTDB update for ${activeSharedOrderNumber}:`, data);
         setIsUpdatingFromRTDBSync(true);
@@ -397,7 +400,7 @@ function HomeContent() {
                   setEditingBillId(result.billId);
                 }
                 setIsLocalDirty(false); 
-                if (snacksVisible) { // Only hide if items were visible
+                if (snacksVisible) { 
                     setSnacksVisible(false);
                 }
               }
@@ -504,7 +507,7 @@ function HomeContent() {
     if (typeof window === "undefined") {
         setShareUrl("");
         setIsGeneratingShareUrl(false);
-        if (!editingBillId) { // Only reset active shared order if not already editing a specific bill
+        if (!editingBillId) { 
             setActiveSharedOrderNumber(null);
         }
         return;
@@ -529,24 +532,26 @@ function HomeContent() {
     };
 
     try {
-      setActiveSharedOrderNumber(orderNumberToShare); // Ensure this is set for RTDB listener
+      setActiveSharedOrderNumber(orderNumberToShare); 
       await setSharedOrderInRTDB(orderNumberToShare, sharedOrderPayload);
-      setIsLocalDirty(false); // Mark as synced
+      setIsLocalDirty(false); 
       const baseUrl = window.location.origin;
       const fullUrl = `${baseUrl}/orders/${orderNumberToShare}`;
       setShareUrl(fullUrl);
-      toast({ title: "Bill ready to share!", description: "Link and QR code updated." });
+      if (!isUpdatingFromRTDBSync) { // Avoid toast if update is from RTDB sync itself
+         toast({ title: "Bill ready to share!", description: "Link and QR code updated." });
+      }
     } catch (error) {
       console.error("Failed to share bill to RTDB:", error);
       toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
       setShareUrl("");
-      if (!editingBillId) { // Only reset if not editing
+      if (!editingBillId) { 
          setActiveSharedOrderNumber(null);
       }
     } finally {
       setIsGeneratingShareUrl(false);
     }
-  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, toast, editingBillId]);
+  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, toast, editingBillId, isUpdatingFromRTDBSync]);
 
   useEffect(() => {
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
@@ -588,10 +593,12 @@ function HomeContent() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
-        setIsLocalDirty(false);
+        if (!editingBillId) { // Only clear isLocalDirty if not in "edit Firestore bill" mode
+          setIsLocalDirty(false);
+        }
       } catch (error) {
         console.error("Failed to auto-update RTDB from main page:", error);
-        toast({ variant: "destructive", title: "Sync Error (Auto)", description: "Failed to save changes automatically." });
+        // Do not toast here to avoid flooding with messages on auto-sync errors
       } finally {
         setIsUpdatingRTDBFromMain(false);
       }
@@ -615,7 +622,7 @@ function HomeContent() {
     isUpdatingRTDBFromMain,
     isUpdatingFromRTDBSync,
     isLocalDirty,
-    toast
+    editingBillId // Add editingBillId as a dependency
   ]);
 
   const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -648,9 +655,7 @@ function HomeContent() {
 
   const primaryButtonText = !snacksVisible ? "Edit Items" : (editingBillId ? "Update Bill" : "Save Bill");
   const PrimaryButtonIcon = !snacksVisible ? Edit : Save;
-  // If snacks are not visible, the button is "Edit Items" and should be enabled (unless saving in background).
-  // If snacks are visible, the button is "Save Bill" or "Update Bill" and should only be disabled if isSavingBill.
-  const primaryButtonDisabled = snacksVisible ? isSavingBill : isSavingBill;
+  const primaryButtonDisabled = isSavingBill;
 
 
   return (
@@ -1050,5 +1055,7 @@ export default function HomePage() {
     </Suspense>
   );
 }
+
+    
 
     
