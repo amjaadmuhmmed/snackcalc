@@ -139,6 +139,7 @@ function HomeContent() {
       setEditingBillId(editFsBillId);
       setActiveSharedOrderNumber(editOrderNum);
       setSnacksVisible(true); // Ensure items are visible when starting an edit
+      setIsLocalDirty(false); // Reset dirty state when loading an existing bill
       console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
     } else if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
@@ -172,8 +173,8 @@ function HomeContent() {
     if (!activeSharedOrderNumber || snacks.length === 0) {
       return;
     }
-    if (isLocalDirty) {
-        console.log("Main page: Local state is dirty, skipping RTDB sync for now.");
+    if (isLocalDirty && orderNumber === activeSharedOrderNumber) { // Only skip sync if local is dirty for the *active* shared order
+        console.log(`Main page: Local state is dirty for active shared order ${activeSharedOrderNumber}, skipping RTDB sync for now.`);
         return;
     }
 
@@ -235,7 +236,7 @@ function HomeContent() {
       console.log(`Main page unsubscribing from RTDB for order: ${activeSharedOrderNumber}`);
       unsubscribe();
     };
-  }, [activeSharedOrderNumber, snacks, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, selectedSnacks, serviceCharge]);
+  }, [activeSharedOrderNumber, snacks, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, selectedSnacks, serviceCharge, orderNumber]);
 
 
   const calculateTotal = () => {
@@ -251,10 +252,12 @@ function HomeContent() {
       if (existingSnackIndex > -1) {
         const updatedSnack = { ...prevSelected[existingSnackIndex], quantity: prevSelected[existingSnackIndex].quantity + 1 };
         const newSelected = [...prevSelected];
-        newSelected.splice(existingSnackIndex, 1);
-        return [updatedSnack, ...newSelected];
+        newSelected.splice(existingSnackIndex, 1); // Remove old item
+        return [updatedSnack, ...newSelected]; // Add updated item to the top
       } else {
-        return [{ ...snack, price: Number(snack.price), quantity: 1 }, ...prevSelected];
+         // Ensure price is a number
+        const newSnackItem = { ...snack, price: Number(snack.price), quantity: 1 };
+        return [newSnackItem, ...prevSelected]; // Add new item to the top
       }
     });
     setSearchTerm("");
@@ -269,14 +272,14 @@ function HomeContent() {
 
       const currentSnack = prevSelected[currentSnackIndex];
       let newSelected = [...prevSelected];
+      newSelected.splice(currentSnackIndex, 1); // Remove current item
 
       if (currentSnack.quantity === 1) {
-        newSelected.splice(currentSnackIndex, 1);
+        // If quantity was 1, it's already removed. newSelected is correct.
         return newSelected;
       } else {
         const updatedSnack = { ...currentSnack, quantity: currentSnack.quantity - 1 };
-        newSelected.splice(currentSnackIndex, 1);
-        return [updatedSnack, ...newSelected];
+        return [updatedSnack, ...newSelected]; // Add updated item to the top
       }
     });
   };
@@ -337,10 +340,19 @@ function HomeContent() {
 
   const handleSaveBill = async (resetFormAfterSave: boolean) => {
       const currentTotal = calculateTotal();
-      if (isSavingBill || (!editingBillId && currentTotal <= 0 && selectedSnacks.length === 0 && !resetFormAfterSave)) {
-        if (!editingBillId && currentTotal <= 0 && selectedSnacks.length === 0 && !resetFormAfterSave) {
-          toast({ variant: "default", title: "Cannot save an empty bill." });
-        }
+      if (isSavingBill) return;
+
+      if (editingBillId && !isLocalDirty && !resetFormAfterSave) {
+        toast({
+            variant: "default",
+            title: "No changes to update.",
+            description: "Please make a change before updating the bill."
+        });
+        return;
+      }
+
+      if (!editingBillId && currentTotal <= 0 && selectedSnacks.length === 0 && !resetFormAfterSave) {
+        toast({ variant: "default", title: "Cannot save an empty bill." });
         return;
       }
 
@@ -384,8 +396,10 @@ function HomeContent() {
                 if (!editingBillId && result.billId) {
                   setEditingBillId(result.billId);
                 }
-                setIsLocalDirty(false);
-                setSnacksVisible(false); // Hide snacks after saving/updating
+                setIsLocalDirty(false); 
+                if (snacksVisible) { // Only hide if items were visible
+                    setSnacksVisible(false);
+                }
               }
 
           } else {
@@ -490,7 +504,7 @@ function HomeContent() {
     if (typeof window === "undefined") {
         setShareUrl("");
         setIsGeneratingShareUrl(false);
-        if (!editingBillId) {
+        if (!editingBillId) { // Only reset active shared order if not already editing a specific bill
             setActiveSharedOrderNumber(null);
         }
         return;
@@ -515,9 +529,9 @@ function HomeContent() {
     };
 
     try {
-      setActiveSharedOrderNumber(orderNumberToShare);
+      setActiveSharedOrderNumber(orderNumberToShare); // Ensure this is set for RTDB listener
       await setSharedOrderInRTDB(orderNumberToShare, sharedOrderPayload);
-      setIsLocalDirty(false);
+      setIsLocalDirty(false); // Mark as synced
       const baseUrl = window.location.origin;
       const fullUrl = `${baseUrl}/orders/${orderNumberToShare}`;
       setShareUrl(fullUrl);
@@ -526,8 +540,8 @@ function HomeContent() {
       console.error("Failed to share bill to RTDB:", error);
       toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
       setShareUrl("");
-      if (!editingBillId) {
-        setActiveSharedOrderNumber(null);
+      if (!editingBillId) { // Only reset if not editing
+         setActiveSharedOrderNumber(null);
       }
     } finally {
       setIsGeneratingShareUrl(false);
@@ -634,7 +648,9 @@ function HomeContent() {
 
   const primaryButtonText = !snacksVisible ? "Edit Items" : (editingBillId ? "Update Bill" : "Save Bill");
   const PrimaryButtonIcon = !snacksVisible ? Edit : Save;
-  const primaryButtonDisabled = !snacksVisible ? false : (isSavingBill || (editingBillId && !isLocalDirty && snacksVisible));
+  // If snacks are not visible, the button is "Edit Items" and should be enabled (unless saving in background).
+  // If snacks are visible, the button is "Save Bill" or "Update Bill" and should only be disabled if isSavingBill.
+  const primaryButtonDisabled = snacksVisible ? isSavingBill : isSavingBill;
 
 
   return (
@@ -707,7 +723,7 @@ function HomeContent() {
         </div>
       </div>
 
-      {!showAdminLoginSection && !isAdmin && (
+      {!isAdmin && !showAdminLoginSection && (
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardDescription>{editingBillId ? `Editing Bill (Order: ${orderNumber})` : "Select snacks, add customer details, and calculate the total."}</CardDescription>
@@ -973,7 +989,15 @@ function HomeContent() {
                         <Button variant="outline" size="icon" onClick={() => handleEditSnack(snack)} aria-label={`Edit ${snack.name}`}>
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="destructive" size="icon" onClick={() => handleDeleteSnack(snack.id)} aria-label={`Delete ${snack.name}`}>
+                        <Button variant="destructive" size="icon" onClick={async () => {
+                             const result = await deleteSnack(snack.id);
+                             if(result.success) {
+                               toast({title: result.message});
+                               loadSnacks();
+                             } else {
+                               toast({variant: "destructive", title: "Error", description: result.message});
+                             }
+                        }} aria-label={`Delete ${snack.name}`}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
@@ -1027,3 +1051,4 @@ export default function HomePage() {
   );
 }
 
+    
