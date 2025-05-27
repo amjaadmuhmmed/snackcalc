@@ -11,28 +11,64 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Edit, Printer } from "lucide-react"; // Added Printer icon
-import { format, isValid } from 'date-fns'; // For formatting dates
+import { ArrowLeft, Edit, Printer, Calendar as CalendarIcon, XCircle } from "lucide-react";
+import { format, isValid, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
 import { setSharedOrderInRTDB, SharedOrderItem } from "@/lib/rt_db";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import type { DateRange } from "react-day-picker";
+import { cn } from "@/lib/utils";
+
+// Helper to convert Firestore Timestamp to JS Date
+const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
+  if (!timestamp) return null;
+  try {
+    if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+      return timestamp.toDate();
+    } else if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') {
+      // Handling Firestore Timestamp-like objects (e.g., from RTDB or serialized)
+      return new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
+    } else if (typeof timestamp === 'number') {
+      // Assuming it's a Unix timestamp in milliseconds
+      const d = new Date(timestamp);
+      if (isValid(d)) return d;
+    } else if (typeof timestamp === 'string') {
+      const d = new Date(timestamp);
+      if (isValid(d)) return d;
+    }
+    console.warn('Invalid or unsupported timestamp format for conversion:', typeof timestamp, timestamp);
+    return null;
+  } catch (e) {
+    console.error("Error converting timestamp to Date:", e, "Timestamp value:", timestamp);
+    return null;
+  }
+};
+
 
 export default function BillsPage() {
-  const [bills, setBills] = useState<Bill[]>([]);
+  const [allBills, setAllBills] = useState<Bill[]>([]);
+  const [filteredBills, setFilteredBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { toast } = useToast();
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: startOfDay(new Date()),
+    to: endOfDay(new Date()),
+  });
 
   useEffect(() => {
     const fetchBills = async () => {
       try {
         setLoading(true);
-        const fetchedBills = await getBills(); // Call the server action
-        setBills(fetchedBills);
+        const fetchedBills = await getBills();
+        setAllBills(fetchedBills);
         setError(null);
       } catch (err: any) {
         console.error("Failed to fetch bills:", err);
         setError("Failed to load bills. Please try again later.");
+        setAllBills([]);
       } finally {
         setLoading(false);
       }
@@ -41,32 +77,42 @@ export default function BillsPage() {
     fetchBills();
   }, []);
 
-  const formatFirestoreTimestamp = (timestamp: any): string => {
-    if (!timestamp) {
-      return 'N/A';
-    }
-    try {
-      let date: Date | null = null;
-      if (timestamp && typeof timestamp.toDate === 'function') {
-        date = timestamp.toDate();
-      } else if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') {
-        date = new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
-      } else if (typeof timestamp === 'number') {
-        date = new Date(timestamp);
-      } else if (typeof timestamp === 'string') {
-        date = new Date(timestamp);
-      }
+  useEffect(() => {
+    if (loading) return; // Don't filter while still loading all bills
 
-      if (date instanceof Date && isValid(date)) {
-        return format(date, 'Pp');
-      } else {
-        console.warn('Invalid or unsupported timestamp format:', typeof timestamp, timestamp);
-        return 'Invalid Date';
-      }
-    } catch (e) {
-      console.error("Error formatting timestamp:", e, "Timestamp value:", timestamp);
-      return 'Error Formatting Date';
+    if (!dateRange || !dateRange.from) {
+      // If no date range selected (filter cleared), show all bills
+      setFilteredBills(allBills);
+      return;
     }
+
+    const fromDate = startOfDay(dateRange.from);
+    // If no 'to' date, use the 'from' date to define a single day range
+    const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+
+    const newFilteredBills = allBills.filter((bill) => {
+      const billCreationDate = convertFirestoreTimestampToDate(bill.createdAt);
+      if (!billCreationDate || !isValid(billCreationDate)) {
+        console.warn(`Bill ${bill.id} has invalid createdAt:`, bill.createdAt);
+        return false; // Exclude bills with invalid dates
+      }
+      // Ensure fromDate is not after toDate before calling isWithinInterval
+      return isWithinInterval(billCreationDate, { 
+        start: fromDate <= toDate ? fromDate : toDate, 
+        end: fromDate <= toDate ? toDate : fromDate 
+      });
+    });
+    setFilteredBills(newFilteredBills);
+
+  }, [allBills, dateRange, loading]);
+
+
+  const formatFirestoreTimestampForDisplay = (timestamp: any): string => {
+    const date = convertFirestoreTimestampToDate(timestamp);
+    if (date && isValid(date)) {
+      return format(date, 'Pp'); // Format like: Sep 15, 2023, 4:30 PM
+    }
+    return 'Invalid Date';
   };
 
   const handleEditBill = async (bill: Bill) => {
@@ -104,11 +150,10 @@ export default function BillsPage() {
       const rawHeaderTitle = process.env.NEXT_PUBLIC_RECEIPT_HEADER_TITLE || "Snackulator";
       const rawFooterMessage = process.env.NEXT_PUBLIC_RECEIPT_FOOTER_MESSAGE || "Thank you for your order!";
       
-      // Corrected regex: replace actual newline characters (\n) with <br>
       const receiptHeaderTitle = rawHeaderTitle.replace(/\n/g, '<br>');
       const receiptFooterMessage = rawFooterMessage.replace(/\n/g, '<br>');
 
-      const formattedDate = formatFirestoreTimestamp(bill.createdAt);
+      const formattedDate = formatFirestoreTimestampForDisplay(bill.createdAt);
       let itemsHtml = '';
       let subtotal = 0;
 
@@ -128,7 +173,7 @@ export default function BillsPage() {
           <head>
             <title>Receipt - ${bill.orderNumber}</title>
             <style>
-              body { font-family: 'Courier New', Courier, monospace; font-size: 10pt; margin: 0; padding: 5mm; width: 280px; /* Approx 58mm paper width */ }
+              body { font-family: 'Courier New', Courier, monospace; font-size: 10pt; margin: 0; padding: 5mm; width: 280px; }
               .receipt-container { width: 100%; }
               .header { text-align: center; margin-bottom: 10px; }
               .header h2 { margin: 0; font-size: 14pt; line-height: 1.2; }
@@ -200,7 +245,6 @@ export default function BillsPage() {
       printWindow.document.close();
       printWindow.focus();
       printWindow.print();
-      // printWindow.close(); // May not work reliably due to browser restrictions
     } else {
       toast({
         variant: "destructive",
@@ -209,7 +253,6 @@ export default function BillsPage() {
       });
     }
   };
-
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-4 md:p-8">
@@ -225,15 +268,67 @@ export default function BillsPage() {
 
       <Card className="w-full max-w-5xl">
         <CardHeader>
-          <CardDescription>View all previously generated bills.</CardDescription>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <CardDescription>
+                    {dateRange?.from && !dateRange.to ? "Showing transactions for " + format(dateRange.from, "LLL dd, yyyy") : 
+                     dateRange?.from && dateRange?.to && format(dateRange.from, "yyyy-MM-dd") === format(dateRange.to, "yyyy-MM-dd") ? "Showing transactions for " + format(dateRange.from, "LLL dd, yyyy") :
+                     dateRange?.from && dateRange?.to ? "Showing transactions from " + format(dateRange.from, "LLL dd, yyyy") + " to " + format(dateRange.to, "LLL dd, yyyy") :
+                     "Showing all transactions."}
+                </CardDescription>
+                <div className="flex gap-2 items-center">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          id="date"
+                          variant={"outline"}
+                          className={cn(
+                            "w-[260px] justify-start text-left font-normal",
+                            !dateRange && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {dateRange?.from ? (
+                            dateRange.to ? (
+                              <>
+                                {format(dateRange.from, "LLL dd, y")} -{" "}
+                                {format(dateRange.to, "LLL dd, y")}
+                              </>
+                            ) : (
+                              format(dateRange.from, "LLL dd, y")
+                            )
+                          ) : (
+                            <span>Pick a date range</span>
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="end">
+                        <Calendar
+                          initialFocus
+                          mode="range"
+                          defaultMonth={dateRange?.from}
+                          selected={dateRange}
+                          onSelect={setDateRange}
+                          numberOfMonths={2}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    {dateRange && (
+                        <Button variant="ghost" size="icon" onClick={() => setDateRange(undefined)} aria-label="Clear date filter">
+                            <XCircle className="h-4 w-4" />
+                        </Button>
+                    )}
+                </div>
+            </div>
         </CardHeader>
         <CardContent>
           {loading ? (
             <p className="text-center text-muted-foreground">Loading bills...</p>
           ) : error ? (
             <p className="text-center text-destructive">{error}</p>
-          ) : bills.length === 0 ? (
-             <p className="text-center text-muted-foreground">No bills recorded yet.</p>
+          ) : filteredBills.length === 0 ? (
+             <p className="text-center text-muted-foreground">
+                {allBills.length === 0 ? "No bills recorded yet." : "No bills found for the selected period."}
+            </p>
           ) : (
             <Table>
                <TableCaption>A list of your recent transactions. Click Edit to modify a bill or Print to get a receipt.</TableCaption>
@@ -251,10 +346,10 @@ export default function BillsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {bills.map((bill) => (
+                {filteredBills.map((bill) => (
                   <TableRow key={bill.id}>
                     <TableCell className="font-medium">{bill.orderNumber}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{formatFirestoreTimestamp(bill.createdAt)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{formatFirestoreTimestampForDisplay(bill.createdAt)}</TableCell>
                     <TableCell>
                         {bill.customerName || '-'} <br />
                         <span className="text-xs text-muted-foreground">{bill.customerPhoneNumber || '-'}</span>
@@ -290,4 +385,3 @@ export default function BillsPage() {
     </div>
   );
 }
-
