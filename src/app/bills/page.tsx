@@ -2,7 +2,7 @@
 // src/app/bills/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { getBills } from "../actions"; // Import the server action
 import type { Bill, BillItem as DbBillItem } from "@/lib/db"; // Import the Bill type
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Edit, Printer, Calendar as CalendarIcon, XCircle } from "lucide-react";
+import { ArrowLeft, Edit, Printer, Calendar as CalendarIcon, XCircle, BarChart3 } from "lucide-react";
 import { format, isValid, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
 import { setSharedOrderInRTDB, SharedOrderItem } from "@/lib/rt_db";
@@ -19,6 +19,17 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import type { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog";
+
 
 // Helper to convert Firestore Timestamp to JS Date
 const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
@@ -45,6 +56,11 @@ const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
   }
 };
 
+interface SummaryItem {
+  name: string;
+  totalQuantity: number;
+  totalRevenue: number;
+}
 
 export default function BillsPage() {
   const [allBills, setAllBills] = useState<Bill[]>([]);
@@ -57,6 +73,7 @@ export default function BillsPage() {
     from: startOfDay(new Date()),
     to: endOfDay(new Date()),
   });
+  const [showSummaryDialog, setShowSummaryDialog] = useState(false);
 
   useEffect(() => {
     const fetchBills = async () => {
@@ -78,25 +95,22 @@ export default function BillsPage() {
   }, []);
 
   useEffect(() => {
-    if (loading) return; // Don't filter while still loading all bills
+    if (loading) return; 
 
     if (!dateRange || !dateRange.from) {
-      // If no date range selected (filter cleared), show all bills
       setFilteredBills(allBills);
       return;
     }
 
     const fromDate = startOfDay(dateRange.from);
-    // If no 'to' date, use the 'from' date to define a single day range
     const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
 
     const newFilteredBills = allBills.filter((bill) => {
       const billCreationDate = convertFirestoreTimestampToDate(bill.createdAt);
       if (!billCreationDate || !isValid(billCreationDate)) {
         console.warn(`Bill ${bill.id} has invalid createdAt:`, bill.createdAt);
-        return false; // Exclude bills with invalid dates
+        return false; 
       }
-      // Ensure fromDate is not after toDate before calling isWithinInterval
       return isWithinInterval(billCreationDate, { 
         start: fromDate <= toDate ? fromDate : toDate, 
         end: fromDate <= toDate ? toDate : fromDate 
@@ -110,7 +124,7 @@ export default function BillsPage() {
   const formatFirestoreTimestampForDisplay = (timestamp: any): string => {
     const date = convertFirestoreTimestampToDate(timestamp);
     if (date && isValid(date)) {
-      return format(date, 'Pp'); // Format like: Sep 15, 2023, 4:30 PM
+      return format(date, 'Pp'); 
     }
     return 'Invalid Date';
   };
@@ -254,6 +268,33 @@ export default function BillsPage() {
     }
   };
 
+  const dailySummaryData = useMemo(() => {
+    if (!filteredBills || filteredBills.length === 0) {
+      return [];
+    }
+    const summaryMap: Record<string, { totalQuantity: number; totalRevenue: number }> = {};
+
+    filteredBills.forEach(bill => {
+      bill.items.forEach(item => {
+        if (summaryMap[item.name]) {
+          summaryMap[item.name].totalQuantity += item.quantity;
+          summaryMap[item.name].totalRevenue += item.price * item.quantity;
+        } else {
+          summaryMap[item.name] = {
+            totalQuantity: item.quantity,
+            totalRevenue: item.price * item.quantity,
+          };
+        }
+      });
+    });
+
+    return Object.entries(summaryMap).map(([name, data]) => ({
+      name,
+      ...data,
+    })).sort((a, b) => b.totalQuantity - a.totalQuantity); 
+  }, [filteredBills]);
+
+
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-4 md:p-8">
        <div className="w-full max-w-5xl mb-4 flex justify-between items-center">
@@ -275,14 +316,14 @@ export default function BillsPage() {
                      dateRange?.from && dateRange?.to ? "Showing transactions from " + format(dateRange.from, "LLL dd, yyyy") + " to " + format(dateRange.to, "LLL dd, yyyy") :
                      "Showing all transactions."}
                 </CardDescription>
-                <div className="flex gap-2 items-center">
+                <div className="flex flex-wrap gap-2 items-center"> {/* Changed to flex-wrap */}
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
                           id="date"
                           variant={"outline"}
                           className={cn(
-                            "w-[260px] justify-start text-left font-normal",
+                            "w-full sm:w-[260px] justify-start text-left font-normal", // Responsive width
                             !dateRange && "text-muted-foreground"
                           )}
                         >
@@ -317,6 +358,56 @@ export default function BillsPage() {
                             <XCircle className="h-4 w-4" />
                         </Button>
                     )}
+                    <Dialog open={showSummaryDialog} onOpenChange={setShowSummaryDialog}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline">
+                          <BarChart3 className="mr-2 h-4 w-4" /> View Summary
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Daily Sales Summary</DialogTitle>
+                          <DialogDescription>
+                            Summary for {
+                            dateRange?.from && !dateRange.to ? `transactions on ${format(dateRange.from, "LLL dd, yyyy")}` :
+                            dateRange?.from && dateRange?.to && format(dateRange.from, "yyyy-MM-dd") === format(dateRange.to, "yyyy-MM-dd") ? `transactions on ${format(dateRange.from, "LLL dd, yyyy")}` :
+                            dateRange?.from && dateRange?.to ? `transactions from ${format(dateRange.from, "LLL dd, yyyy")} to ${format(dateRange.to, "LLL dd, yyyy")}` :
+                            "all recorded transactions."}
+                          </DialogDescription>
+                        </DialogHeader>
+                        {dailySummaryData.length === 0 ? (
+                          <p className="text-muted-foreground text-center py-4">No items sold in this period.</p>
+                        ) : (
+                          <div className="max-h-[60vh] overflow-y-auto pr-2 mt-4">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Item Name</TableHead>
+                                  <TableHead className="text-right">Qty Sold</TableHead>
+                                  <TableHead className="text-right">Total Revenue</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {dailySummaryData.map((item) => (
+                                  <TableRow key={item.name}>
+                                    <TableCell>{item.name}</TableCell>
+                                    <TableCell className="text-right">{item.totalQuantity}</TableCell>
+                                    <TableCell className="text-right">₹{item.totalRevenue.toFixed(2)}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        )}
+                        <DialogFooter className="sm:justify-start mt-4">
+                          <DialogClose asChild>
+                            <Button type="button" variant="secondary">
+                              Close
+                            </Button>
+                          </DialogClose>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
                 </div>
             </div>
         </CardHeader>
@@ -385,3 +476,4 @@ export default function BillsPage() {
     </div>
   );
 }
+
