@@ -58,6 +58,7 @@ const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
 
 interface SummaryItem {
   name: string;
+  itemCode?: string;
   totalQuantity: number;
   totalRevenue: number;
 }
@@ -176,7 +177,7 @@ export default function BillsPage() {
         subtotal += itemTotal;
         itemsHtml += `
           <tr class="item">
-            <td>${item.name} (x${item.quantity})</td>
+            <td>${item.name} (x${item.quantity}) ${item.itemCode ? `[${item.itemCode}]` : ''}</td>
             <td class="text-right">₹${itemTotal.toFixed(2)}</td>
           </tr>
         `;
@@ -272,17 +273,23 @@ export default function BillsPage() {
     if (!filteredBills || filteredBills.length === 0) {
       return [];
     }
-    const summaryMap: Record<string, { totalQuantity: number; totalRevenue: number }> = {};
+    const summaryMap: Record<string, { totalQuantity: number; totalRevenue: number; itemCode?: string }> = {};
 
     filteredBills.forEach(bill => {
-      bill.items.forEach(item => {
+      (bill.items || []).forEach(item => {
         if (summaryMap[item.name]) {
           summaryMap[item.name].totalQuantity += item.quantity;
           summaryMap[item.name].totalRevenue += item.price * item.quantity;
+          // If itemCode is not already set, or if current item has one, set/update it.
+          // This assumes itemCode is consistent for the same item name, or takes the last one encountered.
+          if (item.itemCode && (!summaryMap[item.name].itemCode || summaryMap[item.name].itemCode !== item.itemCode)) {
+             summaryMap[item.name].itemCode = item.itemCode;
+          }
         } else {
           summaryMap[item.name] = {
             totalQuantity: item.quantity,
             totalRevenue: item.price * item.quantity,
+            itemCode: item.itemCode || undefined,
           };
         }
       });
@@ -290,9 +297,95 @@ export default function BillsPage() {
 
     return Object.entries(summaryMap).map(([name, data]) => ({
       name,
-      ...data,
+      itemCode: data.itemCode,
+      totalQuantity: data.totalQuantity,
+      totalRevenue: data.totalRevenue,
     })).sort((a, b) => b.totalQuantity - a.totalQuantity); 
   }, [filteredBills]);
+
+  const handlePrintSummary = () => {
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      const rawHeaderTitle = process.env.NEXT_PUBLIC_RECEIPT_HEADER_TITLE || "Snackulator";
+      const receiptHeaderTitle = rawHeaderTitle.replace(/\n/g, '<br>');
+      const dateRangeString = dateRange?.from && !dateRange.to ? `for ${format(dateRange.from, "LLL dd, yyyy")}` : 
+                              dateRange?.from && dateRange?.to && format(dateRange.from, "yyyy-MM-dd") === format(dateRange.to, "yyyy-MM-dd") ? `for ${format(dateRange.from, "LLL dd, yyyy")}` :
+                              dateRange?.from && dateRange?.to ? `from ${format(dateRange.from, "LLL dd, yyyy")} to ${format(dateRange.to, "LLL dd, yyyy")}` :
+                              "for All Transactions";
+
+      let itemsHtml = '';
+      dailySummaryData.forEach(item => {
+        itemsHtml += `
+          <tr>
+            <td>${item.name}</td>
+            <td>${item.itemCode || '-'}</td>
+            <td class="text-right">${item.totalQuantity}</td>
+            <td class="text-right">₹${item.totalRevenue.toFixed(2)}</td>
+          </tr>
+        `;
+      });
+
+      const overallTotalRevenue = dailySummaryData.reduce((sum, item) => sum + item.totalRevenue, 0);
+
+      const summaryReceiptHtml = `
+        <html>
+          <head>
+            <title>Sales Summary - ${dateRangeString}</title>
+            <style>
+              body { font-family: 'Courier New', Courier, monospace; font-size: 10pt; margin: 0; padding: 5mm; width: 280px; }
+              .receipt-container { width: 100%; }
+              .header { text-align: center; margin-bottom: 10px; }
+              .header h2 { margin: 0; font-size: 14pt; line-height: 1.2; }
+              .info p { margin: 2px 0; font-size: 10pt; text-align: center;}
+              .item-table { width: 100%; border-collapse: collapse; margin-top: 5px; margin-bottom: 5px; }
+              .item-table th, .item-table td { text-align: left; padding: 2px 1px; border-bottom: 1px solid #eee; }
+              .item-table .text-right { text-align: right; }
+              .separator { border-top: 1px dashed #000; margin: 5px 0; }
+              .footer-total { margin-top: 10px; text-align: right; font-weight: bold; font-size: 11pt;}
+            </style>
+          </head>
+          <body>
+            <div class="receipt-container">
+              <div class="header">
+                <h2>${receiptHeaderTitle}</h2>
+              </div>
+              <div class="info">
+                <p>Sales Summary ${dateRangeString}</p>
+              </div>
+              <div class="separator"></div>
+              <table class="item-table">
+                <thead>
+                  <tr>
+                    <th>Item Name</th>
+                    <th>Code</th>
+                    <th class="text-right">Qty</th>
+                    <th class="text-right">Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${itemsHtml}
+                </tbody>
+              </table>
+              <div class="separator"></div>
+              <div class="footer-total">
+                <p>Total Revenue: ₹${overallTotalRevenue.toFixed(2)}</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      `;
+      printWindow.document.write(summaryReceiptHtml);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Print Error",
+        description: "Could not open print window. Please check your pop-up blocker settings.",
+      });
+    }
+  };
 
 
   return (
@@ -316,14 +409,14 @@ export default function BillsPage() {
                      dateRange?.from && dateRange?.to ? "Showing transactions from " + format(dateRange.from, "LLL dd, yyyy") + " to " + format(dateRange.to, "LLL dd, yyyy") :
                      "Showing all transactions."}
                 </CardDescription>
-                <div className="flex flex-wrap gap-2 items-center"> {/* Changed to flex-wrap */}
+                <div className="flex flex-wrap gap-2 items-center"> 
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
                           id="date"
                           variant={"outline"}
                           className={cn(
-                            "w-full sm:w-[260px] justify-start text-left font-normal", // Responsive width
+                            "w-full sm:w-[260px] justify-start text-left font-normal", 
                             !dateRange && "text-muted-foreground"
                           )}
                         >
@@ -383,14 +476,16 @@ export default function BillsPage() {
                               <TableHeader>
                                 <TableRow>
                                   <TableHead>Item Name</TableHead>
+                                  <TableHead>Item Code</TableHead>
                                   <TableHead className="text-right">Qty Sold</TableHead>
                                   <TableHead className="text-right">Total Revenue</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
-                                {dailySummaryData.map((item) => (
-                                  <TableRow key={item.name}>
+                                {dailySummaryData.map((item, index) => (
+                                  <TableRow key={`${item.name}-${index}`}>
                                     <TableCell>{item.name}</TableCell>
+                                    <TableCell>{item.itemCode || '-'}</TableCell>
                                     <TableCell className="text-right">{item.totalQuantity}</TableCell>
                                     <TableCell className="text-right">₹{item.totalRevenue.toFixed(2)}</TableCell>
                                   </TableRow>
@@ -399,7 +494,12 @@ export default function BillsPage() {
                             </Table>
                           </div>
                         )}
-                        <DialogFooter className="sm:justify-start mt-4">
+                        <DialogFooter className="sm:justify-start mt-4 gap-2">
+                           {dailySummaryData.length > 0 && (
+                             <Button variant="outline" onClick={handlePrintSummary}>
+                               <Printer className="mr-2 h-4 w-4" /> Print Summary
+                             </Button>
+                           )}
                           <DialogClose asChild>
                             <Button type="button" variant="secondary">
                               Close
@@ -448,9 +548,9 @@ export default function BillsPage() {
                     <TableCell>{bill.tableNumber || '-'}</TableCell>
                     <TableCell className="min-w-[200px] sm:min-w-[250px] md:min-w-[300px]">
                       <ul className="list-disc list-inside text-sm">
-                        {bill.items.map((item, index) => (
+                        {(bill.items || []).map((item, index) => (
                           <li key={index}>
-                            {item.name} (x{item.quantity}) - ₹{item.price.toFixed(2)}
+                            {item.name} (x{item.quantity}) - ₹{item.price.toFixed(2)} {item.itemCode ? `[${item.itemCode}]`: ''}
                           </li>
                         ))}
                       </ul>

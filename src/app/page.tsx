@@ -35,7 +35,7 @@ import {
 import { setSharedOrderInRTDB, SharedOrderItem, SharedOrderData, subscribeToSharedOrder, SharedOrderDataSnapshot } from "@/lib/rt_db";
 
 
-interface SelectedItem extends Snack { // Renamed from SelectedSnack
+interface SelectedItem extends Snack { 
   quantity: number;
 }
 
@@ -65,8 +65,8 @@ const generateOrderNumber = () => {
 function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [items, setItems] = useState<Snack[]>([]); // Renamed from snacks
-  const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]); // Renamed from selectedSnacks
+  const [items, setItems] = useState<Snack[]>([]); 
+  const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]); 
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [serviceCharge, setServiceCharge] = useState<number>(0);
   const [serviceChargeInput, setServiceChargeInput] = useState<string>("0");
@@ -93,10 +93,10 @@ function HomeContent() {
   const [isUpdatingFromRTDBSync, setIsUpdatingFromRTDBSync] = useState(false);
   const [isLocalDirty, setIsLocalDirty] = useState(false);
 
-  const listRefs = useRef<Record<string, HTMLLIElement | null>>({}); // Renamed from itemRefs
+  const listRefs = useRef<Record<string, HTMLLIElement | null>>({}); 
   const lastInteractedItemIdRef = useRef<string | null>(null);
 
-  const [itemsVisible, setItemsVisible] = useState(true); // Renamed from snacksVisible
+  const [itemsVisible, setItemsVisible] = useState(true); 
 
   const {
     register,
@@ -144,7 +144,7 @@ function HomeContent() {
       setEditingBillId(editFsBillId);
       setActiveSharedOrderNumber(editOrderNum);
       setItemsVisible(true);
-      setIsLocalDirty(false);
+      setIsLocalDirty(false); // Ensure local dirty is false when loading for edit
       console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
     } else if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
@@ -165,10 +165,7 @@ function HomeContent() {
     const legacyItems = params.get('items');
 
     if (legacyOrder && legacyItems && typeof window !== "undefined" && !searchParams.get('editOrder')) {
-        toast({
-            title: "Shared link format updated",
-            description: "Please use new share links for real-time collaboration.",
-        });
+        
         window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, [toast, searchParams]);
@@ -177,15 +174,13 @@ function HomeContent() {
     if (!activeSharedOrderNumber || items.length === 0) {
       return;
     }
-    if (isLocalDirty && orderNumber === activeSharedOrderNumber) {
-        // console.log(`Main page: Local state is dirty for active shared order ${activeSharedOrderNumber}, skipping RTDB sync for now.`);
-        // return;
-    }
-
+    
     console.log(`Main page subscribing to RTDB for order: ${activeSharedOrderNumber}`);
     const unsubscribe = subscribeToSharedOrder(activeSharedOrderNumber, (data: SharedOrderDataSnapshot | null) => {
+      if (isUpdatingFromRTDBSync || isUpdatingRTDBFromMain) return; 
+
       if (data && data.orderNumber === activeSharedOrderNumber) {
-        if (isLocalDirty && orderNumber === activeSharedOrderNumber) {
+         if (isLocalDirty && orderNumber === activeSharedOrderNumber) {
             console.log(`Main page: Received RTDB update for ${activeSharedOrderNumber}, but local is dirty. Ignoring direct state update, but will update if other client changed.`);
             return;
         }
@@ -242,7 +237,7 @@ function HomeContent() {
       console.log(`Main page unsubscribing from RTDB for order: ${activeSharedOrderNumber}`);
       unsubscribe();
     };
-  }, [activeSharedOrderNumber, items, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, selectedItems, serviceCharge, orderNumber]);
+  }, [activeSharedOrderNumber, items, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, selectedItems, serviceCharge, orderNumber, isUpdatingFromRTDBSync, isUpdatingRTDBFromMain]);
 
 
   const calculateTotal = () => {
@@ -312,7 +307,14 @@ function HomeContent() {
     setValue("itemCode", item.itemCode || "");
   };
 
-  const handleFormSubmit = async (formData: FormData) => {
+  const handleFormSubmit = async (data: ItemFormDataType) => {
+    const formData = new FormData();
+    formData.append('name', data.name);
+    formData.append('price', String(data.price));
+    formData.append('category', data.category);
+    if (data.cost) formData.append('cost', String(data.cost));
+    if (data.itemCode) formData.append('itemCode', data.itemCode);
+
     try {
       let result;
       if (editingItemId) {
@@ -370,7 +372,12 @@ function HomeContent() {
           customerPhoneNumber: customerPhoneNumber,
           tableNumber: tableNumber,
           notes: notes,
-          items: selectedItems.map(s => ({ name: s.name, price: Number(s.price), quantity: s.quantity })),
+          items: selectedItems.map(s => ({ 
+            name: s.name, 
+            price: Number(s.price), 
+            quantity: s.quantity,
+            itemCode: s.itemCode || ''
+          })),
           serviceCharge: serviceCharge,
           totalAmount: currentTotal,
       };
@@ -378,10 +385,7 @@ function HomeContent() {
       try {
           const result = await saveBill(billData, editingBillId || undefined);
           if (result.success) {
-              if (!isUpdatingFromRTDBSync) { // Only show toast if not triggered by RTDB sync
-                toast({ title: result.message });
-              }
-
+              
               if (resetFormAfterSave) {
                 setSelectedItems([]);
                 setServiceCharge(0);
@@ -409,6 +413,10 @@ function HomeContent() {
                     setItemsVisible(false);
                 }
               }
+               if (!isUpdatingFromRTDBSync && !isLocalDirty) {
+                  toast({ title: result.message });
+               }
+
 
           } else {
               toast({ variant: "destructive", title: editingBillId ? "Failed to update bill." : "Failed to save bill.", description: result.message });
@@ -479,7 +487,7 @@ function HomeContent() {
       }
   };
 
-  const filteredListedItems = useMemo(() => { // Renamed from filteredItems
+  const filteredListedItems = useMemo(() => { 
       if (!searchTerm) {
           return items;
       }
@@ -539,12 +547,12 @@ function HomeContent() {
     try {
       setActiveSharedOrderNumber(orderNumberToShare);
       await setSharedOrderInRTDB(orderNumberToShare, sharedOrderPayload);
-      setIsLocalDirty(false);
+      // setIsLocalDirty(false); // Do not set local dirty false here, let the RTDB sync handle it or saveBill handle it
       const baseUrl = window.location.origin;
       const fullUrl = `${baseUrl}/orders/${orderNumberToShare}`;
       setShareUrl(fullUrl);
-       if (!isUpdatingFromRTDBSync && !isLocalDirty) { // Only show toast if not triggered by RTDB sync and no local changes pending
-         toast({ title: "Bill ready to share!", description: "Link and QR code updated." });
+       if (!isUpdatingFromRTDBSync && !isLocalDirty) { 
+         // toast({ title: "Bill ready to share!", description: "Link and QR code updated." });
       }
     } catch (error) {
       console.error("Failed to share bill to RTDB:", error);
@@ -599,8 +607,8 @@ function HomeContent() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
-         if (!editingBillId) { // Only reset local dirty if not in active edit mode of a Firestore bill
-          setIsLocalDirty(false);
+         if (!editingBillId) { 
+           // setIsLocalDirty(false); // Only reset if not in active Firestore edit mode
         }
       } catch (error) {
         console.error("Failed to auto-update RTDB from main page:", error);
@@ -673,8 +681,8 @@ function HomeContent() {
                 size="icon"
                 onClick={() => {
                     setShowAdminLoginSection(prev => !prev);
-                    if (!showAdminLoginSection) setItemsVisible(false); // Hide items when opening admin login
-                    else if (!isAdmin) setItemsVisible(true); // Show items if closing admin login & not admin
+                    if (!showAdminLoginSection) setItemsVisible(false); 
+                    else if (!isAdmin) setItemsVisible(true); 
                 }}
                 aria-label="Toggle Admin Login"
             >
@@ -737,13 +745,99 @@ function HomeContent() {
         </div>
       </div>
 
-      {!isAdmin && !showAdminLoginSection && (
+      {!isAdmin && !showAdminLoginSection && !itemsVisible && (
+         <Card className="w-full max-w-md">
+          <CardHeader>
+             <CardTitle className="text-lg">Order {orderNumber}</CardTitle>
+             <CardDescription>{editingBillId ? `Editing Bill (Order: ${orderNumber})` : "Review current order. Click 'Edit Items' to modify."}</CardDescription>
+          </CardHeader>
+           <CardContent className="grid gap-4">
+             {/* Content identical to the main bill summary but without item selection part */}
+            <div>
+              <h3 className="text-sm font-medium mb-2">Selected Items</h3>
+              {selectedItems.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No items selected.</p>
+              ) : (
+                <ul className="space-y-2 max-h-48 overflow-y-auto">
+                  {selectedItems.map((item) => (
+                    <li
+                      key={item.id}
+                      ref={(el) => listRefs.current[item.id] = el}
+                      className="flex items-center justify-between text-sm p-1.5 rounded-md hover:bg-muted/50"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <span>{item.name}</span>
+                        <div className="flex items-center border rounded-md">
+                          <Button variant="ghost" size="icon" className="h-6 w-6" disabled={true /* Items not editable here */}>
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <Badge variant="outline" className="text-xs px-1.5 border-none tabular-nums">{item.quantity}</Badge>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" disabled={true /* Items not editable here */}>
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                      <span className="font-medium tabular-nums">₹{typeof item.price === 'number' ? (item.price * item.quantity).toFixed(2) : 'N/A'}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <Separator />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="customer-name-display" className="text-sm">Customer Name</Label>
+                <Input id="customer-name-display" type="text" value={customerName} readOnly className="pl-8 h-9 text-sm bg-muted/50" />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="customer-phone-display" className="text-sm">Customer Phone</Label>
+                <Input id="customer-phone-display" type="tel" value={customerPhoneNumber} readOnly className="pl-8 h-9 text-sm bg-muted/50" />
+              </div>
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="service-charge-display" className="text-sm">Service Charge (₹)</Label>
+              <Input id="service-charge-display" type="text" value={serviceChargeInput} readOnly className="h-9 text-sm bg-muted/50" />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="table-number-display" className="text-sm">Table Number</Label>
+              <Input id="table-number-display" type="text" value={tableNumber} readOnly className="pl-8 h-9 text-sm bg-muted/50" />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="notes-display" className="text-sm">Notes</Label>
+              <Textarea id="notes-display" value={notes} readOnly className="pl-8 text-sm min-h-[60px] bg-muted/50" />
+            </div>
+            <Separator />
+            <div className="flex flex-col items-center justify-between gap-3">
+              <div className="flex justify-between w-full items-center">
+                <span className="text-base font-semibold">Total:</span>
+                <Badge variant="secondary" className="text-base font-semibold tabular-nums">₹{total.toFixed(2)}</Badge>
+              </div>
+              {(total > 0 || selectedItems.length > 0 || editingBillId || !itemsVisible) && (
+                <div className="flex flex-col items-center gap-3 w-full">
+                  <QRCodeCanvas value={upiLink} size={128} level="H" data-ai-hint="payment qr" />
+                  <div className="flex w-full gap-2">
+                    <Button variant="default" onClick={handlePrimaryActionClick} disabled={primaryButtonDisabled} className="flex-1">
+                      <PrimaryButtonIcon className="mr-2 h-4 w-4" /> {primaryButtonText}
+                    </Button>
+                    <Button variant="outline" onClick={() => handleSaveBill(true)} disabled={isSavingBill} className="flex-1">
+                       <PlusCircle className="mr-2 h-4 w-4" /> New Order
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!isAdmin && !showAdminLoginSection && itemsVisible && (
         <Card className="w-full max-w-md">
           <CardHeader>
-            <CardDescription>{editingBillId ? `Editing Bill (Order: ${orderNumber})` : "Select items, add customer details, and calculate the total."}</CardDescription>
+             <CardTitle className="text-lg">Order {orderNumber}</CardTitle>
+             <CardDescription>{editingBillId ? `Editing Bill (Order: ${orderNumber})` : "Select items, add customer details, and calculate the total."}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
-            {itemsVisible && (
+            
               <>
                 <div className="relative">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -788,7 +882,7 @@ function HomeContent() {
                 </div>
                 <Separator />
               </>
-            )}
+            
             <div>
               <h3 className="text-sm font-medium mb-2">Selected Items</h3>
               {selectedItems.length === 0 ? (
@@ -930,11 +1024,7 @@ function HomeContent() {
                            <PrimaryButtonIcon className="mr-2 h-4 w-4" /> {primaryButtonText}
                         </Button>
                         <Button variant="outline" onClick={() => handleSaveBill(true)} disabled={isSavingBill} className="flex-1">
-                           {isSavingBill && !editingBillId && !itemsVisible ? 'Saving...' : (isSavingBill && editingBillId && !itemsVisible ? 'Updating...' : (
-                            <>
-                              <PlusCircle className="mr-2 h-4 w-4" /> New Order
-                            </>
-                           ))}
+                           <PlusCircle className="mr-2 h-4 w-4" /> New Order
                         </Button>
                        </div>
                   </div>
@@ -953,7 +1043,7 @@ function HomeContent() {
               <CardDescription>Add a new item to the listing or update an existing one.</CardDescription>
             </CardHeader>
             <CardContent>
-              <form action={handleFormSubmit} className="grid gap-4">
+              <form onSubmit={handleSubmit(handleFormSubmit)} className="grid gap-4">
                 <div className="grid gap-2">
                   <Label htmlFor="name">Name</Label>
                   <Input id="name" type="text" placeholder="Item Name" {...register("name")} required/>
@@ -1004,7 +1094,7 @@ function HomeContent() {
               <ul className="mt-2 space-y-2 max-h-60 overflow-y-auto">
                 {items.map((item) => {
                    const price = typeof item.price === 'number' ? item.price.toFixed(2) : (typeof item.price === 'string' ? parseFloat(item.price).toFixed(2) : 'N/A');
-                   const cost = item.cost !== undefined && typeof item.cost === 'number' ? item.cost.toFixed(2) : 'N/A';
+                   const cost = item.cost !== undefined && typeof item.cost === 'number' ? item.cost.toFixed(2) : (item.cost === undefined ? 'N/A' : String(item.cost));
                    return (
                     <li key={item.id} className="flex items-center justify-between p-2 border rounded-md hover:bg-muted/30">
                       <div className="flex flex-col text-sm">
@@ -1038,7 +1128,7 @@ function HomeContent() {
           </Card>
            <Button variant="outline" className="mt-4" onClick={() => {
                setIsAdmin(false);
-               setItemsVisible(true); // Ensure items section is visible when logging out
+               setItemsVisible(true); 
            }}>Logout Admin</Button>
         </>
       ) }
@@ -1063,7 +1153,7 @@ function HomeContent() {
             <Button className="mt-4 w-full" onClick={handleAdminLogin}>Login</Button>
             <Button variant="ghost" className="mt-2 w-full" onClick={() => {
                 setShowAdminLoginSection(false);
-                setItemsVisible(true); // Ensure items section is visible when cancelling admin login
+                setItemsVisible(true); 
             }}>Cancel</Button>
           </CardContent>
         </Card>

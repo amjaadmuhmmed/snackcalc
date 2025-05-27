@@ -103,7 +103,7 @@ export interface BillItem {
     name: string;
     price: number; // Selling price
     quantity: number;
-    // Cost and itemCode are generally not part of the individual bill item for customer display
+    itemCode?: string; // Optional item code
 }
 
 export interface Bill {
@@ -166,6 +166,14 @@ export async function getBillsFromDb(): Promise<Bill[]> {
       const billSnapshot = await getDocs(billsQuery);
       return billSnapshot.docs.map(docSnap => {
         const data = docSnap.data();
+        // Ensure items array exists and each item has an itemCode (even if empty)
+        const itemsWithCode = (data.items || []).map((item: any) => ({
+          name: item.name || 'Unknown Item',
+          price: Number(item.price) || 0,
+          quantity: Number(item.quantity) || 0,
+          itemCode: item.itemCode || '', 
+        }));
+
         return {
           id: docSnap.id,
           orderNumber: data.orderNumber,
@@ -173,7 +181,7 @@ export async function getBillsFromDb(): Promise<Bill[]> {
           customerPhoneNumber: data.customerPhoneNumber || '',
           tableNumber: data.tableNumber || '',
           notes: data.notes || '',
-          items: data.items,
+          items: itemsWithCode,
           serviceCharge: data.serviceCharge,
           totalAmount: data.totalAmount,
           createdAt: data.createdAt,
