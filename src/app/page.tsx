@@ -35,23 +35,28 @@ import {
 import { setSharedOrderInRTDB, SharedOrderItem, SharedOrderData, subscribeToSharedOrder, SharedOrderDataSnapshot } from "@/lib/rt_db";
 
 
-interface SelectedSnack extends Snack {
+interface SelectedItem extends Snack { // Renamed from SelectedSnack
   quantity: number;
 }
 
-const itemSchema = z.object({ // Renamed from snackSchema
+const itemSchema = z.object({
   name: z.string().min(3, {
     message: "Name must be at least 3 characters.",
   }),
   price: z.string().refine((value) => !isNaN(parseFloat(value)) && parseFloat(value) > 0, {
-    message: "Price must be a positive number.",
+    message: "Selling price must be a positive number.",
   }),
   category: z.string().min(3, {
     message: "Category must be at least 3 characters.",
   }),
+  cost: z.string().optional().refine(
+    (value) => value === undefined || value.trim() === "" || (!isNaN(parseFloat(value)) && parseFloat(value) >= 0), {
+    message: "Cost must be a non-negative number if provided.",
+  }),
+  itemCode: z.string().optional(),
 });
 
-type ItemFormDataType = z.infer<typeof itemSchema>; // Renamed from SnackFormDataType
+type ItemFormDataType = z.infer<typeof itemSchema>;
 
 const generateOrderNumber = () => {
     return `ORD-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
@@ -60,9 +65,9 @@ const generateOrderNumber = () => {
 function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [snacks, setSnacks] = useState<Snack[]>([]); // Internal data structure name remains Snack
-  const [selectedSnacks, setSelectedSnacks] = useState<SelectedSnack[]>([]);
-  const [editingItemId, setEditingItemId] = useState<string | null>(null); // Renamed from editingSnackId
+  const [items, setItems] = useState<Snack[]>([]); // Renamed from snacks
+  const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]); // Renamed from selectedSnacks
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [serviceCharge, setServiceCharge] = useState<number>(0);
   const [serviceChargeInput, setServiceChargeInput] = useState<string>("0");
   const [orderNumber, setOrderNumber] = useState<string>('');
@@ -75,7 +80,7 @@ function HomeContent() {
   const [showAdminLoginSection, setShowAdminLoginSection] = useState(false);
   const [password, setPassword] = useState("");
   const [isSavingBill, setIsSavingBill] = useState(false);
-  const [isLoadingItems, setIsLoadingItems] = useState(true); // Renamed from isLoadingSnacks
+  const [isLoadingItems, setIsLoadingItems] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
@@ -88,12 +93,10 @@ function HomeContent() {
   const [isUpdatingFromRTDBSync, setIsUpdatingFromRTDBSync] = useState(false);
   const [isLocalDirty, setIsLocalDirty] = useState(false);
 
-  const itemRefs = useRef<Record<string, HTMLLIElement | null>>({});
-  const lastInteractedItemIdRef = useRef<string | null>(null); // Renamed from lastInteractedSnackIdRef
-  const prevShowShareDialogRef = useRef<boolean | undefined>();
+  const listRefs = useRef<Record<string, HTMLLIElement | null>>({}); // Renamed from itemRefs
+  const lastInteractedItemIdRef = useRef<string | null>(null);
 
-  const [snacksVisible, setSnacksVisible] = useState(true);
-
+  const [itemsVisible, setItemsVisible] = useState(true); // Renamed from snacksVisible
 
   const {
     register,
@@ -101,35 +104,37 @@ function HomeContent() {
     setValue,
     formState: { errors },
     reset
-  } = useForm<ItemFormDataType>({ // Changed to ItemFormDataType
-    resolver: zodResolver(itemSchema), // Changed to itemSchema
+  } = useForm<ItemFormDataType>({
+    resolver: zodResolver(itemSchema),
     defaultValues: {
       name: "",
       price: "",
       category: "",
+      cost: "",
+      itemCode: "",
     }
   });
 
-  const loadItems = useCallback(async () => { // Renamed from loadSnacks
-    setIsLoadingItems(true); // Renamed
+  const loadItems = useCallback(async () => {
+    setIsLoadingItems(true);
     try {
-      const itemsFromDb = await getSnacks(); // Server action name remains getSnacks
-      setSnacks(itemsFromDb || []);
+      const itemsFromDb = await getSnacks();
+      setItems(itemsFromDb || []);
     } catch (error: any) {
-      console.error("Failed to load items:", error); // Changed message
+      console.error("Failed to load items:", error);
       toast({
         variant: "destructive",
-        title: "Failed to load items.", // Changed message
+        title: "Failed to load items.",
         description: error.message || "Please check your connection and configuration.",
       });
-      setSnacks([]);
+      setItems([]);
     } finally {
-        setIsLoadingItems(false); // Renamed
+        setIsLoadingItems(false);
     }
   }, [toast]);
 
   useEffect(() => {
-    loadItems(); // Renamed
+    loadItems();
 
     const editOrderNum = searchParams.get('editOrder');
     const editFsBillId = searchParams.get('editBillId');
@@ -138,15 +143,14 @@ function HomeContent() {
       setOrderNumber(editOrderNum);
       setEditingBillId(editFsBillId);
       setActiveSharedOrderNumber(editOrderNum);
-      setSnacksVisible(true); 
-      setIsLocalDirty(false); 
+      setItemsVisible(true);
+      setIsLocalDirty(false);
       console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
     } else if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
-      setSnacksVisible(true);
+      setItemsVisible(true);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadItems, searchParams]); // Changed dependency
+  }, [loadItems, searchParams, orderNumber]);
 
 
   useEffect(() => {
@@ -170,40 +174,42 @@ function HomeContent() {
   }, [toast, searchParams]);
 
   useEffect(() => {
-    if (!activeSharedOrderNumber || snacks.length === 0) {
+    if (!activeSharedOrderNumber || items.length === 0) {
       return;
     }
-    if (isLocalDirty && orderNumber === activeSharedOrderNumber) { 
-        console.log(`Main page: Local state is dirty for active shared order ${activeSharedOrderNumber}, skipping RTDB sync for now.`);
-        // return; 
+    if (isLocalDirty && orderNumber === activeSharedOrderNumber) {
+        // console.log(`Main page: Local state is dirty for active shared order ${activeSharedOrderNumber}, skipping RTDB sync for now.`);
+        // return;
     }
 
     console.log(`Main page subscribing to RTDB for order: ${activeSharedOrderNumber}`);
     const unsubscribe = subscribeToSharedOrder(activeSharedOrderNumber, (data: SharedOrderDataSnapshot | null) => {
       if (data && data.orderNumber === activeSharedOrderNumber) {
-        if (isLocalDirty && orderNumber === activeSharedOrderNumber) { 
+        if (isLocalDirty && orderNumber === activeSharedOrderNumber) {
             console.log(`Main page: Received RTDB update for ${activeSharedOrderNumber}, but local is dirty. Ignoring direct state update, but will update if other client changed.`);
-            return; 
+            return;
         }
         console.log(`Main page received RTDB update for ${activeSharedOrderNumber}:`, data);
         setIsUpdatingFromRTDBSync(true);
 
-        const newSelectedItems = (data.items || []).map(item => { // Renamed
-          const baseItem = snacks.find(s => s.id === item.id || s.name === item.name); // Renamed
+        const newSelected = (data.items || []).map(item => {
+          const baseItem = items.find(s => s.id === item.id || s.name === item.name);
           return {
-            id: baseItem?.id || item.id, // Renamed
+            id: baseItem?.id || item.id,
             name: item.name,
             price: Number(item.price),
             quantity: item.quantity,
-            category: baseItem?.category || 'Unknown', // Renamed
+            category: baseItem?.category || 'Unknown',
+            cost: baseItem?.cost,
+            itemCode: baseItem?.itemCode,
           };
         });
-        
-        const currentSimpleSelected = selectedSnacks.map(s => ({id: s.id, quantity: s.quantity, price: s.price, name: s.name}));
-        const newSimpleSelected = newSelectedItems.map(s => ({id: s.id, quantity: s.quantity, price: s.price, name: s.name})); // Renamed
+
+        const currentSimpleSelected = selectedItems.map(s => ({id: s.id, quantity: s.quantity, price: s.price, name: s.name}));
+        const newSimpleSelected = newSelected.map(s => ({id: s.id, quantity: s.quantity, price: s.price, name: s.name}));
 
         if (JSON.stringify(currentSimpleSelected) !== JSON.stringify(newSimpleSelected)) {
-            setSelectedSnacks(newSelectedItems); // Renamed
+            setSelectedItems(newSelected);
         }
 
         const newServiceCharge = Number(data.serviceCharge) || 0;
@@ -222,7 +228,7 @@ function HomeContent() {
         if (String(data.notes || "") !== notes) {
           setNotes(String(data.notes || ""));
         }
-        
+
         requestAnimationFrame(() => {
             setIsUpdatingFromRTDBSync(false);
         });
@@ -236,102 +242,104 @@ function HomeContent() {
       console.log(`Main page unsubscribing from RTDB for order: ${activeSharedOrderNumber}`);
       unsubscribe();
     };
-  }, [activeSharedOrderNumber, snacks, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, selectedSnacks, serviceCharge, orderNumber]);
+  }, [activeSharedOrderNumber, items, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, selectedItems, serviceCharge, orderNumber]);
 
 
   const calculateTotal = () => {
-    const itemsTotal = selectedSnacks.reduce((total, item) => total + Number(item.price) * item.quantity, 0); // Renamed
+    const itemsTotal = selectedItems.reduce((total, item) => total + Number(item.price) * item.quantity, 0);
     return itemsTotal + serviceCharge;
   };
 
-  const handleItemIncrement = (item: Snack) => { // Renamed parameter for clarity, type is still Snack from DB
+  const handleItemIncrement = (item: Snack) => {
     setIsLocalDirty(true);
     lastInteractedItemIdRef.current = item.id;
-    setSelectedSnacks((prevSelected) => {
-      const existingItemIndex = prevSelected.findIndex((s) => s.id === item.id); // Renamed
+    setSelectedItems((prevSelected) => {
+      const existingItemIndex = prevSelected.findIndex((s) => s.id === item.id);
       if (existingItemIndex > -1) {
-        const updatedItem = { ...prevSelected[existingItemIndex], quantity: prevSelected[existingItemIndex].quantity + 1 }; // Renamed
+        const updated = { ...prevSelected[existingItemIndex], quantity: prevSelected[existingItemIndex].quantity + 1 };
         const newSelected = [...prevSelected];
-        newSelected.splice(existingItemIndex, 1); 
-        return [updatedItem, ...newSelected]; 
+        newSelected.splice(existingItemIndex, 1);
+        return [updated, ...newSelected];
       } else {
-        const newItemData = { ...item, price: Number(item.price), quantity: 1 }; // Renamed
-        return [newItemData, ...prevSelected]; 
+        const newItemData: SelectedItem = { ...item, price: Number(item.price), quantity: 1 };
+        return [newItemData, ...prevSelected];
       }
     });
     setSearchTerm("");
   };
 
-  const handleItemDecrement = (item: SelectedSnack) => { // Renamed parameter
+  const handleItemDecrement = (item: SelectedItem) => {
     setIsLocalDirty(true);
     lastInteractedItemIdRef.current = item.id;
-    setSelectedSnacks((prevSelected) => {
-      const currentItemIndex = prevSelected.findIndex((s) => s.id === item.id); // Renamed
+    setSelectedItems((prevSelected) => {
+      const currentItemIndex = prevSelected.findIndex((s) => s.id === item.id);
       if (currentItemIndex === -1) return prevSelected;
 
-      const currentItem = prevSelected[currentItemIndex]; // Renamed
+      const current = prevSelected[currentItemIndex];
       let newSelected = [...prevSelected];
-      newSelected.splice(currentItemIndex, 1); 
+      newSelected.splice(currentItemIndex, 1);
 
-      if (currentItem.quantity === 1) {
+      if (current.quantity === 1) {
         return newSelected;
       } else {
-        const updatedItem = { ...currentItem, quantity: currentItem.quantity - 1 }; // Renamed
-        return [updatedItem, ...newSelected]; 
+        const updated = { ...current, quantity: current.quantity - 1 };
+        return [updated, ...newSelected];
       }
     });
   };
 
-  const getItemQuantity = (itemId: string) => { // Renamed parameter
-    const selected = selectedSnacks.find((s) => s.id === itemId);
+  const getItemQuantity = (itemId: string) => {
+    const selected = selectedItems.find((s) => s.id === itemId);
     return selected ? selected.quantity : 0;
   };
 
   useEffect(() => {
-    if (lastInteractedItemIdRef.current && itemRefs.current[lastInteractedItemIdRef.current]) {
-      itemRefs.current[lastInteractedItemIdRef.current]?.scrollIntoView({
+    if (lastInteractedItemIdRef.current && listRefs.current[lastInteractedItemIdRef.current]) {
+      listRefs.current[lastInteractedItemIdRef.current]?.scrollIntoView({
         behavior: 'smooth',
         block: 'nearest',
       });
     }
-  }, [selectedSnacks]);
+  }, [selectedItems]);
 
 
-  const handleEditItem = (item: Snack) => { // Renamed parameter
-    setEditingItemId(item.id); // Renamed
+  const handleEditItem = (item: Snack) => {
+    setEditingItemId(item.id);
     setValue("name", item.name);
     setValue("price", item.price.toString());
     setValue("category", item.category);
+    setValue("cost", item.cost?.toString() || "");
+    setValue("itemCode", item.itemCode || "");
   };
 
   const handleFormSubmit = async (formData: FormData) => {
     try {
       let result;
-      if (editingItemId) { // Renamed
-        result = await updateSnack(editingItemId, formData); // Server action name remains updateSnack
-        setEditingItemId(null); // Renamed
+      if (editingItemId) {
+        result = await updateSnack(editingItemId, formData);
+        setEditingItemId(null);
       } else {
-        result = await addSnack(formData); // Server action name remains addSnack
+        result = await addSnack(formData);
       }
 
       if (result?.success) {
         toast({
           title: result.message,
         });
-        await loadItems(); // Renamed
+        await loadItems();
         reset();
       } else {
         toast({
           variant: "destructive",
           title: "Uh oh! Something went wrong.",
-          description: result?.message || "There was a problem saving the item.", // Changed message
+          description: result?.message || "There was a problem saving the item.",
         });
       }
     } catch (e: any) {
       toast({
         variant: "destructive",
         title: "Uh oh! Something went wrong.",
-        description: e.message || "There was a problem saving the item.", // Changed message
+        description: e.message || "There was a problem saving the item.",
       });
     }
   };
@@ -349,7 +357,7 @@ function HomeContent() {
         return;
       }
 
-      if (!editingBillId && currentTotal <= 0 && selectedSnacks.length === 0 && !resetFormAfterSave) {
+      if (!editingBillId && currentTotal <= 0 && selectedItems.length === 0 && !resetFormAfterSave) {
         toast({ variant: "default", title: "Cannot save an empty bill." });
         return;
       }
@@ -362,7 +370,7 @@ function HomeContent() {
           customerPhoneNumber: customerPhoneNumber,
           tableNumber: tableNumber,
           notes: notes,
-          items: selectedSnacks.map(s => ({ name: s.name, price: Number(s.price), quantity: s.quantity })),
+          items: selectedItems.map(s => ({ name: s.name, price: Number(s.price), quantity: s.quantity })),
           serviceCharge: serviceCharge,
           totalAmount: currentTotal,
       };
@@ -370,10 +378,12 @@ function HomeContent() {
       try {
           const result = await saveBill(billData, editingBillId || undefined);
           if (result.success) {
-              toast({ title: result.message });
+              if (!isUpdatingFromRTDBSync) { // Only show toast if not triggered by RTDB sync
+                toast({ title: result.message });
+              }
 
               if (resetFormAfterSave) {
-                setSelectedSnacks([]);
+                setSelectedItems([]);
                 setServiceCharge(0);
                 setCustomerName("");
                 setCustomerPhoneNumber("");
@@ -385,7 +395,7 @@ function HomeContent() {
                 setEditingBillId(null);
                 setShareUrl("");
                 setIsLocalDirty(false);
-                setSnacksVisible(true);
+                setItemsVisible(true);
 
                 if (searchParams.get('editOrder') || searchParams.get('editBillId')) {
                   router.replace('/', undefined);
@@ -394,9 +404,9 @@ function HomeContent() {
                 if (!editingBillId && result.billId) {
                   setEditingBillId(result.billId);
                 }
-                setIsLocalDirty(false); 
-                if (snacksVisible) { 
-                    setSnacksVisible(false);
+                setIsLocalDirty(false);
+                if (itemsVisible) {
+                    setItemsVisible(false);
                 }
               }
 
@@ -469,27 +479,27 @@ function HomeContent() {
       }
   };
 
-  const filteredItems = useMemo(() => { // Renamed from filteredSnacks
+  const filteredListedItems = useMemo(() => { // Renamed from filteredItems
       if (!searchTerm) {
-          return snacks;
+          return items;
       }
-      return snacks.filter(item => // Renamed
+      return items.filter(item =>
           item.name.toLowerCase().includes(searchTerm.toLowerCase())
       );
-  }, [snacks, searchTerm]);
+  }, [items, searchTerm]);
 
   const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
       event.preventDefault();
-      if (filteredItems.length === 1) { // Renamed
-        handleItemIncrement(filteredItems[0]); // Renamed
-      } else if (filteredItems.length === 0 && searchTerm) { // Renamed
+      if (filteredListedItems.length === 1) {
+        handleItemIncrement(filteredListedItems[0]);
+      } else if (filteredListedItems.length === 0 && searchTerm) {
          toast({
              variant: "default",
-             title: "No items found.", // Changed message
-             description: `No items match "${searchTerm}". Try a different term.`, // Changed message
+             title: "No items found.",
+             description: `No items match "${searchTerm}". Try a different term.`,
          });
-      } else if (filteredItems.length > 1) { // Renamed
+      } else if (filteredListedItems.length > 1) {
         toast({
             title: "Multiple matches",
             description: "Please refine your search or select from the list.",
@@ -502,7 +512,7 @@ function HomeContent() {
     if (typeof window === "undefined") {
         setShareUrl("");
         setIsGeneratingShareUrl(false);
-        if (!editingBillId) { 
+        if (!editingBillId) {
             setActiveSharedOrderNumber(null);
         }
         return;
@@ -510,7 +520,7 @@ function HomeContent() {
     setIsGeneratingShareUrl(true);
     setShareUrl("");
 
-    const itemsToShare: SharedOrderItem[] = selectedSnacks.map(s => ({
+    const itemsToShare: SharedOrderItem[] = selectedItems.map(s => ({
       id: s.id,
       name: s.name,
       price: Number(s.price),
@@ -527,27 +537,28 @@ function HomeContent() {
     };
 
     try {
-      setActiveSharedOrderNumber(orderNumberToShare); 
+      setActiveSharedOrderNumber(orderNumberToShare);
       await setSharedOrderInRTDB(orderNumberToShare, sharedOrderPayload);
-      setIsLocalDirty(false); 
+      setIsLocalDirty(false);
       const baseUrl = window.location.origin;
       const fullUrl = `${baseUrl}/orders/${orderNumberToShare}`;
       setShareUrl(fullUrl);
-      if (!isUpdatingFromRTDBSync) { 
+       if (!isUpdatingFromRTDBSync && !isLocalDirty) { // Only show toast if not triggered by RTDB sync and no local changes pending
          toast({ title: "Bill ready to share!", description: "Link and QR code updated." });
       }
     } catch (error) {
       console.error("Failed to share bill to RTDB:", error);
       toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
       setShareUrl("");
-      if (!editingBillId) { 
+      if (!editingBillId) {
          setActiveSharedOrderNumber(null);
       }
     } finally {
       setIsGeneratingShareUrl(false);
     }
-  }, [selectedSnacks, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, toast, editingBillId, isUpdatingFromRTDBSync]);
+  }, [selectedItems, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, toast, editingBillId, isUpdatingFromRTDBSync, isLocalDirty]);
 
+  const prevShowShareDialogRef = useRef<boolean | undefined>();
   useEffect(() => {
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
       handleShareBill(orderNumber);
@@ -557,7 +568,7 @@ function HomeContent() {
 
 
   useEffect(() => {
-    if (isUpdatingFromRTDBSync || !activeSharedOrderNumber || orderNumber !== activeSharedOrderNumber || isLoadingItems || isUpdatingRTDBFromMain || !isLocalDirty) { // Renamed isLoadingSnacks
+    if (isUpdatingFromRTDBSync || !activeSharedOrderNumber || orderNumber !== activeSharedOrderNumber || isLoadingItems || isUpdatingRTDBFromMain || !isLocalDirty) {
       return;
     }
 
@@ -570,7 +581,7 @@ function HomeContent() {
 
       console.log(`Main page pushing update to RTDB for ${activeSharedOrderNumber} (local is dirty)`);
       setIsUpdatingRTDBFromMain(true);
-      const itemsToShare: SharedOrderItem[] = selectedSnacks.map(s => ({
+      const itemsToShare: SharedOrderItem[] = selectedItems.map(s => ({
         id: s.id,
         name: s.name,
         price: Number(s.price),
@@ -588,7 +599,7 @@ function HomeContent() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
-        if (!editingBillId) { 
+         if (!editingBillId) { // Only reset local dirty if not in active edit mode of a Firestore bill
           setIsLocalDirty(false);
         }
       } catch (error) {
@@ -604,7 +615,7 @@ function HomeContent() {
       if (timer) clearTimeout(timer);
     };
   }, [
-    selectedSnacks,
+    selectedItems,
     serviceCharge,
     customerName,
     customerPhoneNumber,
@@ -612,11 +623,11 @@ function HomeContent() {
     notes,
     orderNumber,
     activeSharedOrderNumber,
-    isLoadingItems, // Renamed
+    isLoadingItems,
     isUpdatingRTDBFromMain,
     isUpdatingFromRTDBSync,
     isLocalDirty,
-    editingBillId 
+    editingBillId
   ]);
 
   const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -640,16 +651,16 @@ function HomeContent() {
   };
 
   const handlePrimaryActionClick = () => {
-    if (!snacksVisible) {
-      setSnacksVisible(true);
+    if (!itemsVisible) {
+      setItemsVisible(true);
     } else {
       handleSaveBill(false);
     }
   };
 
-  const primaryButtonText = !snacksVisible ? "Edit Items" : (editingBillId ? "Update Bill" : "Save Bill");
-  const PrimaryButtonIcon = !snacksVisible ? Edit : Save;
-  const primaryButtonDisabled = isSavingBill || (!snacksVisible && false) || (snacksVisible && editingBillId && !isLocalDirty);
+  const primaryButtonText = !itemsVisible ? "Edit Items" : (editingBillId ? "Update Bill" : "Save Bill");
+  const PrimaryButtonIcon = !itemsVisible ? Edit : Save;
+  const primaryButtonDisabled = isSavingBill;
 
 
   return (
@@ -660,7 +671,11 @@ function HomeContent() {
             <Button
                 variant="outline"
                 size="icon"
-                onClick={() => setShowAdminLoginSection(prev => !prev)}
+                onClick={() => {
+                    setShowAdminLoginSection(prev => !prev);
+                    if (!showAdminLoginSection) setItemsVisible(false); // Hide items when opening admin login
+                    else if (!isAdmin) setItemsVisible(true); // Show items if closing admin login & not admin
+                }}
                 aria-label="Toggle Admin Login"
             >
                 <UserCog className="h-4 w-4" />
@@ -728,43 +743,43 @@ function HomeContent() {
             <CardDescription>{editingBillId ? `Editing Bill (Order: ${orderNumber})` : "Select items, add customer details, and calculate the total."}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
-            {snacksVisible && (
+            {itemsVisible && (
               <>
                 <div className="relative">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
-                    id="search-items" // Renamed id
+                    id="search-items"
                     type="search"
-                    placeholder="Search items..." // Changed placeholder
+                    placeholder="Search items..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     onKeyDown={handleSearchKeyDown}
                     className="pl-8 w-full h-9"
-                    aria-label="Search items" // Changed aria-label
+                    aria-label="Search items"
                   />
                 </div>
 
                 <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1 rounded-md border bg-muted/20">
-                  {isLoadingItems ? ( // Renamed
-                      <p className="text-sm text-muted-foreground w-full text-center py-2">Loading items...</p> // Changed message
-                  ) : filteredItems.length === 0 && snacks.length > 0 && searchTerm ? ( // Renamed
-                        <p className="text-sm text-muted-foreground w-full text-center py-2">No items match your search.</p> // Changed message
-                  ): filteredItems.length === 0 && snacks.length === 0 ? ( // Renamed
-                      <p className="text-sm text-muted-foreground w-full text-center py-2">No items available. Add items below (Admin).</p> // Changed message
+                  {isLoadingItems ? (
+                      <p className="text-sm text-muted-foreground w-full text-center py-2">Loading items...</p>
+                  ) : filteredListedItems.length === 0 && items.length > 0 && searchTerm ? (
+                        <p className="text-sm text-muted-foreground w-full text-center py-2">No items match your search.</p>
+                  ): filteredListedItems.length === 0 && items.length === 0 ? (
+                      <p className="text-sm text-muted-foreground w-full text-center py-2">No items available. Add items below (Admin).</p>
                   ) : (
-                      filteredItems.map((item) => ( // Renamed
+                      filteredListedItems.map((item) => (
                         <div key={item.id} className="flex items-center space-x-1">
                           <Button
                             variant="outline"
                             size="sm"
                             className="rounded-full px-3 py-1 h-auto text-xs"
-                            onClick={() => handleItemIncrement(item)} // Renamed
+                            onClick={() => handleItemIncrement(item)}
                           >
                             {item.name} (₹{Number(item.price).toFixed(2)})
                           </Button>
-                          {getItemQuantity(item.id) > 0 && ( // Renamed
+                          {getItemQuantity(item.id) > 0 && (
                             <Badge variant="secondary" className="text-xs px-1.5 py-0.5">
-                              {getItemQuantity(item.id)} 
+                              {getItemQuantity(item.id)}
                             </Badge>
                           )}
                         </div>
@@ -775,15 +790,15 @@ function HomeContent() {
               </>
             )}
             <div>
-              <h3 className="text-sm font-medium mb-2">Selected Items</h3> 
-              {selectedSnacks.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No items selected.</p> 
+              <h3 className="text-sm font-medium mb-2">Selected Items</h3>
+              {selectedItems.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No items selected.</p>
               ) : (
                 <ul className="space-y-2 max-h-48 overflow-y-auto">
-                  {selectedSnacks.map((item) => ( // Renamed
+                  {selectedItems.map((item) => (
                     <li
                       key={item.id}
-                      ref={(el) => itemRefs.current[item.id] = el}
+                      ref={(el) => listRefs.current[item.id] = el}
                       className="flex items-center justify-between text-sm p-1.5 rounded-md hover:bg-muted/50"
                     >
                       <div className="flex items-center space-x-2">
@@ -793,8 +808,8 @@ function HomeContent() {
                             variant="ghost"
                             size="icon"
                             className="h-6 w-6"
-                            onClick={() => handleItemDecrement(item)} // Renamed
-                            disabled={item.quantity <= 0 || !snacksVisible}
+                            onClick={() => handleItemDecrement(item)}
+                            disabled={item.quantity <= 0 || !itemsVisible}
                             aria-label={`Decrease quantity of ${item.name}`}
                           >
                             <Minus className="h-3 w-3" />
@@ -807,10 +822,10 @@ function HomeContent() {
                             size="icon"
                              className="h-6 w-6"
                             onClick={() => {
-                              const originalItem = snacks.find(s => s.id === item.id); // Renamed
-                              if (originalItem) handleItemIncrement(originalItem); // Renamed
+                              const originalItem = items.find(s => s.id === item.id);
+                              if (originalItem) handleItemIncrement(originalItem);
                             }}
-                             disabled={!snacksVisible}
+                             disabled={!itemsVisible}
                              aria-label={`Increase quantity of ${item.name}`}
                           >
                             <Plus className="h-3 w-3" />
@@ -907,7 +922,7 @@ function HomeContent() {
                    <Badge variant="secondary" className="text-base font-semibold tabular-nums">₹{total.toFixed(2)}</Badge>
                </div>
 
-              {(total > 0 || selectedSnacks.length > 0 || editingBillId || !snacksVisible) && (
+              {(total > 0 || selectedItems.length > 0 || editingBillId || !itemsVisible) && (
                   <div className="flex flex-col items-center gap-3 w-full">
                       <QRCodeCanvas value={upiLink} size={128} level="H" data-ai-hint="payment qr" />
                        <div className="flex w-full gap-2">
@@ -915,7 +930,7 @@ function HomeContent() {
                            <PrimaryButtonIcon className="mr-2 h-4 w-4" /> {primaryButtonText}
                         </Button>
                         <Button variant="outline" onClick={() => handleSaveBill(true)} disabled={isSavingBill} className="flex-1">
-                           {isSavingBill && !editingBillId && !snacksVisible ? 'Saving...' : (isSavingBill && editingBillId && !snacksVisible ? 'Updating...' : (
+                           {isSavingBill && !editingBillId && !itemsVisible ? 'Saving...' : (isSavingBill && editingBillId && !itemsVisible ? 'Updating...' : (
                             <>
                               <PlusCircle className="mr-2 h-4 w-4" /> New Order
                             </>
@@ -935,7 +950,7 @@ function HomeContent() {
           <Card className="w-full max-w-md mt-4">
             <CardHeader>
               <CardTitle className="text-lg">{editingItemId ? "Update Item" : "Add an Item"}</CardTitle>
-              <CardDescription>Add a new item to the listing.</CardDescription>
+              <CardDescription>Add a new item to the listing or update an existing one.</CardDescription>
             </CardHeader>
             <CardContent>
               <form action={handleFormSubmit} className="grid gap-4">
@@ -945,9 +960,19 @@ function HomeContent() {
                   {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="price">Price (₹)</Label>
-                  <Input id="price" type="text" placeholder="Item Price" {...register("price")} required inputMode="decimal"/>
+                  <Label htmlFor="price">Selling Price (₹)</Label>
+                  <Input id="price" type="text" placeholder="Item Selling Price" {...register("price")} required inputMode="decimal"/>
                   {errors.price && <p className="text-sm text-destructive">{errors.price.message}</p>}
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="cost">Cost Price (₹)</Label>
+                  <Input id="cost" type="text" placeholder="Item Cost Price (Optional)" {...register("cost")} inputMode="decimal"/>
+                  {errors.cost && <p className="text-sm text-destructive">{errors.cost.message}</p>}
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="itemCode">Item Code</Label>
+                  <Input id="itemCode" type="text" placeholder="Item Code (Optional)" {...register("itemCode")} />
+                  {errors.itemCode && <p className="text-sm text-destructive">{errors.itemCode.message}</p>}
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="category">Category</Label>
@@ -971,29 +996,32 @@ function HomeContent() {
               <CardTitle className="text-lg">Manage Items</CardTitle>
             </CardHeader>
             <CardContent>
-              {isLoadingItems ? ( 
-                 <p className="text-sm text-muted-foreground">Loading items...</p> // Changed message
-              ) : snacks.length === 0 ? (
-                 <p className="text-sm text-muted-foreground">No items added yet.</p> // Changed message
+              {isLoadingItems ? (
+                 <p className="text-sm text-muted-foreground">Loading items...</p>
+              ) : items.length === 0 ? (
+                 <p className="text-sm text-muted-foreground">No items added yet.</p>
               ) : (
               <ul className="mt-2 space-y-2 max-h-60 overflow-y-auto">
-                {snacks.map((item) => { // Renamed
+                {items.map((item) => {
                    const price = typeof item.price === 'number' ? item.price.toFixed(2) : (typeof item.price === 'string' ? parseFloat(item.price).toFixed(2) : 'N/A');
+                   const cost = item.cost !== undefined && typeof item.cost === 'number' ? item.cost.toFixed(2) : 'N/A';
                    return (
                     <li key={item.id} className="flex items-center justify-between p-2 border rounded-md hover:bg-muted/30">
                       <div className="flex flex-col text-sm">
                          <span className="font-medium">{item.name}</span>
-                         <span className="text-xs text-muted-foreground">₹{price} - {item.category}</span>
+                         <span className="text-xs text-muted-foreground">
+                           Sell: ₹{price} {item.cost !== undefined ? `| Cost: ₹${cost}` : ''} {item.itemCode ? `| Code: ${item.itemCode}` : ''} - {item.category}
+                         </span>
                       </div>
                       <div className="flex space-x-2">
-                        <Button variant="outline" size="icon" onClick={() => handleEditItem(item)} aria-label={`Edit ${item.name}`}> 
+                        <Button variant="outline" size="icon" onClick={() => handleEditItem(item)} aria-label={`Edit ${item.name}`}>
                           <Edit className="h-4 w-4" />
                         </Button>
                         <Button variant="destructive" size="icon" onClick={async () => {
-                             const result = await deleteSnack(item.id); // Server action name remains deleteSnack
+                             const result = await deleteSnack(item.id);
                              if(result.success) {
                                toast({title: result.message});
-                               loadItems(); // Renamed
+                               loadItems();
                              } else {
                                toast({variant: "destructive", title: "Error", description: result.message});
                              }
@@ -1008,7 +1036,10 @@ function HomeContent() {
               )}
             </CardContent>
           </Card>
-           <Button variant="outline" className="mt-4" onClick={() => setIsAdmin(false)}>Logout Admin</Button>
+           <Button variant="outline" className="mt-4" onClick={() => {
+               setIsAdmin(false);
+               setItemsVisible(true); // Ensure items section is visible when logging out
+           }}>Logout Admin</Button>
         </>
       ) }
 
@@ -1030,6 +1061,10 @@ function HomeContent() {
               />
             </div>
             <Button className="mt-4 w-full" onClick={handleAdminLogin}>Login</Button>
+            <Button variant="ghost" className="mt-2 w-full" onClick={() => {
+                setShowAdminLoginSection(false);
+                setItemsVisible(true); // Ensure items section is visible when cancelling admin login
+            }}>Cancel</Button>
           </CardContent>
         </Card>
       )}
@@ -1050,3 +1085,4 @@ export default function HomePage() {
     </Suspense>
   );
 }
+

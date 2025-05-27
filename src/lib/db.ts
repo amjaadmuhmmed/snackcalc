@@ -1,15 +1,18 @@
+
 'use server';
 
 import {db} from './firebase';
 import {collection, addDoc, getDocs, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp} from 'firebase/firestore';
 
-// --- Snacks ---
+// --- Items (formerly Snacks) ---
 
-export interface Snack {
+export interface Snack { // Internal interface name remains Snack for now to minimize breaking changes
   id: string;
   name: string;
   category: string;
   price: number;
+  cost?: number; // Optional cost price
+  itemCode?: string; // Optional item code
 }
 
 // Use 'snack' as the collection name consistently
@@ -19,72 +22,76 @@ const snacksCollection = collection(db, 'snack');
 export interface SnackInput extends Omit<Snack, 'id'> {}
 
 
-export async function addSnackToDb(snack: SnackInput) {
+export async function addSnackToDb(item: SnackInput) { // Parameter name changed for clarity
   try {
-    // Ensure price is a number before saving
-    const snackData = {
-      ...snack,
-      price: Number(snack.price) || 0, // Convert price to number, default to 0 if invalid
+    const itemData = {
+      ...item,
+      price: Number(item.price) || 0,
+      cost: item.cost !== undefined ? Number(item.cost) : undefined,
+      itemCode: item.itemCode || '',
     };
-    await addDoc(snacksCollection, snackData);
+    await addDoc(snacksCollection, itemData);
     return {success: true};
   } catch (e: any) {
-    console.error('Error adding snack document: ', e);
+    console.error('Error adding item document: ', e);
     return {success: false, message: e.message};
   }
 }
 
-export async function updateSnackInDb(id: string, snack: SnackInput) {
+export async function updateSnackInDb(id: string, item: SnackInput) { // Parameter name changed for clarity
   try {
-    // Ensure price is a number before updating
-    const snackData = {
-        ...snack,
-        price: Number(snack.price) || 0, // Convert price to number
+    const itemData = {
+        ...item,
+        price: Number(item.price) || 0,
+        cost: item.cost !== undefined ? Number(item.cost) : undefined,
+        itemCode: item.itemCode || '',
     };
-    const snackDoc = doc(db, 'snack', id); // Use 'snack' collection, was 'snacks'
-    await updateDoc(snackDoc, snackData);
+    const itemDoc = doc(db, 'snack', id);
+    await updateDoc(itemDoc, itemData);
     return {success: true};
   } catch (e: any) {
-    console.error('Error updating snack document: ', e);
+    console.error('Error updating item document: ', e);
     return {success: false, message: e.message};
   }
 }
 
 export async function deleteSnackFromDb(id: string) {
   try {
-    const snackDoc = doc(db, 'snack', id); // Use 'snack' collection, was 'snacks'
-    await deleteDoc(snackDoc);
+    const itemDoc = doc(db, 'snack', id);
+    await deleteDoc(itemDoc);
     return {success: true};
   } catch (e: any) {
-    console.error('Error deleting snack document: ', e);
+    console.error('Error deleting item document: ', e);
     return {success: false, message: e.message};
   }
 }
 
 export async function getSnacksFromDb(): Promise<Snack[]> {
   try {
-    console.log("Attempting to fetch snacks from Firestore collection 'snack'..."); // was 'snacks'
-    const snackSnapshot = await getDocs(snacksCollection); // Use 'snack' collection
-    console.log(`Fetched ${snackSnapshot.docs.length} snack documents.`);
-    const snacks = snackSnapshot.docs.map(docSnap => { // Renamed doc to docSnap to avoid conflict
+    const itemSnapshot = await getDocs(snacksCollection);
+    const items = itemSnapshot.docs.map(docSnap => {
         const data = docSnap.data();
-        // Ensure price is treated as a number
         const price = Number(data.price);
+        const cost = data.cost !== undefined ? Number(data.cost) : undefined;
+
         if (isNaN(price)) {
             console.warn(`Document ${docSnap.id} has invalid price: ${data.price}. Setting price to 0.`);
         }
+        if (data.cost !== undefined && isNaN(cost!)) {
+            console.warn(`Document ${docSnap.id} has invalid cost: ${data.cost}. Setting cost to undefined.`);
+        }
         return {
           id: docSnap.id,
-          name: data.name || 'Unnamed Snack', // Provide default values if fields are missing
+          name: data.name || 'Unnamed Item',
           category: data.category || 'Uncategorized',
-          price: isNaN(price) ? 0 : price, // Default to 0 if price is not a valid number
+          price: isNaN(price) ? 0 : price,
+          cost: data.cost !== undefined && !isNaN(cost!) ? cost : undefined,
+          itemCode: data.itemCode || '',
         } as Snack;
     });
-    console.log("Mapped snacks:", snacks);
-    return snacks;
+    return items;
   } catch (e: any) {
-    console.error('Error getting snack documents: ', e);
-    // Return empty array or throw error based on desired behavior
+    console.error('Error getting item documents: ', e);
     return [];
   }
 }
@@ -94,22 +101,23 @@ export async function getSnacksFromDb(): Promise<Snack[]> {
 
 export interface BillItem {
     name: string;
-    price: number;
+    price: number; // Selling price
     quantity: number;
+    // Cost and itemCode are generally not part of the individual bill item for customer display
 }
 
 export interface Bill {
     id: string; // Firestore document ID
     orderNumber: string;
-    customerName?: string; // Optional customer name
-    customerPhoneNumber?: string; // Optional customer phone number
-    tableNumber?: string; // Optional table number
-    notes?: string; // Optional notes
+    customerName?: string;
+    customerPhoneNumber?: string;
+    tableNumber?: string;
+    notes?: string;
     items: BillItem[];
     serviceCharge: number;
     totalAmount: number;
-    createdAt: Timestamp | Date; // Firestore Timestamp or Date
-    lastUpdatedAt?: Timestamp | Date; // Optional: Firestore Timestamp or Date for updates
+    createdAt: Timestamp | Date;
+    lastUpdatedAt?: Timestamp | Date;
 }
 
 export interface BillInput extends Omit<Bill, 'id' | 'createdAt' | 'lastUpdatedAt'> {}
@@ -123,13 +131,13 @@ export async function addBillToDb(bill: BillInput) {
         customerName: bill.customerName || '',
         customerPhoneNumber: bill.customerPhoneNumber || '',
         tableNumber: bill.tableNumber || '',
-        notes: bill.notes || '', // Save notes
-        createdAt: serverTimestamp() // Add server timestamp
+        notes: bill.notes || '',
+        createdAt: serverTimestamp()
       });
-      return {success: true, id: docRef.id}; // Return the new document ID
+      return {success: true, id: docRef.id};
     } catch (e: any) {
       console.error('Error adding bill document: ', e);
-      return {success: false, message: e.message};
+      return {success: false, message: e.message, id: undefined };
     }
 }
 
@@ -142,7 +150,7 @@ export async function updateBillInDb(id: string, bill: BillInput) {
             customerPhoneNumber: bill.customerPhoneNumber || '',
             tableNumber: bill.tableNumber || '',
             notes: bill.notes || '',
-            lastUpdatedAt: serverTimestamp() // Set last updated timestamp
+            lastUpdatedAt: serverTimestamp()
         });
         return {success: true};
     } catch (e: any) {
@@ -154,10 +162,9 @@ export async function updateBillInDb(id: string, bill: BillInput) {
 
 export async function getBillsFromDb(): Promise<Bill[]> {
     try {
-      // Order bills by creation date, newest first
       const billsQuery = query(billsCollection, orderBy('createdAt', 'desc'));
       const billSnapshot = await getDocs(billsQuery);
-      return billSnapshot.docs.map(docSnap => { // Renamed doc to docSnap
+      return billSnapshot.docs.map(docSnap => {
         const data = docSnap.data();
         return {
           id: docSnap.id,
@@ -165,7 +172,7 @@ export async function getBillsFromDb(): Promise<Bill[]> {
           customerName: data.customerName || '',
           customerPhoneNumber: data.customerPhoneNumber || '',
           tableNumber: data.tableNumber || '',
-          notes: data.notes || '', // Retrieve notes
+          notes: data.notes || '',
           items: data.items,
           serviceCharge: data.serviceCharge,
           totalAmount: data.totalAmount,
@@ -178,3 +185,4 @@ export async function getBillsFromDb(): Promise<Bill[]> {
       return [];
     }
 }
+
