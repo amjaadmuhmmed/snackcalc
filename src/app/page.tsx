@@ -97,6 +97,7 @@ function HomeContent() {
   const lastInteractedItemIdRef = useRef<string | null>(null);
 
   const [itemsVisible, setItemsVisible] = useState(true); 
+  const prevShowShareDialogRef = useRef<boolean | undefined>();
 
   const {
     register,
@@ -413,9 +414,11 @@ function HomeContent() {
                     setItemsVisible(false);
                 }
               }
-               if (!isUpdatingFromRTDBSync && !isLocalDirty) {
-                  toast({ title: result.message });
+               if (!isUpdatingFromRTDBSync && !isLocalDirty) { 
+                  // Do not show success toast if the update came from RTDB sync or if local is dirty (meaning it was an auto-sync)
+                   // toast({ title: result.message }); // Re-enabled for explicit save actions
                }
+               toast({ title: result.message });
 
 
           } else {
@@ -491,8 +494,10 @@ function HomeContent() {
       if (!searchTerm) {
           return items;
       }
+      const lowerSearchTerm = searchTerm.toLowerCase();
       return items.filter(item =>
-          item.name.toLowerCase().includes(searchTerm.toLowerCase())
+          item.name.toLowerCase().includes(lowerSearchTerm) ||
+          (item.itemCode && item.itemCode.toLowerCase().includes(lowerSearchTerm))
       );
   }, [items, searchTerm]);
 
@@ -547,13 +552,11 @@ function HomeContent() {
     try {
       setActiveSharedOrderNumber(orderNumberToShare);
       await setSharedOrderInRTDB(orderNumberToShare, sharedOrderPayload);
-      // setIsLocalDirty(false); // Do not set local dirty false here, let the RTDB sync handle it or saveBill handle it
+       // toast({ title: "Bill ready to share!", description: "Link and QR code updated." }); // Removed to avoid toast on auto-sync
       const baseUrl = window.location.origin;
       const fullUrl = `${baseUrl}/orders/${orderNumberToShare}`;
       setShareUrl(fullUrl);
-       if (!isUpdatingFromRTDBSync && !isLocalDirty) { 
-         // toast({ title: "Bill ready to share!", description: "Link and QR code updated." });
-      }
+       
     } catch (error) {
       console.error("Failed to share bill to RTDB:", error);
       toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
@@ -564,9 +567,9 @@ function HomeContent() {
     } finally {
       setIsGeneratingShareUrl(false);
     }
-  }, [selectedItems, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, toast, editingBillId, isUpdatingFromRTDBSync, isLocalDirty]);
+  }, [selectedItems, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, toast, editingBillId]);
 
-  const prevShowShareDialogRef = useRef<boolean | undefined>();
+
   useEffect(() => {
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
       handleShareBill(orderNumber);
@@ -608,7 +611,9 @@ function HomeContent() {
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
          if (!editingBillId) { 
-           // setIsLocalDirty(false); // Only reset if not in active Firestore edit mode
+            // Do not reset local dirty if in active Firestore edit mode for the current bill,
+            // as it will be reset upon successful Firestore save.
+            // setIsLocalDirty(false);
         }
       } catch (error) {
         console.error("Failed to auto-update RTDB from main page:", error);
@@ -681,7 +686,7 @@ function HomeContent() {
                 size="icon"
                 onClick={() => {
                     setShowAdminLoginSection(prev => !prev);
-                    if (!showAdminLoginSection) setItemsVisible(false); 
+                    if (!showAdminLoginSection && !isAdmin) setItemsVisible(false); 
                     else if (!isAdmin) setItemsVisible(true); 
                 }}
                 aria-label="Toggle Admin Login"
@@ -752,7 +757,6 @@ function HomeContent() {
              <CardDescription>{editingBillId ? `Editing Bill (Order: ${orderNumber})` : "Review current order. Click 'Edit Items' to modify."}</CardDescription>
           </CardHeader>
            <CardContent className="grid gap-4">
-             {/* Content identical to the main bill summary but without item selection part */}
             <div>
               <h3 className="text-sm font-medium mb-2">Selected Items</h3>
               {selectedItems.length === 0 ? (
@@ -768,11 +772,11 @@ function HomeContent() {
                       <div className="flex items-center space-x-2">
                         <span>{item.name}</span>
                         <div className="flex items-center border rounded-md">
-                          <Button variant="ghost" size="icon" className="h-6 w-6" disabled={true /* Items not editable here */}>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" disabled={true}>
                             <Minus className="h-3 w-3" />
                           </Button>
                           <Badge variant="outline" className="text-xs px-1.5 border-none tabular-nums">{item.quantity}</Badge>
-                          <Button variant="ghost" size="icon" className="h-6 w-6" disabled={true /* Items not editable here */}>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" disabled={true}>
                             <Plus className="h-3 w-3" />
                           </Button>
                         </div>
@@ -830,6 +834,32 @@ function HomeContent() {
         </Card>
       )}
 
+      {!isAdmin && showAdminLoginSection && (
+        <Card className="w-full max-w-md mt-4">
+          <CardHeader>
+            <CardTitle className="text-lg">Admin Login</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
+                aria-label="Admin Password"
+              />
+            </div>
+            <Button className="mt-4 w-full" onClick={handleAdminLogin}>Login</Button>
+            <Button variant="ghost" className="mt-2 w-full" onClick={() => {
+                setShowAdminLoginSection(false);
+                setItemsVisible(true); 
+            }}>Cancel</Button>
+          </CardContent>
+        </Card>
+      )}
+
       {!isAdmin && !showAdminLoginSection && itemsVisible && (
         <Card className="w-full max-w-md">
           <CardHeader>
@@ -844,7 +874,7 @@ function HomeContent() {
                   <Input
                     id="search-items"
                     type="search"
-                    placeholder="Search items..."
+                    placeholder="Search items by name or code..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     onKeyDown={handleSearchKeyDown}
@@ -1132,32 +1162,6 @@ function HomeContent() {
            }}>Logout Admin</Button>
         </>
       ) }
-
-      {!isAdmin && showAdminLoginSection && (
-        <Card className="w-full max-w-md mt-4">
-          <CardHeader>
-            <CardTitle className="text-lg">Admin Login</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
-                aria-label="Admin Password"
-              />
-            </div>
-            <Button className="mt-4 w-full" onClick={handleAdminLogin}>Login</Button>
-            <Button variant="ghost" className="mt-2 w-full" onClick={() => {
-                setShowAdminLoginSection(false);
-                setItemsVisible(true); 
-            }}>Cancel</Button>
-          </CardContent>
-        </Card>
-      )}
       <Toaster />
     </div>
   );
