@@ -96,7 +96,7 @@ export default function BillsPage() {
   }, []);
 
   useEffect(() => {
-    if (loading) return; 
+    if (loading) return;
 
     if (!dateRange || !dateRange.from) {
       setFilteredBills(allBills);
@@ -110,11 +110,11 @@ export default function BillsPage() {
       const billCreationDate = convertFirestoreTimestampToDate(bill.createdAt);
       if (!billCreationDate || !isValid(billCreationDate)) {
         console.warn(`Bill ${bill.id} has invalid createdAt:`, bill.createdAt);
-        return false; 
+        return false;
       }
-      return isWithinInterval(billCreationDate, { 
-        start: fromDate <= toDate ? fromDate : toDate, 
-        end: fromDate <= toDate ? toDate : fromDate 
+      return isWithinInterval(billCreationDate, {
+        start: fromDate <= toDate ? fromDate : toDate,
+        end: fromDate <= toDate ? toDate : fromDate
       });
     });
     setFilteredBills(newFilteredBills);
@@ -125,7 +125,7 @@ export default function BillsPage() {
   const formatFirestoreTimestampForDisplay = (timestamp: any): string => {
     const date = convertFirestoreTimestampToDate(timestamp);
     if (date && isValid(date)) {
-      return format(date, 'Pp'); 
+      return format(date, 'Pp');
     }
     return 'Invalid Date';
   };
@@ -133,10 +133,11 @@ export default function BillsPage() {
   const handleEditBill = async (bill: Bill) => {
     try {
       const itemsToShare: SharedOrderItem[] = bill.items.map((item: DbBillItem) => ({
-        id: item.name, 
+        id: item.itemId, // Use itemId from DbBillItem as id for SharedOrderItem
         name: item.name,
         price: Number(item.price),
         quantity: item.quantity,
+        itemCode: item.itemCode || '', // Include itemCode
       }));
 
       await setSharedOrderInRTDB(bill.orderNumber, {
@@ -164,7 +165,7 @@ export default function BillsPage() {
     if (printWindow) {
       const rawHeaderTitle = process.env.NEXT_PUBLIC_RECEIPT_HEADER_TITLE || "Snackulator";
       const rawFooterMessage = process.env.NEXT_PUBLIC_RECEIPT_FOOTER_MESSAGE || "Thank you for your order!";
-      
+
       const receiptHeaderTitle = rawHeaderTitle.replace(/\n/g, '<br>');
       const receiptFooterMessage = rawFooterMessage.replace(/\n/g, '<br>');
 
@@ -280,8 +281,6 @@ export default function BillsPage() {
         if (summaryMap[item.name]) {
           summaryMap[item.name].totalQuantity += item.quantity;
           summaryMap[item.name].totalRevenue += item.price * item.quantity;
-          // If itemCode is not already set, or if current item has one, set/update it.
-          // This assumes itemCode is consistent for the same item name, or takes the last one encountered.
           if (item.itemCode && (!summaryMap[item.name].itemCode || summaryMap[item.name].itemCode !== item.itemCode)) {
              summaryMap[item.name].itemCode = item.itemCode;
           }
@@ -300,7 +299,7 @@ export default function BillsPage() {
       itemCode: data.itemCode,
       totalQuantity: data.totalQuantity,
       totalRevenue: data.totalRevenue,
-    })).sort((a, b) => b.totalQuantity - a.totalQuantity); 
+    })).sort((a, b) => b.totalQuantity - a.totalQuantity);
   }, [filteredBills]);
 
   const handlePrintSummary = () => {
@@ -308,7 +307,7 @@ export default function BillsPage() {
     if (printWindow) {
       const rawHeaderTitle = process.env.NEXT_PUBLIC_RECEIPT_HEADER_TITLE || "Snackulator";
       const receiptHeaderTitle = rawHeaderTitle.replace(/\n/g, '<br>');
-      const dateRangeString = dateRange?.from && !dateRange.to ? `for ${format(dateRange.from, "LLL dd, yyyy")}` : 
+      const dateRangeString = dateRange?.from && !dateRange.to ? `for ${format(dateRange.from, "LLL dd, yyyy")}` :
                               dateRange?.from && dateRange?.to && format(dateRange.from, "yyyy-MM-dd") === format(dateRange.to, "yyyy-MM-dd") ? `for ${format(dateRange.from, "LLL dd, yyyy")}` :
                               dateRange?.from && dateRange?.to ? `from ${format(dateRange.from, "LLL dd, yyyy")} to ${format(dateRange.to, "LLL dd, yyyy")}` :
                               "for All Transactions";
@@ -404,19 +403,19 @@ export default function BillsPage() {
         <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <CardDescription>
-                    {dateRange?.from && !dateRange.to ? "Showing transactions for " + format(dateRange.from, "LLL dd, yyyy") : 
+                    {dateRange?.from && !dateRange.to ? "Showing transactions for " + format(dateRange.from, "LLL dd, yyyy") :
                      dateRange?.from && dateRange?.to && format(dateRange.from, "yyyy-MM-dd") === format(dateRange.to, "yyyy-MM-dd") ? "Showing transactions for " + format(dateRange.from, "LLL dd, yyyy") :
                      dateRange?.from && dateRange?.to ? "Showing transactions from " + format(dateRange.from, "LLL dd, yyyy") + " to " + format(dateRange.to, "LLL dd, yyyy") :
                      "Showing all transactions."}
                 </CardDescription>
-                <div className="flex flex-wrap gap-2 items-center"> 
+                <div className="flex flex-wrap gap-2 items-center">
                     <Popover>
                       <PopoverTrigger asChild>
                         <Button
                           id="date"
                           variant={"outline"}
                           className={cn(
-                            "w-full sm:w-[260px] justify-start text-left font-normal", 
+                            "w-full sm:w-[260px] justify-start text-left font-normal",
                             !dateRange && "text-muted-foreground"
                           )}
                         >
@@ -565,7 +564,7 @@ export default function BillsPage() {
                         <Printer className="h-3 w-3 mr-1" /> Print
                       </Button>
                     </TableCell>
-                    <TableCell className="text-xs whitespace-pre-wrap">{bill.notes || '-'}</TableCell>
+                    <TableCell className="text-xs whitespace-pre-wrap max-w-xs">{bill.notes || '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -576,4 +575,3 @@ export default function BillsPage() {
     </div>
   );
 }
-
