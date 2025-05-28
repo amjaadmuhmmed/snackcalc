@@ -19,8 +19,8 @@ import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
 import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
-import { addSnack, getSnacks, updateSnack, deleteSnack, saveBill } from "./actions";
-import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db";
+import { addItem, getItems, updateItem, deleteItem, saveBill } from "./actions";
+import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db"; // Snack is used as Item type
 import Link from "next/link";
 import {
   Dialog,
@@ -54,6 +54,10 @@ const itemSchema = z.object({
     message: "Cost must be a non-negative number if provided.",
   }),
   itemCode: z.string().optional(),
+  stockQuantity: z.string().optional().refine(
+    (value) => value === undefined || value.trim() === "" || (!isNaN(parseInt(value, 10)) && parseInt(value, 10) >= 0), {
+    message: "Stock Quantity must be a non-negative integer if provided.",
+  }),
 });
 
 type ItemFormDataType = z.infer<typeof itemSchema>;
@@ -113,13 +117,14 @@ function HomeContent() {
       category: "",
       cost: "",
       itemCode: "",
+      stockQuantity: "0",
     }
   });
 
   const loadItems = useCallback(async () => {
     setIsLoadingItems(true);
     try {
-      const itemsFromDb = await getSnacks();
+      const itemsFromDb = await getItems();
       setItems(itemsFromDb || []);
     } catch (error: any) {
       console.error("Failed to load items:", error);
@@ -145,7 +150,7 @@ function HomeContent() {
       setEditingBillId(editFsBillId);
       setActiveSharedOrderNumber(editOrderNum);
       setItemsVisible(true);
-      setIsLocalDirty(false); // Ensure local dirty is false when loading for edit
+      setIsLocalDirty(false); 
       console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
     } else if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
@@ -181,8 +186,8 @@ function HomeContent() {
       if (isUpdatingFromRTDBSync || isUpdatingRTDBFromMain) return; 
 
       if (data && data.orderNumber === activeSharedOrderNumber) {
-         if (isLocalDirty && orderNumber === activeSharedOrderNumber) {
-            console.log(`Main page: Received RTDB update for ${activeSharedOrderNumber}, but local is dirty. Ignoring direct state update, but will update if other client changed.`);
+         if (isLocalDirty && orderNumber === activeSharedOrderNumber && !editingBillId) { // If editing a bill from FS, allow RTDB sync to update form for consistency
+            console.log(`Main page: Received RTDB update for ${activeSharedOrderNumber}, but local is dirty (and not FS edit mode). Ignoring direct state update.`);
             return;
         }
         console.log(`Main page received RTDB update for ${activeSharedOrderNumber}:`, data);
@@ -198,6 +203,7 @@ function HomeContent() {
             category: baseItem?.category || 'Unknown',
             cost: baseItem?.cost,
             itemCode: baseItem?.itemCode,
+            stockQuantity: baseItem?.stockQuantity || 0,
           };
         });
 
@@ -238,7 +244,7 @@ function HomeContent() {
       console.log(`Main page unsubscribing from RTDB for order: ${activeSharedOrderNumber}`);
       unsubscribe();
     };
-  }, [activeSharedOrderNumber, items, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, selectedItems, serviceCharge, orderNumber, isUpdatingFromRTDBSync, isUpdatingRTDBFromMain]);
+  }, [activeSharedOrderNumber, items, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, selectedItems, serviceCharge, orderNumber, isUpdatingFromRTDBSync, isUpdatingRTDBFromMain, editingBillId]);
 
 
   const calculateTotal = () => {
@@ -306,6 +312,7 @@ function HomeContent() {
     setValue("category", item.category);
     setValue("cost", item.cost?.toString() || "");
     setValue("itemCode", item.itemCode || "");
+    setValue("stockQuantity", item.stockQuantity.toString());
   };
 
   const handleFormSubmit = async (data: ItemFormDataType) => {
@@ -315,14 +322,16 @@ function HomeContent() {
     formData.append('category', data.category);
     if (data.cost) formData.append('cost', String(data.cost));
     if (data.itemCode) formData.append('itemCode', data.itemCode);
+    if (data.stockQuantity) formData.append('stockQuantity', String(data.stockQuantity));
+
 
     try {
       let result;
       if (editingItemId) {
-        result = await updateSnack(editingItemId, formData);
+        result = await updateItem(editingItemId, formData);
         setEditingItemId(null);
       } else {
-        result = await addSnack(formData);
+        result = await addItem(formData);
       }
 
       if (result?.success) {
@@ -330,7 +339,7 @@ function HomeContent() {
           title: result.message,
         });
         await loadItems();
-        reset();
+        reset({ name: "", price: "", category: "", cost: "", itemCode: "", stockQuantity: "0" });
       } else {
         toast({
           variant: "destructive",
@@ -374,6 +383,7 @@ function HomeContent() {
           tableNumber: tableNumber,
           notes: notes,
           items: selectedItems.map(s => ({ 
+            itemId: s.id, 
             name: s.name, 
             price: Number(s.price), 
             quantity: s.quantity,
@@ -386,7 +396,7 @@ function HomeContent() {
       try {
           const result = await saveBill(billData, editingBillId || undefined);
           if (result.success) {
-              
+              loadItems(); 
               if (resetFormAfterSave) {
                 setSelectedItems([]);
                 setServiceCharge(0);
@@ -403,21 +413,17 @@ function HomeContent() {
                 setItemsVisible(true);
 
                 if (searchParams.get('editOrder') || searchParams.get('editBillId')) {
-                  router.replace('/', undefined);
+                  router.replace('/', { scroll: false });
                 }
               } else {
                 if (!editingBillId && result.billId) {
                   setEditingBillId(result.billId);
                 }
-                setIsLocalDirty(false);
+                setIsLocalDirty(false); // Crucial: reset dirty flag AFTER successful save
                 if (itemsVisible) {
                     setItemsVisible(false);
                 }
               }
-               if (!isUpdatingFromRTDBSync && !isLocalDirty) { 
-                  // Do not show success toast if the update came from RTDB sync or if local is dirty (meaning it was an auto-sync)
-                   // toast({ title: result.message }); // Re-enabled for explicit save actions
-               }
                toast({ title: result.message });
 
 
@@ -525,7 +531,7 @@ function HomeContent() {
     if (typeof window === "undefined") {
         setShareUrl("");
         setIsGeneratingShareUrl(false);
-        if (!editingBillId) {
+        if (!editingBillId) { // Only reset activeSharedOrderNumber if not in an edit session from Firestore
             setActiveSharedOrderNumber(null);
         }
         return;
@@ -550,9 +556,8 @@ function HomeContent() {
     };
 
     try {
-      setActiveSharedOrderNumber(orderNumberToShare);
+      setActiveSharedOrderNumber(orderNumberToShare); // Set it for subscription
       await setSharedOrderInRTDB(orderNumberToShare, sharedOrderPayload);
-       // toast({ title: "Bill ready to share!", description: "Link and QR code updated." }); // Removed to avoid toast on auto-sync
       const baseUrl = window.location.origin;
       const fullUrl = `${baseUrl}/orders/${orderNumberToShare}`;
       setShareUrl(fullUrl);
@@ -561,7 +566,7 @@ function HomeContent() {
       console.error("Failed to share bill to RTDB:", error);
       toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
       setShareUrl("");
-      if (!editingBillId) {
+      if (!editingBillId) { 
          setActiveSharedOrderNumber(null);
       }
     } finally {
@@ -611,9 +616,7 @@ function HomeContent() {
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
          if (!editingBillId) { 
-            // Do not reset local dirty if in active Firestore edit mode for the current bill,
-            // as it will be reset upon successful Firestore save.
-            // setIsLocalDirty(false);
+            // setIsLocalDirty(false); // Local dirty is reset by handleSaveBill for FS edits
         }
       } catch (error) {
         console.error("Failed to auto-update RTDB from main page:", error);
@@ -673,7 +676,8 @@ function HomeContent() {
 
   const primaryButtonText = !itemsVisible ? "Edit Items" : (editingBillId ? "Update Bill" : "Save Bill");
   const PrimaryButtonIcon = !itemsVisible ? Edit : Save;
-  const primaryButtonDisabled = isSavingBill;
+  
+  const primaryButtonDisabled = isSavingBill || (!itemsVisible ? false : (editingBillId && !isLocalDirty));
 
 
   return (
@@ -750,7 +754,7 @@ function HomeContent() {
         </div>
       </div>
 
-      {!isAdmin && !showAdminLoginSection && !itemsVisible && (
+      {(!isAdmin && !showAdminLoginSection && !itemsVisible) && (
          <Card className="w-full max-w-md">
           <CardHeader>
              <CardTitle className="text-lg">Order {orderNumber}</CardTitle>
@@ -860,7 +864,7 @@ function HomeContent() {
         </Card>
       )}
 
-      {!isAdmin && !showAdminLoginSection && itemsVisible && (
+      {(!isAdmin && !showAdminLoginSection && itemsVisible) && (
         <Card className="w-full max-w-md">
           <CardHeader>
              <CardTitle className="text-lg">Order {orderNumber}</CardTitle>
@@ -868,6 +872,7 @@ function HomeContent() {
           </CardHeader>
           <CardContent className="grid gap-4">
             
+             {itemsVisible && (
               <>
                 <div className="relative">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -912,6 +917,7 @@ function HomeContent() {
                 </div>
                 <Separator />
               </>
+             )}
             
             <div>
               <h3 className="text-sm font-medium mb-2">Selected Items</h3>
@@ -1094,6 +1100,11 @@ function HomeContent() {
                   <Input id="itemCode" type="text" placeholder="Item Code (Optional)" {...register("itemCode")} />
                   {errors.itemCode && <p className="text-sm text-destructive">{errors.itemCode.message}</p>}
                 </div>
+                 <div className="grid gap-2">
+                  <Label htmlFor="stockQuantity">Stock Quantity</Label>
+                  <Input id="stockQuantity" type="number" placeholder="Initial Stock (e.g., 0)" {...register("stockQuantity")} />
+                  {errors.stockQuantity && <p className="text-sm text-destructive">{errors.stockQuantity.message}</p>}
+                </div>
                 <div className="grid gap-2">
                   <Label htmlFor="category">Category</Label>
                   <Input id="category" type="text" placeholder="Item Category" {...register("category")} required/>
@@ -1103,7 +1114,7 @@ function HomeContent() {
                     {editingItemId ? "Update Item" : "Add Item"}
                  </Button>
                 {editingItemId && (
-                  <Button variant="ghost" type="button" onClick={() => { setEditingItemId(null); reset(); }}>
+                  <Button variant="ghost" type="button" onClick={() => { setEditingItemId(null); reset({ name: "", price: "", category: "", cost: "", itemCode: "", stockQuantity: "0" }); }}>
                     Cancel Edit
                   </Button>
                 )}
@@ -1125,12 +1136,13 @@ function HomeContent() {
                 {items.map((item) => {
                    const price = typeof item.price === 'number' ? item.price.toFixed(2) : (typeof item.price === 'string' ? parseFloat(item.price).toFixed(2) : 'N/A');
                    const cost = item.cost !== undefined && typeof item.cost === 'number' ? item.cost.toFixed(2) : (item.cost === undefined ? 'N/A' : String(item.cost));
+                   const stock = item.stockQuantity;
                    return (
                     <li key={item.id} className="flex items-center justify-between p-2 border rounded-md hover:bg-muted/30">
                       <div className="flex flex-col text-sm">
                          <span className="font-medium">{item.name}</span>
                          <span className="text-xs text-muted-foreground">
-                           Sell: ₹{price} {item.cost !== undefined ? `| Cost: ₹${cost}` : ''} {item.itemCode ? `| Code: ${item.itemCode}` : ''} - {item.category}
+                           Sell: ₹{price} {item.cost !== undefined ? `| Cost: ₹${cost}` : ''} {item.itemCode ? `| Code: ${item.itemCode}` : ''} | Stock: {stock} - {item.category}
                          </span>
                       </div>
                       <div className="flex space-x-2">
@@ -1138,7 +1150,7 @@ function HomeContent() {
                           <Edit className="h-4 w-4" />
                         </Button>
                         <Button variant="destructive" size="icon" onClick={async () => {
-                             const result = await deleteSnack(item.id);
+                             const result = await deleteItem(item.id);
                              if(result.success) {
                                toast({title: result.message});
                                loadItems();
@@ -1180,3 +1192,4 @@ export default function HomePage() {
   );
 }
 
+    
