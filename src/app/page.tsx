@@ -86,6 +86,7 @@ function HomeContent() {
   const [isSavingBill, setIsSavingBill] = useState(false);
   const [isLoadingItems, setIsLoadingItems] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [adminItemSearchTerm, setAdminItemSearchTerm] = useState(""); // New state for admin item search
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [isGeneratingShareUrl, setIsGeneratingShareUrl] = useState(false);
@@ -150,13 +151,13 @@ function HomeContent() {
       setEditingBillId(editFsBillId);
       setActiveSharedOrderNumber(editOrderNum);
       setItemsVisible(true);
-      setIsLocalDirty(false);
+      setIsLocalDirty(false); // Start clean when loading an existing bill
       console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
     } else if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
       setItemsVisible(true);
     }
-  }, [loadItems, searchParams]); // Removed orderNumber from dependencies to prevent loop
+  }, [loadItems, searchParams]);
 
 
   useEffect(() => {
@@ -183,7 +184,7 @@ function HomeContent() {
 
     console.log(`Main page subscribing to RTDB for order: ${activeSharedOrderNumber}`);
     const unsubscribe = subscribeToSharedOrder(activeSharedOrderNumber, (data: SharedOrderDataSnapshot | null) => {
-      if (isUpdatingFromRTDBSync || isUpdatingRTDBFromMain) return;
+      if (isUpdatingRTDBFromMain) return;
 
       if (data && data.orderNumber === activeSharedOrderNumber) {
          if (isLocalDirty && orderNumber === activeSharedOrderNumber && editingBillId) {
@@ -202,7 +203,7 @@ function HomeContent() {
             quantity: item.quantity,
             category: baseItem?.category || 'Unknown',
             cost: baseItem?.cost,
-            itemCode: item.itemCode || baseItem?.itemCode || '', // Prioritize item.itemCode from RTDB
+            itemCode: item.itemCode || baseItem?.itemCode || '',
             stockQuantity: baseItem?.stockQuantity || 0,
           };
         });
@@ -244,7 +245,7 @@ function HomeContent() {
       console.log(`Main page unsubscribing from RTDB for order: ${activeSharedOrderNumber}`);
       unsubscribe();
     };
-  }, [activeSharedOrderNumber, items, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, selectedItems, serviceCharge, orderNumber, isUpdatingFromRTDBSync, isUpdatingRTDBFromMain, editingBillId]);
+  }, [activeSharedOrderNumber, items, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, selectedItems, serviceCharge, orderNumber, isUpdatingRTDBFromMain, editingBillId]);
 
 
   const calculateTotal = () => {
@@ -396,7 +397,7 @@ function HomeContent() {
       try {
           const result = await saveBill(billData, editingBillId || undefined);
           if (result.success) {
-              loadItems();
+              loadItems(); // Reload items to reflect potential stock changes
               if (resetFormAfterSave) {
                 setSelectedItems([]);
                 setServiceCharge(0);
@@ -544,7 +545,7 @@ function HomeContent() {
       name: s.name,
       price: Number(s.price),
       quantity: s.quantity,
-      itemCode: s.itemCode || '', // Include itemCode
+      itemCode: s.itemCode || '',
     }));
 
     const sharedOrderPayload: Omit<SharedOrderData, 'lastUpdatedAt' | 'orderNumber'> = {
@@ -585,6 +586,7 @@ function HomeContent() {
 
 
   useEffect(() => {
+    // Don't push to RTDB if the main page is not in a state to sync (e.g., loading items, already updating, or not dirty)
     if (isUpdatingFromRTDBSync || !activeSharedOrderNumber || orderNumber !== activeSharedOrderNumber || isLoadingItems || isUpdatingRTDBFromMain || !isLocalDirty) {
       return;
     }
@@ -594,6 +596,7 @@ function HomeContent() {
     }
 
     const timer = setTimeout(async () => {
+      // Re-check conditions before pushing, especially if the local state became non-dirty or RTDB sync occurred
       if (isUpdatingFromRTDBSync || orderNumber !== activeSharedOrderNumber || !activeSharedOrderNumber || !isLocalDirty) return;
 
       console.log(`Main page pushing update to RTDB for ${activeSharedOrderNumber} (local is dirty)`);
@@ -603,7 +606,7 @@ function HomeContent() {
         name: s.name,
         price: Number(s.price),
         quantity: s.quantity,
-        itemCode: s.itemCode || '', // Include itemCode
+        itemCode: s.itemCode || '',
       }));
 
       const currentOrderData: Omit<SharedOrderData, 'lastUpdatedAt' | 'orderNumber'> = {
@@ -617,14 +620,18 @@ function HomeContent() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
-        // Do not set isLocalDirty to false here if editingBillId is set,
-        // as it should only be cleared by a successful Firestore save.
+        // Only set isLocalDirty to false if NOT editing an existing bill from Firestore.
+        // For Firestore edits, isLocalDirty is cleared by handleSaveBill after successful Firestore update.
+        if (!editingBillId) {
+          setIsLocalDirty(false);
+        }
       } catch (error) {
         console.error("Failed to auto-update RTDB from main page:", error);
+        // Do not show toast for auto-sync errors to avoid being too noisy
       } finally {
         setIsUpdatingRTDBFromMain(false);
       }
-    }, 750);
+    }, 750); // Debounce time
 
     setMainDebounceTimer(timer);
 
@@ -644,7 +651,7 @@ function HomeContent() {
     isUpdatingRTDBFromMain,
     isUpdatingFromRTDBSync,
     isLocalDirty,
-    editingBillId
+    editingBillId // Important: ensure editingBillId is part of dependency array if its presence changes RTDB update logic
   ]);
 
   const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -677,9 +684,19 @@ function HomeContent() {
 
   const primaryButtonText = !itemsVisible ? "Edit Items" : (editingBillId ? "Update Bill" : "Save Bill");
   const PrimaryButtonIcon = !itemsVisible ? Edit : Save;
-
-  // Ensure "Update Bill" is enabled when first loaded for edit, or if dirty
   const primaryButtonDisabled = isSavingBill;
+
+
+  const filteredAdminItems = useMemo(() => { // For admin item management search
+    if (!adminItemSearchTerm) {
+        return items;
+    }
+    const lowerSearchTerm = adminItemSearchTerm.toLowerCase();
+    return items.filter(item =>
+        item.name.toLowerCase().includes(lowerSearchTerm) ||
+        (item.itemCode && item.itemCode.toLowerCase().includes(lowerSearchTerm))
+    );
+  }, [items, adminItemSearchTerm]);
 
 
   return (
@@ -692,8 +709,8 @@ function HomeContent() {
                 size="icon"
                 onClick={() => {
                     setShowAdminLoginSection(prev => !prev);
-                    if (!showAdminLoginSection && !isAdmin) setItemsVisible(false);
-                    else if (!isAdmin) setItemsVisible(true);
+                    if (!showAdminLoginSection && !isAdmin) setItemsVisible(false); // Hide items if opening admin login & not admin
+                    else if (!isAdmin) setItemsVisible(true); // Show items if closing admin login & not admin
                 }}
                 aria-label="Toggle Admin Login"
             >
@@ -840,7 +857,7 @@ function HomeContent() {
         </Card>
       )}
 
-      {!isAdmin && showAdminLoginSection && (
+      {(!isAdmin && showAdminLoginSection) && (
         <Card className="w-full max-w-md mt-4">
           <CardHeader>
             <CardTitle className="text-lg">Admin Login</CardTitle>
@@ -1127,15 +1144,29 @@ function HomeContent() {
           <Card className="w-full max-w-md mt-4">
             <CardHeader>
               <CardTitle className="text-lg">Manage Items</CardTitle>
+              <div className="relative mt-2"> {/* Search bar for admin items */}
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="search-admin-items"
+                  type="search"
+                  placeholder="Search items by name or code..."
+                  value={adminItemSearchTerm}
+                  onChange={(e) => setAdminItemSearchTerm(e.target.value)}
+                  className="pl-8 w-full h-9"
+                  aria-label="Search managed items"
+                />
+              </div>
             </CardHeader>
             <CardContent>
               {isLoadingItems ? (
                  <p className="text-sm text-muted-foreground">Loading items...</p>
-              ) : items.length === 0 ? (
-                 <p className="text-sm text-muted-foreground">No items added yet.</p>
+              ) : filteredAdminItems.length === 0 ? (
+                 <p className="text-sm text-muted-foreground">
+                    {items.length === 0 ? "No items added yet." : "No items match your search."}
+                 </p>
               ) : (
               <ul className="mt-2 space-y-2 max-h-60 overflow-y-auto">
-                {items.map((item) => {
+                {filteredAdminItems.map((item) => {
                    const price = typeof item.price === 'number' ? item.price.toFixed(2) : (typeof item.price === 'string' ? parseFloat(item.price).toFixed(2) : 'N/A');
                    const cost = item.cost !== undefined && typeof item.cost === 'number' ? item.cost.toFixed(2) : (item.cost === undefined ? 'N/A' : String(item.cost));
                    const stock = item.stockQuantity;
@@ -1193,3 +1224,4 @@ export default function HomePage() {
     </Suspense>
   );
 }
+
