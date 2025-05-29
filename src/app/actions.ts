@@ -1,7 +1,26 @@
 
 'use server';
 
-import {addItemToDb, getItemsFromDb, updateItemInDb, deleteItemFromDb, addBillToDb, updateBillInDb, getBillsFromDb, BillInput, SnackInput, BillItem as DbBillItem, Bill, updateStockQuantitiesForBill, getDoc } from '@/lib/db';
+import {
+    addItemToDb,
+    getItemsFromDb,
+    updateItemInDb,
+    deleteItemFromDb,
+    addBillToDb,
+    updateBillInDb,
+    getBillsFromDb,
+    BillInput,
+    SnackInput,
+    BillItem as DbBillItem,
+    Bill,
+    updateStockQuantitiesForBill,
+    PurchaseInput,
+    addPurchaseToDb,
+    updateStockAfterPurchase,
+    PurchaseItem,
+    getPurchasesFromDb,
+    getDoc
+} from '@/lib/db';
 import {revalidatePath} from 'next/cache';
 import { db } from '@/lib/firebase'; // For getDoc
 import { doc } from 'firebase/firestore';
@@ -55,6 +74,8 @@ export async function addItem(data: FormData) {
     if (result.success) {
       revalidatePath('/');
       revalidatePath('/bills');
+      revalidatePath('/purchases/create'); // Revalidate if items are shown there
+      revalidatePath('/purchases/history');
       return {success: true, message: 'Item added successfully!'};
     } else {
       return {success: false, message: result.message || 'Failed to add item.'};
@@ -91,7 +112,7 @@ export async function updateItem(id: string, data: FormData) {
       }
     }
     
-    const parsedStockQuantity = stockQuantityString ? parseInt(stockQuantityString, 10) : undefined; // Keep as undefined if not provided
+    const parsedStockQuantity = stockQuantityString ? parseInt(stockQuantityString, 10) : undefined;
     if (parsedStockQuantity !== undefined && (isNaN(parsedStockQuantity) || parsedStockQuantity < 0)) {
         return { success: false, message: 'Invalid input: Stock Quantity must be a non-negative integer if provided.' };
     }
@@ -102,7 +123,7 @@ export async function updateItem(id: string, data: FormData) {
       category,
     };
     if (parsedCost !== undefined) itemToUpdate.cost = parsedCost;
-    if (itemCode !== null) itemToUpdate.itemCode = itemCode || undefined; // Ensure empty string is stored as undefined if desired, or just itemCode
+    if (itemCode !== null) itemToUpdate.itemCode = itemCode || undefined;
     if (parsedStockQuantity !== undefined) itemToUpdate.stockQuantity = parsedStockQuantity;
 
 
@@ -111,6 +132,8 @@ export async function updateItem(id: string, data: FormData) {
     if (result.success) {
       revalidatePath('/');
       revalidatePath('/bills');
+      revalidatePath('/purchases/create');
+      revalidatePath('/purchases/history');
       return {success: true, message: 'Item updated successfully!'};
     } else {
       return {success: false, message: result.message || 'Failed to update item.'};
@@ -123,13 +146,13 @@ export async function updateItem(id: string, data: FormData) {
 
 export async function deleteItem(id: string) {
   try {
-    // Before deleting, consider if stock should be handled or if related bills prevent deletion.
-    // For now, direct deletion.
     const result = await deleteItemFromDb(id);
 
     if (result.success) {
       revalidatePath('/');
       revalidatePath('/bills');
+      revalidatePath('/purchases/create');
+      revalidatePath('/purchases/history');
       return {success: true, message: 'Item deleted successfully!'};
     } else {
       return {success: false, message: result.message || 'Failed to delete item.'};
@@ -168,24 +191,22 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
             }
         }
 
-        // Calculate stock changes
         const stockAdjustments: Array<{ itemId: string; quantityChange: number }> = [];
         const currentBillItemsMap = new Map(itemsInCurrentBill.map(item => [item.itemId, item.quantity]));
         const oldBillItemsMap = new Map(oldBillItems.map(item => [item.itemId, item.quantity]));
         const allInvolvedItemIds = new Set([...currentBillItemsMap.keys(), ...oldBillItemsMap.keys()]);
 
         allInvolvedItemIds.forEach(itemId => {
-            if (!itemId) return; // Should not happen if item IDs are always present
+            if (!itemId) return;
             const newQty = currentBillItemsMap.get(itemId) || 0;
             const oldQty = oldBillItemsMap.get(itemId) || 0;
-            const quantityDelta = newQty - oldQty; // Positive if more sold, negative if items returned/reduced
+            const quantityDelta = newQty - oldQty;
 
             if (quantityDelta !== 0) {
                 stockAdjustments.push({ itemId, quantityChange: quantityDelta });
             }
         });
         
-        // Save or Update the bill document
         if (billIdToUpdate) {
             billActionResult = await updateBillInDb(billIdToUpdate, billData);
         } else {
@@ -196,7 +217,6 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
             }
         }
 
-        // If bill operation was successful, proceed with stock update
         if (billActionResult.success) {
             if (stockAdjustments.length > 0) {
                 const stockUpdateResult = await updateStockQuantitiesForBill(stockAdjustments);
@@ -207,7 +227,7 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
             }
             
             revalidatePath('/bills');
-            revalidatePath('/'); // Revalidate item list for potential stock changes
+            revalidatePath('/'); 
             
             let finalMessage = billIdToUpdate ? 'Bill updated successfully!' : 'Bill saved successfully!';
             if (stockUpdateResultMessage) {
@@ -234,4 +254,44 @@ export async function getBills() {
     return getBillsFromDb();
 }
 
-    
+
+// --- Purchase Actions ---
+export async function savePurchase(purchaseData: PurchaseInput) {
+    try {
+        // 1. Save the purchase document
+        const purchaseResult = await addPurchaseToDb(purchaseData);
+        if (!purchaseResult.success || !purchaseResult.id) {
+            return { success: false, message: purchaseResult.message || 'Failed to save purchase order.' };
+        }
+
+        // 2. Update stock quantities for the purchased items
+        const stockUpdateResult = await updateStockAfterPurchase(purchaseData.items);
+        if (!stockUpdateResult.success) {
+            // Log or handle the case where purchase is saved but stock update fails
+            console.warn(`Purchase ${purchaseResult.id} saved, but stock update failed: ${stockUpdateResult.message}`);
+            return {
+                success: true, // Purchase itself was saved
+                message: `Purchase saved successfully, but failed to update stock levels. Please verify stock manually. Error: ${stockUpdateResult.message}`,
+                purchaseId: purchaseResult.id
+            };
+        }
+
+        revalidatePath('/'); // Revalidate items list for stock changes
+        revalidatePath('/purchases/create');
+        revalidatePath('/purchases/history');
+
+        return {
+            success: true,
+            message: 'Purchase saved and stock updated successfully!',
+            purchaseId: purchaseResult.id
+        };
+
+    } catch (error: any) {
+        console.error('Error in savePurchase action:', error);
+        return { success: false, message: error.message || 'An unexpected error occurred while saving the purchase.' };
+    }
+}
+
+export async function getPurchases() {
+    return getPurchasesFromDb();
+}

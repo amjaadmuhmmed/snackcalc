@@ -17,10 +17,10 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle } from "lucide-react";
+import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
 import { addItem, getItems, updateItem, deleteItem, saveBill } from "./actions";
-import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db"; // Snack is used as Item type
+import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db";
 import Link from "next/link";
 import {
   Dialog,
@@ -86,7 +86,7 @@ function HomeContent() {
   const [isSavingBill, setIsSavingBill] = useState(false);
   const [isLoadingItems, setIsLoadingItems] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [adminItemSearchTerm, setAdminItemSearchTerm] = useState(""); // New state for admin item search
+  const [adminItemSearchTerm, setAdminItemSearchTerm] = useState("");
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [isGeneratingShareUrl, setIsGeneratingShareUrl] = useState(false);
@@ -151,7 +151,7 @@ function HomeContent() {
       setEditingBillId(editFsBillId);
       setActiveSharedOrderNumber(editOrderNum);
       setItemsVisible(true);
-      setIsLocalDirty(false); // Start clean when loading an existing bill
+      setIsLocalDirty(false);
       console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
     } else if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
@@ -167,18 +167,7 @@ function HomeContent() {
   }, [serviceCharge]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const legacyOrder = params.get('order');
-    const legacyItems = params.get('items');
-
-    if (legacyOrder && legacyItems && typeof window !== "undefined" && !searchParams.get('editOrder')) {
-
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, [toast, searchParams]);
-
-  useEffect(() => {
-    if (!activeSharedOrderNumber || items.length === 0) {
+    if (!activeSharedOrderNumber || items.length === 0 || isUpdatingRTDBFromMain) {
       return;
     }
 
@@ -321,9 +310,9 @@ function HomeContent() {
     formData.append('name', data.name);
     formData.append('price', String(data.price));
     formData.append('category', data.category);
-    if (data.cost) formData.append('cost', String(data.cost));
-    if (data.itemCode) formData.append('itemCode', data.itemCode);
-    if (data.stockQuantity) formData.append('stockQuantity', String(data.stockQuantity));
+    if (data.cost && data.cost.trim() !== "") formData.append('cost', String(data.cost));
+    if (data.itemCode && data.itemCode.trim() !== "") formData.append('itemCode', data.itemCode);
+    if (data.stockQuantity && data.stockQuantity.trim() !== "") formData.append('stockQuantity', String(data.stockQuantity));
 
 
     try {
@@ -397,7 +386,7 @@ function HomeContent() {
       try {
           const result = await saveBill(billData, editingBillId || undefined);
           if (result.success) {
-              loadItems(); // Reload items to reflect potential stock changes
+              loadItems();
               if (resetFormAfterSave) {
                 setSelectedItems([]);
                 setServiceCharge(0);
@@ -586,7 +575,6 @@ function HomeContent() {
 
 
   useEffect(() => {
-    // Don't push to RTDB if the main page is not in a state to sync (e.g., loading items, already updating, or not dirty)
     if (isUpdatingFromRTDBSync || !activeSharedOrderNumber || orderNumber !== activeSharedOrderNumber || isLoadingItems || isUpdatingRTDBFromMain || !isLocalDirty) {
       return;
     }
@@ -596,7 +584,6 @@ function HomeContent() {
     }
 
     const timer = setTimeout(async () => {
-      // Re-check conditions before pushing, especially if the local state became non-dirty or RTDB sync occurred
       if (isUpdatingFromRTDBSync || orderNumber !== activeSharedOrderNumber || !activeSharedOrderNumber || !isLocalDirty) return;
 
       console.log(`Main page pushing update to RTDB for ${activeSharedOrderNumber} (local is dirty)`);
@@ -620,18 +607,15 @@ function HomeContent() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
-        // Only set isLocalDirty to false if NOT editing an existing bill from Firestore.
-        // For Firestore edits, isLocalDirty is cleared by handleSaveBill after successful Firestore update.
         if (!editingBillId) {
           setIsLocalDirty(false);
         }
       } catch (error) {
         console.error("Failed to auto-update RTDB from main page:", error);
-        // Do not show toast for auto-sync errors to avoid being too noisy
       } finally {
         setIsUpdatingRTDBFromMain(false);
       }
-    }, 750); // Debounce time
+    }, 750);
 
     setMainDebounceTimer(timer);
 
@@ -651,7 +635,7 @@ function HomeContent() {
     isUpdatingRTDBFromMain,
     isUpdatingFromRTDBSync,
     isLocalDirty,
-    editingBillId // Important: ensure editingBillId is part of dependency array if its presence changes RTDB update logic
+    editingBillId
   ]);
 
   const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -687,7 +671,7 @@ function HomeContent() {
   const primaryButtonDisabled = isSavingBill;
 
 
-  const filteredAdminItems = useMemo(() => { // For admin item management search
+  const filteredAdminItems = useMemo(() => {
     if (!adminItemSearchTerm) {
         return items;
     }
@@ -709,8 +693,8 @@ function HomeContent() {
                 size="icon"
                 onClick={() => {
                     setShowAdminLoginSection(prev => !prev);
-                    if (!showAdminLoginSection && !isAdmin) setItemsVisible(false); // Hide items if opening admin login & not admin
-                    else if (!isAdmin) setItemsVisible(true); // Show items if closing admin login & not admin
+                    if (!showAdminLoginSection && !isAdmin) setItemsVisible(false);
+                    else if (!isAdmin) setItemsVisible(true);
                 }}
                 aria-label="Toggle Admin Login"
             >
@@ -913,7 +897,7 @@ function HomeContent() {
                   ) : filteredListedItems.length === 0 && items.length > 0 && searchTerm ? (
                         <p className="text-sm text-muted-foreground w-full text-center py-2">No items match your search.</p>
                   ): filteredListedItems.length === 0 && items.length === 0 ? (
-                      <p className="text-sm text-muted-foreground w-full text-center py-2">No items available. Add items below (Admin).</p>
+                      <p className="text-sm text-muted-foreground w-full text-center py-2">No items available. Add items (Admin).</p>
                   ) : (
                       filteredListedItems.map((item) => (
                         <div key={item.id} className="flex items-center space-x-1">
@@ -1143,8 +1127,18 @@ function HomeContent() {
 
           <Card className="w-full max-w-md mt-4">
             <CardHeader>
-              <CardTitle className="text-lg">Manage Items</CardTitle>
-              <div className="relative mt-2"> {/* Search bar for admin items */}
+                <div className="flex justify-between items-center">
+                    <CardTitle className="text-lg">Manage Items</CardTitle>
+                    <div className="flex gap-2">
+                        <Link href="/purchases/create" passHref>
+                            <Button variant="outline" size="sm"><ShoppingCart className="mr-2 h-4 w-4" /> New Purchase</Button>
+                        </Link>
+                        <Link href="/purchases/history" passHref>
+                            <Button variant="outline" size="sm"><History className="mr-2 h-4 w-4" /> Purchase History</Button>
+                        </Link>
+                    </div>
+                </div>
+              <div className="relative mt-2">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="search-admin-items"
@@ -1168,14 +1162,14 @@ function HomeContent() {
               <ul className="mt-2 space-y-2 max-h-60 overflow-y-auto">
                 {filteredAdminItems.map((item) => {
                    const price = typeof item.price === 'number' ? item.price.toFixed(2) : (typeof item.price === 'string' ? parseFloat(item.price).toFixed(2) : 'N/A');
-                   const cost = item.cost !== undefined && typeof item.cost === 'number' ? item.cost.toFixed(2) : (item.cost === undefined ? 'N/A' : String(item.cost));
+                   const cost = item.cost !== undefined && typeof item.cost === 'number' ? item.cost.toFixed(2) : (item.cost === undefined || String(item.cost).trim() === "" ? 'N/A' : String(item.cost));
                    const stock = item.stockQuantity;
                    return (
                     <li key={item.id} className="flex items-center justify-between p-2 border rounded-md hover:bg-muted/30">
                       <div className="flex flex-col text-sm">
                          <span className="font-medium">{item.name}</span>
                          <span className="text-xs text-muted-foreground">
-                           Sell: ₹{price} {item.cost !== undefined ? `| Cost: ₹${cost}` : ''} {item.itemCode ? `| Code: ${item.itemCode}` : ''} | Stock: {stock} - {item.category}
+                           Sell: ₹{price} {cost !== 'N/A' ? `| Cost: ₹${cost}` : ''} {item.itemCode ? `| Code: ${item.itemCode}` : ''} | Stock: {stock !== undefined ? stock : 'N/A'} - {item.category}
                          </span>
                       </div>
                       <div className="flex space-x-2">
@@ -1224,4 +1218,3 @@ export default function HomePage() {
     </Suspense>
   );
 }
-
