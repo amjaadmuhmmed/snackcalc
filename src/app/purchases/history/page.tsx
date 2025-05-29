@@ -12,6 +12,7 @@ import { getPurchases } from "@/app/actions";
 import type { Purchase } from "@/lib/db";
 import { format, isValid } from 'date-fns';
 import { Timestamp } from "firebase/firestore";
+import { Toaster } from "@/components/ui/toaster"; // Added missing import
 
 const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
   if (!timestamp) return null;
@@ -138,3 +139,4 @@ export default function PurchaseHistoryPage() {
     </div>
   );
 }
+
