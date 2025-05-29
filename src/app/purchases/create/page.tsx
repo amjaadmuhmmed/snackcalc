@@ -12,10 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { DatePicker } from "@/components/ui/date-picker"; // Assuming you have or will create this
+import { DatePicker } from "@/components/ui/date-picker"; // Correctly import from UI components
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, CalendarIcon as Calendar } from "lucide-react";
+import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, Calendar as CalendarIconLucide } from "lucide-react"; // Renamed Calendar to avoid conflict if any
 import { getItems, savePurchase } from "@/app/actions";
 import type { Snack, PurchaseInput, PurchaseItem as DbPurchaseItem } from "@/lib/db"; // Snack is used as Item type
 import { Timestamp } from "firebase/firestore";
@@ -87,7 +87,6 @@ export default function CreatePurchasePage() {
         newSelected.splice(existingItemIndex, 1);
         return [updatedItem, ...newSelected];
       } else {
-        // Default purchaseCost to item's cost or 0 if not available
         const defaultPurchaseCost = item.cost !== undefined ? Number(item.cost) : 0;
         const newItemData: SelectedItemForPurchase = { ...item, quantity: 1, purchaseCost: defaultPurchaseCost };
         return [newItemData, ...prevSelected];
@@ -143,13 +142,12 @@ export default function CreatePurchasePage() {
       return;
     }
 
-
     setIsSavingPurchase(true);
 
     const purchaseData: PurchaseInput = {
       purchaseOrderNumber: purchaseOrderNumber,
       supplierName: supplierName,
-      purchaseDate: Timestamp.fromDate(purchaseDate), // Convert JS Date to Firestore Timestamp
+      purchaseDate: Timestamp.fromDate(purchaseDate),
       items: selectedItems.map(s => ({
         itemId: s.id,
         name: s.name,
@@ -165,13 +163,11 @@ export default function CreatePurchasePage() {
       const result = await savePurchase(purchaseData);
       if (result.success) {
         toast({ title: result.message });
-        // Reset form
         setSelectedItems([]);
         setSupplierName("");
         setNotes("");
         setPurchaseOrderNumber(generatePurchaseOrderNumber());
         setPurchaseDate(new Date());
-        // Optionally redirect or update item list on main page if it's also shown there
         router.push('/purchases/history'); 
       } else {
         toast({ variant: "destructive", title: "Failed to save purchase.", description: result.message });
@@ -205,7 +201,6 @@ export default function CreatePurchasePage() {
     }
   };
 
-
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-4 md:p-8">
       <div className="w-full max-w-2xl mb-4 flex justify-between items-center">
@@ -237,7 +232,7 @@ export default function CreatePurchasePage() {
             </div>
              <div className="grid gap-1.5">
               <Label htmlFor="purchase-date">Purchase Date</Label>
-                <DatePicker date={purchaseDate} setDate={setPurchaseDate} />
+                <DatePicker date={purchaseDate} setDate={setPurchaseDate} /> {/* Use imported DatePicker */}
             </div>
             <div className="grid gap-1.5 sm:col-span-2">
               <Label htmlFor="supplier-name">Supplier Name (Optional)</Label>
@@ -313,7 +308,7 @@ export default function CreatePurchasePage() {
                        <Input 
                         id={`purchase-cost-${item.id}`}
                         type="number"
-                        value={item.purchaseCost}
+                        value={item.purchaseCost === undefined ? '' : item.purchaseCost} // Handle undefined for initial render
                         onChange={(e) => handlePurchaseCostChange(item.id, e.target.value)}
                         className="h-8 w-20 text-xs"
                         placeholder="Cost"
@@ -378,48 +373,3 @@ export default function CreatePurchasePage() {
     </div>
   );
 }
-
-// Basic DatePicker component (can be moved to components/ui if not already there)
-// For simplicity, this is a very basic one. You might have a more advanced one from ShadCN.
-// If you already have a DatePicker, you can remove this.
-interface DatePickerProps {
-  date: Date | undefined;
-  setDate: (date: Date | undefined) => void;
-  className?: string;
-}
-
-const DatePickerComponent: React.FC<DatePickerProps> = ({ date, setDate, className }) => {
-  const { Popover, PopoverTrigger, PopoverContent } = require("@/components/ui/popover");
-  const { Calendar: ShadCalendar } = require("@/components/ui/calendar"); // Renamed to avoid conflict
-  const { format } = require("date-fns");
-  const { cn } = require("@/lib/utils");
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant={"outline"}
-          className={cn(
-            "w-full justify-start text-left font-normal h-9",
-            !date && "text-muted-foreground",
-            className
-          )}
-        >
-          <Calendar className="mr-2 h-4 w-4" />
-          {date ? format(date, "PPP") : <span>Pick a date</span>}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0">
-        <ShadCalendar
-          mode="single"
-          selected={date}
-          onSelect={setDate}
-          initialFocus
-        />
-      </PopoverContent>
-    </Popover>
-  );
-};
-// Use the alias in the main component
-DatePicker = DatePickerComponent;
-
