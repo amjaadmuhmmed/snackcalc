@@ -37,7 +37,7 @@ export default function CreatePurchasePage() {
   const [selectedItems, setSelectedItems] = useState<SelectedItemForPurchase[]>([]);
   const [purchaseOrderNumber, setPurchaseOrderNumber] = useState<string>("");
   const [supplierName, setSupplierName] = useState<string>("");
-  const [purchaseDate, setPurchaseDate] = useState<Date | undefined>(new Date());
+  const [purchaseDate, setPurchaseDate] = useState<Date | undefined>(undefined); // Initialize to undefined
   const [notes, setNotes] = useState<string>("");
   const [isSavingPurchase, setIsSavingPurchase] = useState(false);
   const [isLoadingItems, setIsLoadingItems] = useState(true);
@@ -45,6 +45,12 @@ export default function CreatePurchasePage() {
 
   const listRefs = useRef<Record<string, HTMLLIElement | null>>({});
   const lastInteractedItemIdRef = useRef<string | null>(null);
+
+  // Set purchaseDate on client-side after mount
+  useEffect(() => {
+    setPurchaseDate(new Date());
+  }, []);
+
 
   useEffect(() => {
     setPurchaseOrderNumber(generatePurchaseOrderNumber());
@@ -168,7 +174,7 @@ export default function CreatePurchasePage() {
         setNotes("");
         setPurchaseOrderNumber(generatePurchaseOrderNumber());
         setPurchaseDate(new Date());
-        router.push('/purchases/history'); 
+        router.push('/purchases/history');
       } else {
         toast({ variant: "destructive", title: "Failed to save purchase.", description: result.message });
       }
@@ -222,12 +228,12 @@ export default function CreatePurchasePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="grid gap-1.5">
               <Label htmlFor="purchase-order-number">P.O. Number</Label>
-              <Input 
-                id="purchase-order-number" 
-                type="text" 
-                value={purchaseOrderNumber} 
+              <Input
+                id="purchase-order-number"
+                type="text"
+                value={purchaseOrderNumber}
                 onChange={(e) => setPurchaseOrderNumber(e.target.value)}
-                placeholder="e.g., PO-2024001" 
+                placeholder="e.g., PO-2024001"
               />
             </div>
              <div className="grid gap-1.5">
@@ -236,16 +242,16 @@ export default function CreatePurchasePage() {
             </div>
             <div className="grid gap-1.5 sm:col-span-2">
               <Label htmlFor="supplier-name">Supplier Name (Optional)</Label>
-              <Input 
-                id="supplier-name" 
-                type="text" 
-                value={supplierName} 
+              <Input
+                id="supplier-name"
+                type="text"
+                value={supplierName}
                 onChange={(e) => setSupplierName(e.target.value)}
                 placeholder="e.g., Main Supplier Co."
               />
             </div>
           </div>
-          
+
           <Separator />
 
           <div>
@@ -284,7 +290,7 @@ export default function CreatePurchasePage() {
               {!isLoadingItems && filteredAllItems.length === 0 && <p className="text-sm text-muted-foreground w-full text-center py-2">No items match search.</p>}
             </div>
           </div>
-          
+
           <Separator />
 
           <div>
@@ -305,7 +311,7 @@ export default function CreatePurchasePage() {
                     </div>
                     <div className="flex items-center space-x-2 w-full sm:w-auto mt-1 sm:mt-0">
                        <Label htmlFor={`purchase-cost-${item.id}`} className="text-xs sr-only">Cost</Label>
-                       <Input 
+                       <Input
                         id={`purchase-cost-${item.id}`}
                         type="number"
                         value={item.purchaseCost === undefined ? '' : item.purchaseCost} // Handle undefined for initial render
@@ -358,8 +364,8 @@ export default function CreatePurchasePage() {
                 ₹{calculateTotal.toFixed(2)}
               </Badge>
             </div>
-            <Button 
-                onClick={handleSavePurchase} 
+            <Button
+                onClick={handleSavePurchase}
                 disabled={isSavingPurchase || selectedItems.length === 0}
                 className="w-full sm:w-auto"
             >
@@ -373,3 +379,4 @@ export default function CreatePurchasePage() {
     </div>
   );
 }
+
