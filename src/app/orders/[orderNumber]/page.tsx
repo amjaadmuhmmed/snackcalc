@@ -100,8 +100,8 @@ export default function SharedOrderPage() {
         setIsUpdatingFromRTDBSync(true);
 
         const newSelectedItemsData = Array.isArray(data.items) ? [...data.items] : []; 
-        const currentSimpleSelected = selectedItems.map(s => ({id: s.id, quantity: s.quantity, price: s.price, name: s.name})); 
-        const newSimpleSelected = newSelectedItemsData.map(s => ({id: s.id, quantity: s.quantity, price: s.price, name: s.name})); 
+        const currentSimpleSelected = selectedItems.map(s => ({id: s.id, quantity: s.quantity, price: s.price, name: s.name, itemCode: s.itemCode})); 
+        const newSimpleSelected = newSelectedItemsData.map(s => ({id: s.id, quantity: s.quantity, price: s.price, name: s.name, itemCode: s.itemCode})); 
 
 
         if (JSON.stringify(currentSimpleSelected) !== JSON.stringify(newSimpleSelected)) {
@@ -226,7 +226,7 @@ export default function SharedOrderPage() {
         const newItemData: SelectedItemForOrder = { 
             id: item.id,
             name: item.name,
-            price: Number(item.price),
+            price: Number(item.price), // Initialize with item's default price
             quantity: 1,
             itemCode: item.itemCode || '',
         };
@@ -256,6 +256,19 @@ export default function SharedOrderPage() {
         return [updatedItem, ...newSelected];
       }
     });
+  };
+
+  const handleSelectedPriceChange = (itemId: string, newPriceString: string) => {
+    const newPrice = parseFloat(newPriceString);
+    if (isNaN(newPrice) || newPrice < 0) return; 
+
+    setIsLocalDirty(true);
+    lastInteractedItemIdRef.current = itemId;
+    setSelectedItems(prevSelected =>
+      prevSelected.map(item =>
+        item.id === itemId ? { ...item, price: newPrice } : item
+      )
+    );
   };
 
   const getItemQuantity = (itemId: string) => { 
@@ -421,8 +434,24 @@ export default function SharedOrderPage() {
                     ref={(el) => listRefs.current[item.id] = el} 
                     className="flex items-center justify-between text-sm p-1.5 rounded-md hover:bg-muted/50"
                   >
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 flex-grow">
                       <span>{item.name}</span>
+                       <Input
+                          type="number"
+                          value={item.price.toString()}
+                          onChange={(e) => handleSelectedPriceChange(item.id, e.target.value)}
+                          onBlur={(e) => {
+                            const newPrice = parseFloat(e.target.value);
+                            if (!isNaN(newPrice) && newPrice >=0) {
+                                handleSelectedPriceChange(item.id, newPrice.toFixed(2));
+                            } else {
+                                const originalItem = allItems.find(i => i.id === item.id);
+                                handleSelectedPriceChange(item.id, (originalItem ? originalItem.price : 0).toFixed(2));
+                            }
+                          }}
+                          className="h-7 w-20 text-xs px-1 text-right"
+                          aria-label={`Price for ${item.name}`}
+                        />
                       <div className="flex items-center border rounded-md">
                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleItemDecrement(item.id)} aria-label={`Decrease ${item.name}`}> 
                           <Minus className="h-3 w-3" />
@@ -436,7 +465,7 @@ export default function SharedOrderPage() {
                         </Button>
                       </div>
                     </div>
-                    <span className="font-medium tabular-nums">{currencySymbol}{(Number(item.price) * item.quantity).toFixed(2)}</span>
+                    <span className="font-medium tabular-nums ml-2">{currencySymbol}{(Number(item.price) * item.quantity).toFixed(2)}</span>
                   </li>
                 ))}
               </ul>

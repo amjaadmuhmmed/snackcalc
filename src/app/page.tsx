@@ -37,6 +37,7 @@ import { setSharedOrderInRTDB, SharedOrderItem, SharedOrderData, subscribeToShar
 
 interface SelectedItem extends Snack { // Snack here refers to the item structure
   quantity: number;
+  // price is already here from Snack, it will represent the actual selling price for this instance
 }
 
 const itemSchema = z.object({
@@ -215,7 +216,7 @@ function HomeContent() {
           return {
             id: baseItem?.id || item.id,
             name: item.name,
-            price: Number(item.price),
+            price: Number(item.price), // Use price from RTDB data
             quantity: item.quantity,
             category: baseItem?.category || 'Unknown',
             cost: baseItem?.cost,
@@ -280,6 +281,7 @@ function HomeContent() {
         newSelected.splice(existingItemIndex, 1);
         return [updated, ...newSelected];
       } else {
+        // Initialize with the item's default price
         const newItemData: SelectedItem = { ...item, price: Number(item.price), quantity: 1 };
         return [newItemData, ...prevSelected];
       }
@@ -306,6 +308,20 @@ function HomeContent() {
       }
     });
   };
+
+  const handleSelectedPriceChange = (itemId: string, newPriceString: string) => {
+    const newPrice = parseFloat(newPriceString);
+    if (isNaN(newPrice) || newPrice < 0) return; // Or handle error, set to 0, etc.
+
+    setIsLocalDirty(true);
+    lastInteractedItemIdRef.current = itemId;
+    setSelectedItems(prevSelected =>
+      prevSelected.map(item =>
+        item.id === itemId ? { ...item, price: newPrice } : item
+      )
+    );
+  };
+
 
   const getItemQuantity = (itemId: string) => {
     const selected = selectedItems.find((s) => s.id === itemId);
@@ -412,9 +428,10 @@ function HomeContent() {
 
       try {
           const result = await saveBill(billData, editingBillId || undefined);
-          toast({ title: result.message });
+          // Do not show toast on auto-save/sync
+          // toast({ title: result.message }); 
           if (result.success) {
-              await loadItems();
+              await loadItems(); // Reload items to reflect any stock changes
               if (resetFormAfterSave) {
                 setSelectedItems([]);
                 setServiceCharge(0);
@@ -438,12 +455,12 @@ function HomeContent() {
                   setEditingBillId(result.billId);
                 }
                 setIsLocalDirty(false);
-                if (itemsVisible) {
+                if (itemsVisible) { // If items were visible, hide them after saving
                     setItemsVisible(false);
                 }
               }
           } else {
-              // toast({ variant: "destructive", title: editingBillId ? "Failed to update bill." : "Failed to save bill.", description: result.message });
+              toast({ variant: "destructive", title: editingBillId ? "Failed to update bill." : "Failed to save bill.", description: result.message });
           }
       } catch (error: any) {
           toast({ variant: "destructive", title: editingBillId ? "Error updating bill." : "Error saving bill.", description: error.message });
@@ -471,12 +488,12 @@ function HomeContent() {
       setIsAdmin(true);
       setPassword("");
       setShowAdminLoginSection(false);
+      setItemsVisible(false); // Hide bill section when admin logs in
+      sessionStorage.setItem(SESSION_STORAGE_ADMIN_LOGGED_IN_KEY, 'true');
       const storedAdminView = sessionStorage.getItem(SESSION_STORAGE_ADMIN_VIEW_KEY) as AdminActiveView;
       const viewToSet = storedAdminView || 'items';
       setAdminActiveView(viewToSet);
-      sessionStorage.setItem(SESSION_STORAGE_ADMIN_LOGGED_IN_KEY, 'true');
       sessionStorage.setItem(SESSION_STORAGE_ADMIN_VIEW_KEY, viewToSet);
-      setItemsVisible(false);
     } else {
       toast({
         variant: "destructive",
@@ -489,7 +506,7 @@ function HomeContent() {
     setIsAdmin(false);
     setAdminActiveView(null);
     setShowAdminLoginSection(false);
-    setItemsVisible(true);
+    setItemsVisible(true); // Show bill section when admin logs out
     sessionStorage.removeItem(SESSION_STORAGE_ADMIN_LOGGED_IN_KEY);
     sessionStorage.removeItem(SESSION_STORAGE_ADMIN_VIEW_KEY);
   };
@@ -562,7 +579,7 @@ function HomeContent() {
     if (typeof window === "undefined") {
         setShareUrl("");
         setIsGeneratingShareUrl(false);
-        if (!editingBillId) {
+        if (!editingBillId) { // Only reset activeSharedOrderNumber if not editing a Firestore bill
             setActiveSharedOrderNumber(null);
         }
         return;
@@ -588,7 +605,7 @@ function HomeContent() {
     };
 
     try {
-      setActiveSharedOrderNumber(orderNumberToShare);
+      setActiveSharedOrderNumber(orderNumberToShare); // Set this regardless of editingBillId for sharing
       await setSharedOrderInRTDB(orderNumberToShare, sharedOrderPayload);
       const baseUrl = window.location.origin;
       const fullUrl = `${baseUrl}/orders/${orderNumberToShare}`;
@@ -596,15 +613,15 @@ function HomeContent() {
 
     } catch (error) {
       console.error("Failed to share bill to RTDB:", error);
-      // toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
+      toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
       setShareUrl("");
-      if (!editingBillId) {
+      if (!editingBillId) { // Only reset activeSharedOrderNumber if not editing a Firestore bill
          setActiveSharedOrderNumber(null);
       }
     } finally {
       setIsGeneratingShareUrl(false);
     }
-  }, [selectedItems, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, toast, editingBillId]);
+  }, [selectedItems, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, editingBillId]);
 
 
   useEffect(() => {
@@ -648,11 +665,12 @@ function HomeContent() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
-        if (!editingBillId) {
+        if (!editingBillId) { // Only clear dirty flag if not in Firestore edit mode.
           setIsLocalDirty(false);
         }
       } catch (error) {
         console.error("Failed to auto-update RTDB from main page:", error);
+         toast({ variant: "destructive", title: "Real-time Sync Error", description: "Failed to sync changes automatically." });
       } finally {
         setIsUpdatingRTDBFromMain(false);
       }
@@ -746,7 +764,7 @@ function HomeContent() {
                     setShowAdminLoginSection(nextShowAdminLoginSection);
                     if (nextShowAdminLoginSection && !isAdmin) {
                         setItemsVisible(false);
-                    } else if (!nextShowAdminLoginSection && !isAdmin) {
+                    } else if (!nextShowAdminLoginSection && !isAdmin && !isEditing) { // Ensure items are visible if not admin and not editing
                         setItemsVisible(true);
                     }
                 }}
@@ -871,8 +889,26 @@ function HomeContent() {
                       ref={(el) => listRefs.current[item.id] = el}
                       className="flex items-center justify-between text-sm p-1.5 rounded-md hover:bg-muted/50"
                     >
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-2 flex-grow">
                         <span>{item.name}</span>
+                        <Input
+                          type="number"
+                          value={item.price.toString()} // Ensure it's a string for input value
+                          onChange={(e) => handleSelectedPriceChange(item.id, e.target.value)}
+                          onBlur={(e) => { // Optional: Format on blur
+                            const newPrice = parseFloat(e.target.value);
+                            if (!isNaN(newPrice) && newPrice >=0) {
+                                handleSelectedPriceChange(item.id, newPrice.toFixed(2));
+                            } else {
+                                // Reset to original if invalid, or keep current valid price
+                                const originalItem = items.find(i => i.id === item.id);
+                                handleSelectedPriceChange(item.id, (originalItem ? originalItem.price : 0).toFixed(2));
+                            }
+                          }}
+                          className="h-7 w-20 text-xs px-1 text-right"
+                          disabled={!itemsVisible}
+                          aria-label={`Price for ${item.name}`}
+                        />
                         <div className="flex items-center border rounded-md">
                           <Button
                             variant="ghost"
@@ -902,7 +938,7 @@ function HomeContent() {
                           </Button>
                         </div>
                       </div>
-                      <span className="font-medium tabular-nums">{currencySymbol}{typeof item.price === 'number' ? (item.price * item.quantity).toFixed(2) : 'N/A'}</span>
+                      <span className="font-medium tabular-nums ml-2">{currencySymbol}{typeof item.price === 'number' ? (item.price * item.quantity).toFixed(2) : 'N/A'}</span>
                     </li>
                   ))}
                 </ul>
@@ -1030,7 +1066,7 @@ function HomeContent() {
             <Button className="mt-4 w-full" onClick={handleAdminLogin}>Login</Button>
             <Button variant="ghost" className="mt-2 w-full" onClick={() => {
                 setShowAdminLoginSection(false);
-                setItemsVisible(true);
+                setItemsVisible(true); // Ensure items are visible when canceling admin login
             }}>Cancel</Button>
           </CardContent>
         </Card>
