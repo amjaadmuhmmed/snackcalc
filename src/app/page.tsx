@@ -70,6 +70,8 @@ type AdminActiveView = 'items' | 'purchasing' | null;
 const SESSION_STORAGE_ADMIN_LOGGED_IN_KEY = 'isAdminLoggedIn';
 const SESSION_STORAGE_ADMIN_VIEW_KEY = 'adminActiveView';
 
+const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
+
 
 function HomeContent() {
   const router = useRouter();
@@ -157,7 +159,7 @@ function HomeContent() {
       if (adminLoggedIn === 'true') {
         setIsAdmin(true);
         setShowAdminLoginSection(false);
-        setAdminActiveView(storedAdminView || 'items'); // Restore view or default to items
+        setAdminActiveView(storedAdminView || 'items'); 
         setItemsVisible(false);
       }
     }
@@ -175,7 +177,7 @@ function HomeContent() {
       setEditingBillId(editFsBillId);
       setActiveSharedOrderNumber(editOrderNum);
       setItemsVisible(true);
-      setIsLocalDirty(false);
+      setIsLocalDirty(false); // Start clean when loading an existing bill
       console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
     } else if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
@@ -410,6 +412,7 @@ function HomeContent() {
 
       try {
           const result = await saveBill(billData, editingBillId || undefined);
+          toast({ title: result.message });
           if (result.success) {
               await loadItems();
               if (resetFormAfterSave) {
@@ -440,7 +443,7 @@ function HomeContent() {
                 }
               }
           } else {
-              toast({ variant: "destructive", title: editingBillId ? "Failed to update bill." : "Failed to save bill.", description: result.message });
+              // toast({ variant: "destructive", title: editingBillId ? "Failed to update bill." : "Failed to save bill.", description: result.message });
           }
       } catch (error: any) {
           toast({ variant: "destructive", title: editingBillId ? "Error updating bill." : "Error saving bill.", description: error.message });
@@ -593,7 +596,7 @@ function HomeContent() {
 
     } catch (error) {
       console.error("Failed to share bill to RTDB:", error);
-      toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
+      // toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
       setShareUrl("");
       if (!editingBillId) {
          setActiveSharedOrderNumber(null);
@@ -841,7 +844,7 @@ function HomeContent() {
                             className="rounded-full px-3 py-1 h-auto text-xs"
                             onClick={() => handleItemIncrement(item)}
                           >
-                            {item.name} (₹{Number(item.price).toFixed(2)})
+                            {item.name} ({currencySymbol}{Number(item.price).toFixed(2)})
                           </Button>
                           {getItemQuantity(item.id) > 0 && (
                             <Badge variant="secondary" className="text-xs px-1.5 py-0.5">
@@ -899,7 +902,7 @@ function HomeContent() {
                           </Button>
                         </div>
                       </div>
-                      <span className="font-medium tabular-nums">₹{typeof item.price === 'number' ? (item.price * item.quantity).toFixed(2) : 'N/A'}</span>
+                      <span className="font-medium tabular-nums">{currencySymbol}{typeof item.price === 'number' ? (item.price * item.quantity).toFixed(2) : 'N/A'}</span>
                     </li>
                   ))}
                 </ul>
@@ -939,7 +942,7 @@ function HomeContent() {
               </div>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="service-charge" className="text-sm">Service Charge (₹)</Label>
+              <Label htmlFor="service-charge" className="text-sm">Service Charge ({currencySymbol})</Label>
               <Input
                 id="service-charge"
                 type="text"
@@ -986,7 +989,7 @@ function HomeContent() {
             <div className="flex flex-col items-center justify-between gap-3">
                <div className="flex justify-between w-full items-center">
                    <span className="text-base font-semibold">Total:</span>
-                   <Badge variant="secondary" className="text-base font-semibold tabular-nums">₹{total.toFixed(2)}</Badge>
+                   <Badge variant="secondary" className="text-base font-semibold tabular-nums">{currencySymbol}{total.toFixed(2)}</Badge>
                </div>
 
               {(total > 0 || selectedItems.length > 0 || editingBillId || !itemsVisible) && (
@@ -1078,12 +1081,12 @@ function HomeContent() {
                                 {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
                                 </div>
                                 <div className="grid gap-2">
-                                <Label htmlFor="price">Selling Price (₹)</Label>
+                                <Label htmlFor="price">Selling Price ({currencySymbol})</Label>
                                 <Input id="price" type="text" placeholder="Item Selling Price" {...register("price")} required inputMode="decimal"/>
                                 {errors.price && <p className="text-sm text-destructive">{errors.price.message}</p>}
                                 </div>
                                 <div className="grid gap-2">
-                                <Label htmlFor="cost">Cost Price (₹)</Label>
+                                <Label htmlFor="cost">Cost Price ({currencySymbol})</Label>
                                 <Input id="cost" type="text" placeholder="Item Cost Price (Optional)" {...register("cost")} inputMode="decimal"/>
                                 {errors.cost && <p className="text-sm text-destructive">{errors.cost.message}</p>}
                                 </div>
@@ -1144,7 +1147,7 @@ function HomeContent() {
                                     <div className="flex flex-col text-sm">
                                         <span className="font-medium">{item.name}</span>
                                         <span className="text-xs text-muted-foreground">
-                                        Sell: ₹{price} {cost !== 'N/A' ? `| Cost: ₹${cost}` : ''} {item.itemCode ? `| Code: ${item.itemCode}` : ''} | Stock: {stock !== undefined ? stock : 'N/A'} - {item.category}
+                                        Sell: {currencySymbol}{price} {cost !== 'N/A' ? `| Cost: ${currencySymbol}${cost}` : ''} {item.itemCode ? `| Code: ${item.itemCode}` : ''} | Stock: {stock !== undefined ? stock : 'N/A'} - {item.category}
                                         </span>
                                     </div>
                                     <div className="flex space-x-2">

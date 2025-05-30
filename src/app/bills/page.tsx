@@ -30,6 +30,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 
+const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
 
 // Helper to convert Firestore Timestamp to JS Date
 const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
@@ -179,7 +180,7 @@ export default function BillsPage() {
         itemsHtml += `
           <tr class="item">
             <td>${item.name} (x${item.quantity}) ${item.itemCode ? `[${item.itemCode}]` : ''}</td>
-            <td class="text-right">₹${itemTotal.toFixed(2)}</td>
+            <td class="text-right">${currencySymbol}${itemTotal.toFixed(2)}</td>
           </tr>
         `;
       });
@@ -236,15 +237,15 @@ export default function BillsPage() {
                 <tbody>
                   <tr>
                     <td>Subtotal:</td>
-                    <td class="text-right">₹${subtotal.toFixed(2)}</td>
+                    <td class="text-right">${currencySymbol}${subtotal.toFixed(2)}</td>
                   </tr>
                   <tr>
                     <td>Service Charge:</td>
-                    <td class="text-right">₹${bill.serviceCharge.toFixed(2)}</td>
+                    <td class="text-right">${currencySymbol}${bill.serviceCharge.toFixed(2)}</td>
                   </tr>
                   <tr class="strong">
                     <td>TOTAL:</td>
-                    <td class="text-right">₹${bill.totalAmount.toFixed(2)}</td>
+                    <td class="text-right">${currencySymbol}${bill.totalAmount.toFixed(2)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -319,7 +320,7 @@ export default function BillsPage() {
             <td>${item.name}</td>
             <td>${item.itemCode || '-'}</td>
             <td class="text-right">${item.totalQuantity}</td>
-            <td class="text-right">₹${item.totalRevenue.toFixed(2)}</td>
+            <td class="text-right">${currencySymbol}${item.totalRevenue.toFixed(2)}</td>
           </tr>
         `;
       });
@@ -367,7 +368,7 @@ export default function BillsPage() {
               </table>
               <div class="separator"></div>
               <div class="footer-total">
-                <p>Total Revenue: ₹${overallTotalRevenue.toFixed(2)}</p>
+                <p>Total Revenue: ${currencySymbol}${overallTotalRevenue.toFixed(2)}</p>
               </div>
             </div>
           </body>
@@ -486,7 +487,7 @@ export default function BillsPage() {
                                     <TableCell>{item.name}</TableCell>
                                     <TableCell>{item.itemCode || '-'}</TableCell>
                                     <TableCell className="text-right">{item.totalQuantity}</TableCell>
-                                    <TableCell className="text-right">₹{item.totalRevenue.toFixed(2)}</TableCell>
+                                    <TableCell className="text-right">{currencySymbol}{item.totalRevenue.toFixed(2)}</TableCell>
                                   </TableRow>
                                 ))}
                               </TableBody>
@@ -549,13 +550,13 @@ export default function BillsPage() {
                       <ul className="list-disc list-inside text-sm">
                         {(bill.items || []).map((item, index) => (
                           <li key={index}>
-                            {item.name} (x{item.quantity}) - ₹{item.price.toFixed(2)} {item.itemCode ? `[${item.itemCode}]`: ''}
+                            {item.name} (x{item.quantity}) - {currencySymbol}{item.price.toFixed(2)} {item.itemCode ? `[${item.itemCode}]`: ''}
                           </li>
                         ))}
                       </ul>
                     </TableCell>
-                    <TableCell className="text-right">₹{bill.serviceCharge.toFixed(2)}</TableCell>
-                    <TableCell className="text-right font-semibold">₹{bill.totalAmount.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{currencySymbol}{bill.serviceCharge.toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-semibold">{currencySymbol}{bill.totalAmount.toFixed(2)}</TableCell>
                     <TableCell className="text-center space-x-1">
                       <Button variant="outline" size="sm" onClick={() => handleEditBill(bill)} aria-label="Edit Bill">
                         <Edit className="h-3 w-3 mr-1" /> Edit

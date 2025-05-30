@@ -39,6 +39,8 @@ const generatePurchaseOrderNumber = () => {
   return `PO-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
 };
 
+const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
+
 export default function CreatePurchasePage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -404,7 +406,7 @@ export default function CreatePurchasePage() {
                         </Button>
                       </div>
                        <span className="font-medium tabular-nums w-20 text-right">
-                        ₹{(Number(item.purchaseCost) * item.quantity).toFixed(2)}
+                        {currencySymbol}{(Number(item.purchaseCost) * item.quantity).toFixed(2)}
                        </span>
                     </div>
                   </li>
@@ -434,7 +436,7 @@ export default function CreatePurchasePage() {
             <div className="flex justify-between w-full sm:w-auto sm:min-w-[200px] items-center">
               <span className="text-lg font-semibold">Total Purchase Amount:</span>
               <Badge variant="secondary" className="text-lg font-semibold tabular-nums">
-                ₹{calculateTotal.toFixed(2)}
+                {currencySymbol}{calculateTotal.toFixed(2)}
               </Badge>
             </div>
             <Button

@@ -12,7 +12,9 @@ import { getPurchases } from "@/app/actions";
 import type { Purchase } from "@/lib/db";
 import { format, isValid } from 'date-fns';
 import { Timestamp } from "firebase/firestore";
-import { Toaster } from "@/components/ui/toaster"; // Added missing import
+import { Toaster } from "@/components/ui/toaster"; 
+
+const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
 
 const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
   if (!timestamp) return null;
@@ -119,13 +121,13 @@ export default function PurchaseHistoryPage() {
                       <ul className="list-disc list-inside text-sm">
                         {(purchase.items || []).map((item, index) => (
                           <li key={index}>
-                            {item.name} (x{item.quantity}) - @ ₹{item.purchaseCost.toFixed(2)} each
+                            {item.name} (x{item.quantity}) - @ {currencySymbol}{item.purchaseCost.toFixed(2)} each
                             {item.itemCode ? ` [${item.itemCode}]` : ''}
                           </li>
                         ))}
                       </ul>
                     </TableCell>
-                    <TableCell className="text-right font-semibold">₹{purchase.totalAmount.toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-semibold">{currencySymbol}{purchase.totalAmount.toFixed(2)}</TableCell>
                     <TableCell className="text-xs whitespace-pre-wrap max-w-xs">{purchase.notes || '-'}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatDisplayDate(purchase.createdAt)}</TableCell>
                   </TableRow>
