@@ -103,7 +103,7 @@ function HomeContent() {
   const listRefs = useRef<Record<string, HTMLLIElement | null>>({});
   const lastInteractedItemIdRef = useRef<string | null>(null);
 
-  const [itemsVisible, setItemsVisible] = useState(true); // Renamed from snacksVisible
+  const [itemsVisible, setItemsVisible] = useState(true);
   const prevShowShareDialogRef = useRef<boolean | undefined>();
 
   const [adminActiveView, setAdminActiveView] = useState<AdminActiveView>('items');
@@ -573,6 +573,7 @@ function HomeContent() {
 
 
   useEffect(() => {
+    // Only call handleShareBill if showShareDialog transitions from false/undefined to true
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
       handleShareBill(orderNumber);
     }
@@ -613,6 +614,8 @@ function HomeContent() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
+        // Only reset local dirty if not in Firestore edit mode.
+        // Firestore edit mode dirty flag is managed by handleSaveBill.
         if (!editingBillId) { 
           setIsLocalDirty(false);
         }
@@ -1092,7 +1095,7 @@ function HomeContent() {
                         setAdminActiveView(null);
                     }}>Logout Admin</Button>
                 </div>
-                <div className="flex flex-wrap space-x-2 pt-2 border-b pb-2">
+                <div className="flex flex-wrap gap-2 pt-2 border-b pb-2">
                     <Button 
                         variant={adminActiveView === 'items' ? 'default' : 'outline'} 
                         size="sm"
@@ -1111,7 +1114,6 @@ function HomeContent() {
                         <Button 
                             variant={'outline'} 
                             size="sm"
-                            className="mt-2 sm:mt-0" // Add margin for smaller screens if needed
                         >
                            <History className="mr-2 h-4 w-4" /> Sales History
                         </Button>
