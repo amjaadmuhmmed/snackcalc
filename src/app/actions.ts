@@ -19,6 +19,10 @@ import {
     updateStockAfterPurchase,
     PurchaseItem,
     getPurchasesFromDb,
+    SupplierInput,
+    addSupplierToDb,
+    getSuppliersFromDb,
+    Supplier,
     getDoc
 } from '@/lib/db';
 import {revalidatePath} from 'next/cache';
@@ -74,9 +78,9 @@ export async function addItem(data: FormData) {
     if (result.success) {
       revalidatePath('/');
       revalidatePath('/bills');
-      revalidatePath('/purchases/create'); // Revalidate if items are shown there
+      revalidatePath('/purchases/create'); 
       revalidatePath('/purchases/history');
-      return {success: true, message: 'Item added successfully!'};
+      return {success: true, message: 'Item added successfully!', id: result.id};
     } else {
       return {success: false, message: result.message || 'Failed to add item.'};
     }
@@ -200,9 +204,10 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
             if (!itemId) return;
             const newQty = currentBillItemsMap.get(itemId) || 0;
             const oldQty = oldBillItemsMap.get(itemId) || 0;
-            const quantityDelta = newQty - oldQty;
+            const quantityDelta = newQty - oldQty; // For sales, positive delta means more sold (stock decreases)
 
             if (quantityDelta !== 0) {
+                 // For sales, quantityChange to updateStockQuantitiesForBill should represent the amount *sold*
                 stockAdjustments.push({ itemId, quantityChange: quantityDelta });
             }
         });
@@ -219,6 +224,7 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
 
         if (billActionResult.success) {
             if (stockAdjustments.length > 0) {
+                // Pass the net change; updateStockQuantitiesForBill will subtract this from current stock
                 const stockUpdateResult = await updateStockQuantitiesForBill(stockAdjustments);
                 if (!stockUpdateResult.success) {
                     stockUpdateResultMessage = stockUpdateResult.message || "Stock update failed.";
@@ -258,25 +264,22 @@ export async function getBills() {
 // --- Purchase Actions ---
 export async function savePurchase(purchaseData: PurchaseInput) {
     try {
-        // 1. Save the purchase document
         const purchaseResult = await addPurchaseToDb(purchaseData);
         if (!purchaseResult.success || !purchaseResult.id) {
             return { success: false, message: purchaseResult.message || 'Failed to save purchase order.' };
         }
 
-        // 2. Update stock quantities for the purchased items
         const stockUpdateResult = await updateStockAfterPurchase(purchaseData.items);
         if (!stockUpdateResult.success) {
-            // Log or handle the case where purchase is saved but stock update fails
             console.warn(`Purchase ${purchaseResult.id} saved, but stock update failed: ${stockUpdateResult.message}`);
             return {
-                success: true, // Purchase itself was saved
+                success: true, 
                 message: `Purchase saved successfully, but failed to update stock levels. Please verify stock manually. Error: ${stockUpdateResult.message}`,
                 purchaseId: purchaseResult.id
             };
         }
 
-        revalidatePath('/'); // Revalidate items list for stock changes
+        revalidatePath('/'); 
         revalidatePath('/purchases/create');
         revalidatePath('/purchases/history');
 
@@ -294,4 +297,33 @@ export async function savePurchase(purchaseData: PurchaseInput) {
 
 export async function getPurchases() {
     return getPurchasesFromDb();
+}
+
+
+// --- Supplier Actions ---
+export async function addSupplier(data: FormData): Promise<{ success: boolean; id?: string; supplier?: Supplier; message?: string }> {
+    try {
+        const name = data.get('name') as string;
+        if (!name || name.trim() === "") {
+            return { success: false, message: 'Supplier name cannot be empty.' };
+        }
+
+        const newSupplier: SupplierInput = { name };
+        const result = await addSupplierToDb(newSupplier);
+
+        if (result.success && result.id) {
+            revalidatePath('/purchases/create'); // Revalidate if suppliers are listed there
+            return { success: true, message: 'Supplier added successfully!', id: result.id, supplier: {id: result.id, name }};
+        } else {
+            return { success: false, message: result.message || 'Failed to add supplier.' };
+        }
+    } catch (error: any) {
+        console.error('Error adding supplier:', error);
+        return { success: false, message: error.message || 'An unexpected error occurred while adding supplier.' };
+    }
+}
+
+
+export async function getSuppliers(): Promise<Supplier[]> {
+    return getSuppliersFromDb();
 }

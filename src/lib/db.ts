@@ -2,7 +2,7 @@
 'use server';
 
 import {db} from './firebase';
-import {collection, addDoc, getDocs, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp, runTransaction, DocumentReference, writeBatch, getDoc as firestoreGetDoc} from 'firebase/firestore';
+import {collection, addDoc, getDocs, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp, runTransaction, DocumentReference, writeBatch, getDoc as firestoreGetDoc, where} from 'firebase/firestore';
 
 // --- Items (formerly Snacks) ---
 
@@ -29,8 +29,8 @@ export async function addItemToDb(item: SnackInput) {
       itemCode: item.itemCode || '',
       stockQuantity: Number(item.stockQuantity) || 0,
     };
-    await addDoc(itemsCollection, itemData);
-    return {success: true};
+    const docRef = await addDoc(itemsCollection, itemData);
+    return {success: true, id: docRef.id};
   } catch (e: any) {
     console.error('Error adding item document: ', e);
     return {success: false, message: e.message};
@@ -228,7 +228,7 @@ export async function updateStockQuantitiesForBill(
                 }
 
                 const currentStock = Number(itemDocSnap.data().stockQuantity) || 0;
-                const newStock = currentStock - quantityChange;
+                const newStock = currentStock - quantityChange; // Subtract for sales
                 transaction.update(itemDocRef, { stockQuantity: newStock });
             }
         });
@@ -244,19 +244,19 @@ export interface PurchaseItem {
     itemId: string;
     name: string;
     quantity: number;
-    purchaseCost: number; // Cost at the time of this specific purchase
+    purchaseCost: number;
     itemCode?: string;
 }
 
 export interface Purchase {
-    id: string; // Firestore document ID
+    id: string;
     purchaseOrderNumber: string;
     supplierName?: string;
-    purchaseDate: Timestamp | Date; // Could be a specific date chosen by user
+    purchaseDate: Timestamp | Date;
     items: PurchaseItem[];
     totalAmount: number;
     notes?: string;
-    createdAt: Timestamp | Date; // System timestamp when record is created
+    createdAt: Timestamp | Date;
 }
 
 export interface PurchaseInput extends Omit<Purchase, 'id' | 'createdAt'> {}
@@ -292,22 +292,15 @@ export async function updateStockAfterPurchase(
                 continue;
             }
             const itemDocRef = doc(db, 'snack', pItem.itemId);
-            const itemDocSnap = await firestoreGetDoc(itemDocRef); // Use firestoreGetDoc to avoid conflict
+            const itemDocSnap = await firestoreGetDoc(itemDocRef);
 
             if (!itemDocSnap.exists()) {
                 console.error(`Item with ID ${pItem.itemId} (${pItem.name}) not found for stock update.`);
-                // Decide if this should throw an error or just skip
-                // For now, we'll skip and potentially log, but this could be an error condition
                 continue;
             }
             const currentStock = Number(itemDocSnap.data().stockQuantity) || 0;
-            const newStock = currentStock + pItem.quantity;
+            const newStock = currentStock + pItem.quantity; // Add for purchases
             batch.update(itemDocRef, { stockQuantity: newStock });
-
-            // Optional: Update default item cost price based on this purchase
-            // For example, set it to the latest purchaseCost or average it.
-            // For now, we'll only update stock. If you want to update cost:
-            // batch.update(itemDocRef, { stockQuantity: newStock, cost: pItem.purchaseCost });
         }
         await batch.commit();
         return { success: true };
@@ -335,7 +328,7 @@ export async function getPurchasesFromDb(): Promise<Purchase[]> {
           id: docSnap.id,
           purchaseOrderNumber: data.purchaseOrderNumber,
           supplierName: data.supplierName || '',
-          purchaseDate: data.purchaseDate, // Keep as Firestore Timestamp or convert as needed
+          purchaseDate: data.purchaseDate,
           items: items,
           totalAmount: data.totalAmount,
           notes: data.notes || '',
@@ -348,5 +341,54 @@ export async function getPurchasesFromDb(): Promise<Purchase[]> {
     }
 }
 
+// --- Suppliers ---
+export interface Supplier {
+  id: string;
+  name: string;
+  // Add other fields like contact, address as needed in the future
+}
+export interface SupplierInput extends Omit<Supplier, 'id'> {}
+
+const suppliersCollection = collection(db, 'suppliers');
+
+export async function addSupplierToDb(supplier: SupplierInput): Promise<{ success: boolean; id?: string; message?: string }> {
+    try {
+        // Check if supplier with the same name already exists (case-insensitive)
+        const q = query(suppliersCollection, where("name_lowercase", "==", supplier.name.toLowerCase()));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+            return { success: false, message: `Supplier with name '${supplier.name}' already exists.` };
+        }
+
+        const docRef = await addDoc(suppliersCollection, {
+            ...supplier,
+            name_lowercase: supplier.name.toLowerCase(), // For case-insensitive checks
+            createdAt: serverTimestamp()
+        });
+        return { success: true, id: docRef.id };
+    } catch (e: any) {
+        console.error('Error adding supplier document: ', e);
+        return { success: false, message: e.message };
+    }
+}
+
+export async function getSuppliersFromDb(): Promise<Supplier[]> {
+    try {
+        const suppliersQuery = query(suppliersCollection, orderBy('name'));
+        const supplierSnapshot = await getDocs(suppliersQuery);
+        return supplierSnapshot.docs.map(docSnap => {
+            const data = docSnap.data();
+            return {
+                id: docSnap.id,
+                name: data.name || 'Unnamed Supplier',
+            } as Supplier;
+        });
+    } catch (e: any) {
+        console.error('Error getting supplier documents: ', e);
+        return [];
+    }
+}
+
 
 export { firestoreGetDoc as getDoc };
+

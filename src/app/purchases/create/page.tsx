@@ -12,17 +12,27 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { DatePicker } from "@/components/ui/date-picker"; // Correctly import from UI components
+import { DatePicker } from "@/components/ui/date-picker"; 
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, Calendar as CalendarIconLucide } from "lucide-react"; // Renamed Calendar to avoid conflict if any
-import { getItems, savePurchase } from "@/app/actions";
-import type { Snack, PurchaseInput, PurchaseItem as DbPurchaseItem } from "@/lib/db"; // Snack is used as Item type
+import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, Calendar as CalendarIconLucide, AlertCircle } from "lucide-react"; 
+import { getItems, savePurchase, getSuppliers, addSupplier } from "@/app/actions";
+import type { Snack, PurchaseInput, PurchaseItem as DbPurchaseItem, Supplier } from "@/lib/db"; 
 import { Timestamp } from "firebase/firestore";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog";
+
 
 interface SelectedItemForPurchase extends Snack {
   quantity: number;
-  purchaseCost: number; // Cost for this specific purchase
+  purchaseCost: number; 
 }
 
 const generatePurchaseOrderNumber = () => {
@@ -34,19 +44,24 @@ export default function CreatePurchasePage() {
   const { toast } = useToast();
 
   const [allItems, setAllItems] = useState<Snack[]>([]);
+  const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
   const [selectedItems, setSelectedItems] = useState<SelectedItemForPurchase[]>([]);
   const [purchaseOrderNumber, setPurchaseOrderNumber] = useState<string>("");
-  const [supplierName, setSupplierName] = useState<string>("");
-  const [purchaseDate, setPurchaseDate] = useState<Date | undefined>(undefined); // Initialize to undefined
+  const [supplierNameInput, setSupplierNameInput] = useState<string>("");
+  const [purchaseDate, setPurchaseDate] = useState<Date | undefined>(undefined); 
   const [notes, setNotes] = useState<string>("");
   const [isSavingPurchase, setIsSavingPurchase] = useState(false);
   const [isLoadingItems, setIsLoadingItems] = useState(true);
+  const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+
+  const [showNewSupplierDialog, setShowNewSupplierDialog] = useState(false);
+  const [newSupplierNameToCreate, setNewSupplierNameToCreate] = useState("");
+
 
   const listRefs = useRef<Record<string, HTMLLIElement | null>>({});
   const lastInteractedItemIdRef = useRef<string | null>(null);
 
-  // Set purchaseDate on client-side after mount
   useEffect(() => {
     setPurchaseDate(new Date());
   }, []);
@@ -54,20 +69,27 @@ export default function CreatePurchasePage() {
 
   useEffect(() => {
     setPurchaseOrderNumber(generatePurchaseOrderNumber());
-    const loadAllItems = async () => {
+    const loadInitialData = async () => {
       setIsLoadingItems(true);
+      setIsLoadingSuppliers(true);
       try {
-        const itemsFromDb = await getItems();
+        const [itemsFromDb, suppliersFromDb] = await Promise.all([
+          getItems(),
+          getSuppliers()
+        ]);
         setAllItems(itemsFromDb || []);
+        setAllSuppliers(suppliersFromDb || []);
       } catch (error: any) {
-        console.error("Failed to load items:", error);
-        toast({ variant: "destructive", title: "Failed to load item list." });
+        console.error("Failed to load initial data:", error);
+        toast({ variant: "destructive", title: "Failed to load page data." });
         setAllItems([]);
+        setAllSuppliers([]);
       } finally {
         setIsLoadingItems(false);
+        setIsLoadingSuppliers(false);
       }
     };
-    loadAllItems();
+    loadInitialData();
   }, [toast]);
 
   useEffect(() => {
@@ -134,26 +156,12 @@ export default function CreatePurchasePage() {
     return selected ? selected.quantity : 0;
   };
 
-  const handleSavePurchase = async () => {
-    if (selectedItems.length === 0) {
-      toast({ variant: "default", title: "Cannot save an empty purchase order." });
-      return;
-    }
-    if (!purchaseDate) {
-      toast({ variant: "destructive", title: "Purchase Date is required."});
-      return;
-    }
-     if (!purchaseOrderNumber.trim()) {
-      toast({ variant: "destructive", title: "Purchase Order Number is required." });
-      return;
-    }
-
+  const proceedToSavePurchase = async (currentSupplierName: string) => {
     setIsSavingPurchase(true);
-
     const purchaseData: PurchaseInput = {
       purchaseOrderNumber: purchaseOrderNumber,
-      supplierName: supplierName,
-      purchaseDate: Timestamp.fromDate(purchaseDate),
+      supplierName: currentSupplierName,
+      purchaseDate: Timestamp.fromDate(purchaseDate!),
       items: selectedItems.map(s => ({
         itemId: s.id,
         name: s.name,
@@ -170,10 +178,13 @@ export default function CreatePurchasePage() {
       if (result.success) {
         toast({ title: result.message });
         setSelectedItems([]);
-        setSupplierName("");
+        setSupplierNameInput("");
         setNotes("");
         setPurchaseOrderNumber(generatePurchaseOrderNumber());
         setPurchaseDate(new Date());
+        // Optionally, navigate or refresh suppliers list if new one was added implicitly
+        const updatedSuppliers = await getSuppliers(); // Re-fetch suppliers
+        setAllSuppliers(updatedSuppliers);
         router.push('/purchases/history');
       } else {
         toast({ variant: "destructive", title: "Failed to save purchase.", description: result.message });
@@ -184,6 +195,58 @@ export default function CreatePurchasePage() {
       setIsSavingPurchase(false);
     }
   };
+
+
+  const handleSavePurchaseAttempt = async () => {
+    if (selectedItems.length === 0) {
+      toast({ variant: "default", title: "Cannot save an empty purchase order." });
+      return;
+    }
+    if (!purchaseDate) {
+      toast({ variant: "destructive", title: "Purchase Date is required."});
+      return;
+    }
+    if (!purchaseOrderNumber.trim()) {
+      toast({ variant: "destructive", title: "Purchase Order Number is required." });
+      return;
+    }
+
+    const trimmedSupplierName = supplierNameInput.trim();
+
+    if (trimmedSupplierName) {
+      const supplierExists = allSuppliers.some(
+        (s) => s.name.toLowerCase() === trimmedSupplierName.toLowerCase()
+      );
+
+      if (!supplierExists) {
+        setNewSupplierNameToCreate(trimmedSupplierName);
+        setShowNewSupplierDialog(true);
+        return; // Stop here, let dialog handle next step
+      }
+    }
+    // If supplier name is empty or exists, proceed directly
+    proceedToSavePurchase(trimmedSupplierName);
+  };
+
+  const handleCreateNewSupplierAndSave = async () => {
+    if (!newSupplierNameToCreate) return;
+
+    const formData = new FormData();
+    formData.append('name', newSupplierNameToCreate);
+
+    const result = await addSupplier(formData);
+    if (result.success && result.supplier) {
+      toast({ title: `Supplier '${result.supplier.name}' created successfully.` });
+      setAllSuppliers(prev => [...prev, result.supplier!]); // Add to local list
+      setShowNewSupplierDialog(false);
+      setSupplierNameInput(result.supplier.name); // Update input with created name
+      proceedToSavePurchase(result.supplier.name); // Now save the purchase
+    } else {
+      toast({ variant: "destructive", title: "Failed to create supplier.", description: result.message });
+      setShowNewSupplierDialog(false); // Still close dialog
+    }
+  };
+
 
   const filteredAllItems = useMemo(() => {
     if (!searchTerm) {
@@ -238,17 +301,27 @@ export default function CreatePurchasePage() {
             </div>
              <div className="grid gap-1.5">
               <Label htmlFor="purchase-date">Purchase Date</Label>
-                <DatePicker date={purchaseDate} setDate={setPurchaseDate} /> {/* Use imported DatePicker */}
+                <DatePicker date={purchaseDate} setDate={setPurchaseDate} /> 
             </div>
             <div className="grid gap-1.5 sm:col-span-2">
-              <Label htmlFor="supplier-name">Supplier Name (Optional)</Label>
+              <Label htmlFor="supplier-name">Supplier Name</Label>
               <Input
                 id="supplier-name"
                 type="text"
-                value={supplierName}
-                onChange={(e) => setSupplierName(e.target.value)}
-                placeholder="e.g., Main Supplier Co."
+                value={supplierNameInput}
+                onChange={(e) => setSupplierNameInput(e.target.value)}
+                placeholder="Enter supplier name"
+                list="suppliers-datalist"
               />
+              {isLoadingSuppliers ? (
+                <p className="text-xs text-muted-foreground">Loading suppliers...</p>
+              ) : (
+                <datalist id="suppliers-datalist">
+                    {allSuppliers.map(supplier => (
+                        <option key={supplier.id} value={supplier.name} />
+                    ))}
+                </datalist>
+              )}
             </div>
           </div>
 
@@ -314,7 +387,7 @@ export default function CreatePurchasePage() {
                        <Input
                         id={`purchase-cost-${item.id}`}
                         type="number"
-                        value={item.purchaseCost === undefined ? '' : item.purchaseCost} // Handle undefined for initial render
+                        value={item.purchaseCost === undefined ? '' : item.purchaseCost} 
                         onChange={(e) => handlePurchaseCostChange(item.id, e.target.value)}
                         className="h-8 w-20 text-xs"
                         placeholder="Cost"
@@ -365,7 +438,7 @@ export default function CreatePurchasePage() {
               </Badge>
             </div>
             <Button
-                onClick={handleSavePurchase}
+                onClick={handleSavePurchaseAttempt}
                 disabled={isSavingPurchase || selectedItems.length === 0}
                 className="w-full sm:w-auto"
             >
@@ -375,6 +448,30 @@ export default function CreatePurchasePage() {
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={showNewSupplierDialog} onOpenChange={setShowNewSupplierDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <AlertCircle className="mr-2 h-5 w-5 text-yellow-500" />
+              Confirm New Supplier
+            </DialogTitle>
+            <DialogDescription>
+              The supplier "<strong>{newSupplierNameToCreate}</strong>" was not found in your records. 
+              Would you like to create this new supplier?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setShowNewSupplierDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateNewSupplierAndSave} disabled={isSavingPurchase}>
+              Yes, Create Supplier and Save PO
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Toaster />
     </div>
   );
