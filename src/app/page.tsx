@@ -17,10 +17,10 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks } from "lucide-react";
+import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
 import { addItem, getItems, updateItem, deleteItem, saveBill } from "./actions";
-import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db"; // Snack is used as an internal type for items
+import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db";
 import Link from "next/link";
 import {
   Dialog,
@@ -35,7 +35,7 @@ import {
 import { setSharedOrderInRTDB, SharedOrderItem, SharedOrderData, subscribeToSharedOrder, SharedOrderDataSnapshot } from "@/lib/rt_db";
 
 
-interface SelectedItem extends Snack { // Snack here refers to the item structure
+interface SelectedItem extends Snack {
   quantity: number;
 }
 
@@ -66,10 +66,12 @@ const generateOrderNumber = () => {
     return `ORD-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 };
 
+type AdminActiveView = 'items' | 'purchasing' | null;
+
 function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [items, setItems] = useState<Snack[]>([]); // Snack is used as an internal type for items
+  const [items, setItems] = useState<Snack[]>([]);
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [serviceCharge, setServiceCharge] = useState<number>(0);
@@ -103,6 +105,9 @@ function HomeContent() {
 
   const [itemsVisible, setItemsVisible] = useState(true);
   const prevShowShareDialogRef = useRef<boolean | undefined>();
+
+  const [adminActiveView, setAdminActiveView] = useState<AdminActiveView>('items');
+
 
   const {
     register,
@@ -150,14 +155,14 @@ function HomeContent() {
       setOrderNumber(editOrderNum);
       setEditingBillId(editFsBillId);
       setActiveSharedOrderNumber(editOrderNum);
-      setItemsVisible(true); // Make items visible when editing from history
-      setIsLocalDirty(false); // Start clean when loading an existing bill
+      setItemsVisible(true); 
+      setIsLocalDirty(false); 
       console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
     } else if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
       setItemsVisible(true);
     }
-  }, [loadItems, searchParams]); // orderNumber removed from deps to avoid re-triggering on its change
+  }, [loadItems, searchParams]); 
 
 
   useEffect(() => {
@@ -242,7 +247,7 @@ function HomeContent() {
     return itemsTotal + serviceCharge;
   };
 
-  const handleItemIncrement = (item: Snack) => { // Snack is used as an internal type for items
+  const handleItemIncrement = (item: Snack) => { 
     setIsLocalDirty(true);
     lastInteractedItemIdRef.current = item.id;
     setSelectedItems((prevSelected) => {
@@ -295,7 +300,7 @@ function HomeContent() {
   }, [selectedItems]);
 
 
-  const handleEditItem = (item: Snack) => { // Snack is used as an internal type for items
+  const handleEditItem = (item: Snack) => { 
     setEditingItemId(item.id);
     setValue("name", item.name);
     setValue("price", item.price.toString());
@@ -373,7 +378,7 @@ function HomeContent() {
           tableNumber: tableNumber,
           notes: notes,
           items: selectedItems.map(s => ({
-            itemId: s.id, // Ensure itemId is included for stock updates
+            itemId: s.id, 
             name: s.name,
             price: Number(s.price),
             quantity: s.quantity,
@@ -386,7 +391,7 @@ function HomeContent() {
       try {
           const result = await saveBill(billData, editingBillId || undefined);
           if (result.success) {
-              await loadItems(); // Reload items to reflect stock changes
+              await loadItems(); 
               if (resetFormAfterSave) {
                 setSelectedItems([]);
                 setServiceCharge(0);
@@ -409,9 +414,9 @@ function HomeContent() {
                 if (!editingBillId && result.billId) {
                   setEditingBillId(result.billId);
                 }
-                setIsLocalDirty(false); // Reset dirty flag after successful save/update
-                if (itemsVisible) { // If items were visible (meaning it was "Save Bill" or "Update Bill" action)
-                    setItemsVisible(false); // Hide item selection area
+                setIsLocalDirty(false); 
+                if (itemsVisible) { 
+                    setItemsVisible(false); 
                 }
               }
                toast({ title: result.message });
@@ -446,6 +451,7 @@ function HomeContent() {
       setIsAdmin(true);
       setPassword("");
       setShowAdminLoginSection(false);
+      setAdminActiveView('items'); // Default to items view on login
     } else {
       toast({
         variant: "destructive",
@@ -534,7 +540,7 @@ function HomeContent() {
       name: s.name,
       price: Number(s.price),
       quantity: s.quantity,
-      itemCode: s.itemCode || '', // Ensure itemCode is included
+      itemCode: s.itemCode || '', 
     }));
 
     const sharedOrderPayload: Omit<SharedOrderData, 'lastUpdatedAt' | 'orderNumber'> = {
@@ -567,7 +573,6 @@ function HomeContent() {
 
 
   useEffect(() => {
-    // Only call handleShareBill if the dialog is being opened (not on every re-render or when closing)
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
       handleShareBill(orderNumber);
     }
@@ -608,7 +613,7 @@ function HomeContent() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
-        if (!editingBillId) { // Only clear dirty flag if not in Firestore edit mode
+        if (!editingBillId) { 
           setIsLocalDirty(false);
         }
       } catch (error) {
@@ -663,11 +668,11 @@ function HomeContent() {
     if (!itemsVisible) {
       setItemsVisible(true);
     } else {
-      handleSaveBill(false); // For "Save Bill" or "Update Bill"
+      handleSaveBill(false); 
     }
   };
 
-  const primaryButtonText = !itemsVisible ? "Edit Items" : (editingBillId ? "Update Bill" : "Save Bill");
+  const primaryButtonText = !itemsVisible ? "Edit Items" : (editingBillId ? "Update Bill" : "Save");
   const PrimaryButtonIcon = !itemsVisible ? Edit : Save;
   const primaryButtonDisabled = isSavingBill;
 
@@ -694,9 +699,9 @@ function HomeContent() {
                 size="icon"
                 onClick={() => {
                     setShowAdminLoginSection(prev => !prev);
-                    if (!showAdminLoginSection && !isAdmin) setItemsVisible(false); // Hide items if opening admin and not admin
-                    else if (isAdmin) setItemsVisible(false); // If admin, always hide items when admin button is clicked
-                    else if (!isAdmin && showAdminLoginSection) setItemsVisible(true); // If closing admin login and not admin, show items
+                    if (!showAdminLoginSection && !isAdmin) setItemsVisible(false); 
+                    else if (isAdmin) setItemsVisible(false); 
+                    else if (!isAdmin && showAdminLoginSection) setItemsVisible(true); 
                 }}
                 aria-label="Toggle Admin Login"
             >
@@ -863,7 +868,7 @@ function HomeContent() {
             <Button className="mt-4 w-full" onClick={handleAdminLogin}>Login</Button>
             <Button variant="ghost" className="mt-2 w-full" onClick={() => {
                 setShowAdminLoginSection(false);
-                setItemsVisible(true);
+                if(!isAdmin) setItemsVisible(true);
             }}>Cancel</Button>
           </CardContent>
         </Card>
@@ -1077,154 +1082,175 @@ function HomeContent() {
 
 
       {isAdmin && (
-        <>
-          <Card className="w-full max-w-md mt-4">
+        <Card className="w-full max-w-md mt-4">
             <CardHeader>
-              <CardTitle className="text-lg">{editingItemId ? "Update Item" : "Add an Item"}</CardTitle>
-              <CardDescription>Add a new item to the listing or update an existing one.</CardDescription>
+                <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">Admin Panel</CardTitle>
+                    <Button variant="outline" size="sm" onClick={() => {
+                        setIsAdmin(false);
+                        setItemsVisible(true); 
+                        setAdminActiveView(null);
+                    }}>Logout Admin</Button>
+                </div>
+                <div className="flex space-x-2 pt-2 border-b pb-2">
+                    <Button 
+                        variant={adminActiveView === 'items' ? 'default' : 'outline'} 
+                        size="sm"
+                        onClick={() => setAdminActiveView('items')}
+                    >
+                       <Package className="mr-2 h-4 w-4" /> Item Management
+                    </Button>
+                    <Button 
+                        variant={adminActiveView === 'purchasing' ? 'default' : 'outline'} 
+                        size="sm"
+                        onClick={() => setAdminActiveView('purchasing')}
+                    >
+                        <ShoppingBag className="mr-2 h-4 w-4" /> Purchasing & Suppliers
+                    </Button>
+                </div>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit(handleFormSubmit)} className="grid gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="name">Name</Label>
-                  <Input id="name" type="text" placeholder="Item Name" {...register("name")} required/>
-                  {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="price">Selling Price (₹)</Label>
-                  <Input id="price" type="text" placeholder="Item Selling Price" {...register("price")} required inputMode="decimal"/>
-                  {errors.price && <p className="text-sm text-destructive">{errors.price.message}</p>}
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="cost">Cost Price (₹)</Label>
-                  <Input id="cost" type="text" placeholder="Item Cost Price (Optional)" {...register("cost")} inputMode="decimal"/>
-                  {errors.cost && <p className="text-sm text-destructive">{errors.cost.message}</p>}
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="itemCode">Item Code</Label>
-                  <Input id="itemCode" type="text" placeholder="Item Code (Optional)" {...register("itemCode")} />
-                  {errors.itemCode && <p className="text-sm text-destructive">{errors.itemCode.message}</p>}
-                </div>
-                 <div className="grid gap-2">
-                  <Label htmlFor="stockQuantity">Stock Quantity</Label>
-                  <Input id="stockQuantity" type="number" placeholder="Initial Stock (e.g., 0)" {...register("stockQuantity")} />
-                  {errors.stockQuantity && <p className="text-sm text-destructive">{errors.stockQuantity.message}</p>}
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="category">Category</Label>
-                  <Input id="category" type="text" placeholder="Item Category" {...register("category")} required/>
-                  {errors.category && <p className="text-sm text-destructive">{errors.category.message}</p>}
-                </div>
-                 <Button type="submit" disabled={isSavingBill}>
-                    {editingItemId ? "Update Item" : "Add Item"}
-                 </Button>
-                {editingItemId && (
-                  <Button variant="ghost" type="button" onClick={() => { setEditingItemId(null); reset({ name: "", price: "", category: "", cost: "", itemCode: "", stockQuantity: "0" }); }}>
-                    Cancel Edit
-                  </Button>
+                {adminActiveView === 'items' && (
+                    <>
+                        <div className="mb-6"> {/* Add Item Form Section */}
+                            <h3 className="text-md font-semibold mb-2">{editingItemId ? "Update Item" : "Add an Item"}</h3>
+                            <form onSubmit={handleSubmit(handleFormSubmit)} className="grid gap-4">
+                                <div className="grid gap-2">
+                                <Label htmlFor="name">Name</Label>
+                                <Input id="name" type="text" placeholder="Item Name" {...register("name")} required/>
+                                {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+                                </div>
+                                <div className="grid gap-2">
+                                <Label htmlFor="price">Selling Price (₹)</Label>
+                                <Input id="price" type="text" placeholder="Item Selling Price" {...register("price")} required inputMode="decimal"/>
+                                {errors.price && <p className="text-sm text-destructive">{errors.price.message}</p>}
+                                </div>
+                                <div className="grid gap-2">
+                                <Label htmlFor="cost">Cost Price (₹)</Label>
+                                <Input id="cost" type="text" placeholder="Item Cost Price (Optional)" {...register("cost")} inputMode="decimal"/>
+                                {errors.cost && <p className="text-sm text-destructive">{errors.cost.message}</p>}
+                                </div>
+                                <div className="grid gap-2">
+                                <Label htmlFor="itemCode">Item Code</Label>
+                                <Input id="itemCode" type="text" placeholder="Item Code (Optional)" {...register("itemCode")} />
+                                {errors.itemCode && <p className="text-sm text-destructive">{errors.itemCode.message}</p>}
+                                </div>
+                                <div className="grid gap-2">
+                                <Label htmlFor="stockQuantity">Stock Quantity</Label>
+                                <Input id="stockQuantity" type="number" placeholder="Initial Stock (e.g., 0)" {...register("stockQuantity")} />
+                                {errors.stockQuantity && <p className="text-sm text-destructive">{errors.stockQuantity.message}</p>}
+                                </div>
+                                <div className="grid gap-2">
+                                <Label htmlFor="category">Category</Label>
+                                <Input id="category" type="text" placeholder="Item Category" {...register("category")} required/>
+                                {errors.category && <p className="text-sm text-destructive">{errors.category.message}</p>}
+                                </div>
+                                <Button type="submit" disabled={isSavingBill}>
+                                    {editingItemId ? "Update Item" : "Add Item"}
+                                </Button>
+                                {editingItemId && (
+                                <Button variant="ghost" type="button" onClick={() => { setEditingItemId(null); reset({ name: "", price: "", category: "", cost: "", itemCode: "", stockQuantity: "0" }); }}>
+                                    Cancel Edit
+                                </Button>
+                                )}
+                            </form>
+                        </div>
+                        <Separator className="my-6" />
+                        <div> {/* Manage Items Section */}
+                            <h3 className="text-md font-semibold mb-2">Manage Existing Items</h3>
+                            <div className="relative mt-2">
+                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                id="search-admin-items"
+                                type="search"
+                                placeholder="Search items by name or code..."
+                                value={adminItemSearchTerm}
+                                onChange={(e) => setAdminItemSearchTerm(e.target.value)}
+                                className="pl-8 w-full h-9"
+                                aria-label="Search managed items"
+                                />
+                            </div>
+                            {isLoadingItems ? (
+                                <p className="text-sm text-muted-foreground mt-2">Loading items...</p>
+                            ) : filteredAdminItems.length === 0 ? (
+                                <p className="text-sm text-muted-foreground mt-2">
+                                    {items.length === 0 ? "No items added yet." : "No items match your search."}
+                                </p>
+                            ) : (
+                            <ul className="mt-2 space-y-2 max-h-60 overflow-y-auto">
+                                {filteredAdminItems.map((item) => {
+                                const price = typeof item.price === 'number' ? item.price.toFixed(2) : (typeof item.price === 'string' ? parseFloat(item.price).toFixed(2) : 'N/A');
+                                const cost = item.cost !== undefined && typeof item.cost === 'number' ? item.cost.toFixed(2) : (item.cost === undefined || String(item.cost).trim() === "" ? 'N/A' : String(item.cost));
+                                const stock = item.stockQuantity;
+                                return (
+                                    <li key={item.id} className="flex items-center justify-between p-2 border rounded-md hover:bg-muted/30">
+                                    <div className="flex flex-col text-sm">
+                                        <span className="font-medium">{item.name}</span>
+                                        <span className="text-xs text-muted-foreground">
+                                        Sell: ₹{price} {cost !== 'N/A' ? `| Cost: ₹${cost}` : ''} {item.itemCode ? `| Code: ${item.itemCode}` : ''} | Stock: {stock !== undefined ? stock : 'N/A'} - {item.category}
+                                        </span>
+                                    </div>
+                                    <div className="flex space-x-2">
+                                        <Button variant="outline" size="icon" onClick={() => handleEditItem(item)} aria-label={`Edit ${item.name}`}>
+                                        <Edit className="h-4 w-4" />
+                                        </Button>
+                                        <Dialog>
+                                        <DialogTrigger asChild>
+                                            <Button variant="destructive" size="icon" aria-label={`Delete ${item.name}`}>
+                                            <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </DialogTrigger>
+                                        <DialogContent>
+                                            <DialogHeader>
+                                            <DialogTitle>Confirm Deletion</DialogTitle>
+                                            <DialogDescription>
+                                                Are you sure you want to delete the item "{item.name}"? This action cannot be undone.
+                                            </DialogDescription>
+                                            </DialogHeader>
+                                            <DialogFooter>
+                                            <DialogClose asChild>
+                                                <Button variant="outline">Cancel</Button>
+                                            </DialogClose>
+                                            <Button variant="destructive" onClick={async () => {
+                                                const result = await deleteItem(item.id);
+                                                if (result.success) {
+                                                toast({ title: result.message });
+                                                loadItems();
+                                                } else {
+                                                toast({ variant: "destructive", title: "Error", description: result.message });
+                                                }
+                                            }}>
+                                                Delete
+                                            </Button>
+                                            </DialogFooter>
+                                        </DialogContent>
+                                        </Dialog>
+                                    </div>
+                                    </li>
+                                )
+                                })}
+                            </ul>
+                            )}
+                        </div>
+                    </>
                 )}
-              </form>
-            </CardContent>
-          </Card>
 
-          <Card className="w-full max-w-md mt-4">
-            <CardHeader>
-                <div className="flex justify-between items-center">
-                    <CardTitle className="text-lg">Manage Items</CardTitle>
-                    <div className="flex flex-wrap gap-2">
+                {adminActiveView === 'purchasing' && (
+                     <div className="flex flex-col space-y-3">
+                        <h3 className="text-md font-semibold mb-1">Purchasing & Supplier Management</h3>
                         <Link href="/purchases/create" passHref>
-                            <Button variant="outline" size="sm"><ShoppingCart className="mr-2 h-4 w-4" /> New Purchase</Button>
+                            <Button variant="outline" className="w-full justify-start"><ShoppingCart className="mr-2 h-4 w-4" /> New Purchase Order</Button>
                         </Link>
                         <Link href="/purchases/history" passHref>
-                            <Button variant="outline" size="sm"><History className="mr-2 h-4 w-4" /> Purchase History</Button>
+                            <Button variant="outline" className="w-full justify-start"><History className="mr-2 h-4 w-4" /> Purchase Order History</Button>
                         </Link>
                         <Link href="/suppliers" passHref>
-                            <Button variant="outline" size="sm"><ListChecks className="mr-2 h-4 w-4" /> View Suppliers</Button>
+                            <Button variant="outline" className="w-full justify-start"><ListChecks className="mr-2 h-4 w-4" /> View Suppliers List</Button>
                         </Link>
                     </div>
-                </div>
-              <div className="relative mt-2">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="search-admin-items"
-                  type="search"
-                  placeholder="Search items by name or code..."
-                  value={adminItemSearchTerm}
-                  onChange={(e) => setAdminItemSearchTerm(e.target.value)}
-                  className="pl-8 w-full h-9"
-                  aria-label="Search managed items"
-                />
-              </div>
-            </CardHeader>
-            <CardContent>
-              {isLoadingItems ? (
-                 <p className="text-sm text-muted-foreground">Loading items...</p>
-              ) : filteredAdminItems.length === 0 ? (
-                 <p className="text-sm text-muted-foreground">
-                    {items.length === 0 ? "No items added yet." : "No items match your search."}
-                 </p>
-              ) : (
-              <ul className="mt-2 space-y-2 max-h-60 overflow-y-auto">
-                {filteredAdminItems.map((item) => {
-                   const price = typeof item.price === 'number' ? item.price.toFixed(2) : (typeof item.price === 'string' ? parseFloat(item.price).toFixed(2) : 'N/A');
-                   const cost = item.cost !== undefined && typeof item.cost === 'number' ? item.cost.toFixed(2) : (item.cost === undefined || String(item.cost).trim() === "" ? 'N/A' : String(item.cost));
-                   const stock = item.stockQuantity;
-                   return (
-                    <li key={item.id} className="flex items-center justify-between p-2 border rounded-md hover:bg-muted/30">
-                      <div className="flex flex-col text-sm">
-                         <span className="font-medium">{item.name}</span>
-                         <span className="text-xs text-muted-foreground">
-                           Sell: ₹{price} {cost !== 'N/A' ? `| Cost: ₹${cost}` : ''} {item.itemCode ? `| Code: ${item.itemCode}` : ''} | Stock: {stock !== undefined ? stock : 'N/A'} - {item.category}
-                         </span>
-                      </div>
-                      <div className="flex space-x-2">
-                        <Button variant="outline" size="icon" onClick={() => handleEditItem(item)} aria-label={`Edit ${item.name}`}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="destructive" size="icon" aria-label={`Delete ${item.name}`}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Confirm Deletion</DialogTitle>
-                              <DialogDescription>
-                                Are you sure you want to delete the item "{item.name}"? This action cannot be undone.
-                              </DialogDescription>
-                            </DialogHeader>
-                            <DialogFooter>
-                              <DialogClose asChild>
-                                <Button variant="outline">Cancel</Button>
-                              </DialogClose>
-                              <Button variant="destructive" onClick={async () => {
-                                const result = await deleteItem(item.id);
-                                if (result.success) {
-                                  toast({ title: result.message });
-                                  loadItems();
-                                } else {
-                                  toast({ variant: "destructive", title: "Error", description: result.message });
-                                }
-                              }}>
-                                Delete
-                              </Button>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
-                      </div>
-                    </li>
-                   )
-                })}
-              </ul>
-              )}
+                )}
             </CardContent>
-          </Card>
-           <Button variant="outline" className="mt-4" onClick={() => {
-               setIsAdmin(false);
-               setItemsVisible(true); // Ensure items section is visible after admin logout
-           }}>Logout Admin</Button>
-        </>
+        </Card>
       ) }
       <Toaster />
     </div>
