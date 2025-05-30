@@ -17,10 +17,10 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag } from "lucide-react";
+import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
 import { addItem, getItems, updateItem, deleteItem, saveBill } from "./actions";
-import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db";
+import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db"; // Snack is now effectively Item
 import Link from "next/link";
 import {
   Dialog,
@@ -35,7 +35,7 @@ import {
 import { setSharedOrderInRTDB, SharedOrderItem, SharedOrderData, subscribeToSharedOrder, SharedOrderDataSnapshot } from "@/lib/rt_db";
 
 
-interface SelectedItem extends Snack {
+interface SelectedItem extends Snack { // Snack here refers to the item structure
   quantity: number;
 }
 
@@ -155,14 +155,14 @@ function HomeContent() {
       setOrderNumber(editOrderNum);
       setEditingBillId(editFsBillId);
       setActiveSharedOrderNumber(editOrderNum);
-      setItemsVisible(true); 
-      setIsLocalDirty(false); 
+      setItemsVisible(true);
+      setIsLocalDirty(false);
       console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
     } else if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
       setItemsVisible(true);
     }
-  }, [loadItems, searchParams]); 
+  }, [loadItems, searchParams]);
 
 
   useEffect(() => {
@@ -247,7 +247,7 @@ function HomeContent() {
     return itemsTotal + serviceCharge;
   };
 
-  const handleItemIncrement = (item: Snack) => { 
+  const handleItemIncrement = (item: Snack) => {
     setIsLocalDirty(true);
     lastInteractedItemIdRef.current = item.id;
     setSelectedItems((prevSelected) => {
@@ -300,7 +300,7 @@ function HomeContent() {
   }, [selectedItems]);
 
 
-  const handleEditItem = (item: Snack) => { 
+  const handleEditItem = (item: Snack) => {
     setEditingItemId(item.id);
     setValue("name", item.name);
     setValue("price", item.price.toString());
@@ -378,7 +378,7 @@ function HomeContent() {
           tableNumber: tableNumber,
           notes: notes,
           items: selectedItems.map(s => ({
-            itemId: s.id, 
+            itemId: s.id,
             name: s.name,
             price: Number(s.price),
             quantity: s.quantity,
@@ -391,7 +391,7 @@ function HomeContent() {
       try {
           const result = await saveBill(billData, editingBillId || undefined);
           if (result.success) {
-              await loadItems(); 
+              await loadItems();
               if (resetFormAfterSave) {
                 setSelectedItems([]);
                 setServiceCharge(0);
@@ -414,9 +414,9 @@ function HomeContent() {
                 if (!editingBillId && result.billId) {
                   setEditingBillId(result.billId);
                 }
-                setIsLocalDirty(false); 
-                if (itemsVisible) { 
-                    setItemsVisible(false); 
+                setIsLocalDirty(false);
+                if (itemsVisible) {
+                    setItemsVisible(false);
                 }
               }
                toast({ title: result.message });
@@ -451,7 +451,7 @@ function HomeContent() {
       setIsAdmin(true);
       setPassword("");
       setShowAdminLoginSection(false);
-      setAdminActiveView('items'); 
+      setAdminActiveView('items');
     } else {
       toast({
         variant: "destructive",
@@ -540,7 +540,7 @@ function HomeContent() {
       name: s.name,
       price: Number(s.price),
       quantity: s.quantity,
-      itemCode: s.itemCode || '', 
+      itemCode: s.itemCode || '',
     }));
 
     const sharedOrderPayload: Omit<SharedOrderData, 'lastUpdatedAt' | 'orderNumber'> = {
@@ -573,7 +573,6 @@ function HomeContent() {
 
 
   useEffect(() => {
-    // Only call handleShareBill if showShareDialog transitions from false/undefined to true
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
       handleShareBill(orderNumber);
     }
@@ -614,9 +613,7 @@ function HomeContent() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
-        // Only reset local dirty if not in Firestore edit mode.
-        // Firestore edit mode dirty flag is managed by handleSaveBill.
-        if (!editingBillId) { 
+        if (!editingBillId) {
           setIsLocalDirty(false);
         }
       } catch (error) {
@@ -671,7 +668,7 @@ function HomeContent() {
     if (!itemsVisible) {
       setItemsVisible(true);
     } else {
-      handleSaveBill(false); 
+      handleSaveBill(false);
     }
   };
 
@@ -702,9 +699,9 @@ function HomeContent() {
                 size="icon"
                 onClick={() => {
                     setShowAdminLoginSection(prev => !prev);
-                    if (!showAdminLoginSection && !isAdmin) setItemsVisible(false); 
-                    else if (isAdmin) setItemsVisible(false); 
-                    else if (!isAdmin && showAdminLoginSection) setItemsVisible(true); 
+                    if (!showAdminLoginSection && !isAdmin) setItemsVisible(false);
+                    else if (isAdmin) setItemsVisible(false);
+                    else if (!isAdmin && showAdminLoginSection) setItemsVisible(true);
                 }}
                 aria-label="Toggle Admin Login"
             >
@@ -755,12 +752,6 @@ function HomeContent() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-
-            <Link href="/bills" passHref>
-                <Button variant="outline" size="icon" aria-label="View Bills">
-                    <ClipboardList className="h-4 w-4" />
-                </Button>
-            </Link>
             <Badge variant="outline" className="text-sm whitespace-nowrap">
             Order: {orderNumber}
             </Badge>
@@ -1091,28 +1082,28 @@ function HomeContent() {
                     <CardTitle className="text-lg">Admin Panel</CardTitle>
                     <Button variant="outline" size="sm" onClick={() => {
                         setIsAdmin(false);
-                        setItemsVisible(true); 
+                        setItemsVisible(true);
                         setAdminActiveView(null);
                     }}>Logout Admin</Button>
                 </div>
                 <div className="flex flex-wrap gap-2 pt-2 border-b pb-2">
-                    <Button 
-                        variant={adminActiveView === 'items' ? 'default' : 'outline'} 
+                    <Button
+                        variant={adminActiveView === 'items' ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => setAdminActiveView('items')}
                     >
                        <Package className="mr-2 h-4 w-4" /> Item Management
                     </Button>
-                    <Button 
-                        variant={adminActiveView === 'purchasing' ? 'default' : 'outline'} 
+                    <Button
+                        variant={adminActiveView === 'purchasing' ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => setAdminActiveView('purchasing')}
                     >
                         <ShoppingBag className="mr-2 h-4 w-4" /> Purchasing & Suppliers
                     </Button>
                     <Link href="/bills" passHref>
-                        <Button 
-                            variant={'outline'} 
+                        <Button
+                            variant={'outline'}
                             size="sm"
                         >
                            <History className="mr-2 h-4 w-4" /> Sales History
