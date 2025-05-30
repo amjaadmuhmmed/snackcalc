@@ -17,7 +17,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag } from "lucide-react";
+import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
 import { addItem, getItems, updateItem, deleteItem, saveBill } from "./actions";
 import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db"; // Snack is now effectively Item
@@ -106,7 +106,7 @@ function HomeContent() {
   const [itemsVisible, setItemsVisible] = useState(true);
   const prevShowShareDialogRef = useRef<boolean | undefined>();
 
-  const [adminActiveView, setAdminActiveView] = useState<AdminActiveView>('items');
+  const [adminActiveView, setAdminActiveView] = useState<AdminActiveView>(null);
 
 
   const {
@@ -146,6 +146,20 @@ function HomeContent() {
   }, [toast]);
 
   useEffect(() => {
+    const adminPass = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
+    if (adminPass && adminPass.length > 0) { // Check if admin password is set and not empty
+      const adminLoggedIn = sessionStorage.getItem('isAdminLoggedIn');
+      if (adminLoggedIn === 'true') {
+        setIsAdmin(true);
+        setShowAdminLoginSection(false); // Ensure login section is hidden
+        setAdminActiveView('items');    // Default to items view
+        setItemsVisible(false);         // Explicitly hide the main bill form's item section
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Runs once on mount
+
+  useEffect(() => {
     loadItems();
 
     const editOrderNum = searchParams.get('editOrder');
@@ -155,14 +169,15 @@ function HomeContent() {
       setOrderNumber(editOrderNum);
       setEditingBillId(editFsBillId);
       setActiveSharedOrderNumber(editOrderNum);
-      setItemsVisible(true);
-      setIsLocalDirty(false);
+      setItemsVisible(true); // Ensure item selection is visible when loading a bill for edit
+      setIsLocalDirty(false); // Bill is initially not dirty when loaded
       console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
     } else if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
       setItemsVisible(true);
     }
-  }, [loadItems, searchParams]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadItems, searchParams]); // Removed orderNumber from dependencies to avoid re-triggering new order number generation
 
 
   useEffect(() => {
@@ -391,7 +406,7 @@ function HomeContent() {
       try {
           const result = await saveBill(billData, editingBillId || undefined);
           if (result.success) {
-              await loadItems();
+              await loadItems(); // Refresh item list for stock counts
               if (resetFormAfterSave) {
                 setSelectedItems([]);
                 setServiceCharge(0);
@@ -405,21 +420,23 @@ function HomeContent() {
                 setEditingBillId(null);
                 setShareUrl("");
                 setIsLocalDirty(false);
-                setItemsVisible(true);
+                setItemsVisible(true); // Show item selection for new order
 
                 if (searchParams.get('editOrder') || searchParams.get('editBillId')) {
-                  router.replace('/', { scroll: false });
+                  router.replace('/', { scroll: false }); // Clear query params
                 }
               } else {
+                // "Save" or "Update Bill" without reset
                 if (!editingBillId && result.billId) {
-                  setEditingBillId(result.billId);
+                  setEditingBillId(result.billId); // If it was a new bill, now it has an ID
                 }
-                setIsLocalDirty(false);
-                if (itemsVisible) {
+                setIsLocalDirty(false); // Changes have been saved
+                if (itemsVisible) { // If items were visible, hide them after save
                     setItemsVisible(false);
                 }
               }
-               toast({ title: result.message });
+               // Do not show "Bill Saved" toast on auto-syncs
+               // toast({ title: result.message });
 
 
           } else {
@@ -439,7 +456,7 @@ function HomeContent() {
 
   const handleAdminLogin = () => {
     const adminPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
-    if (!adminPassword) {
+    if (!adminPassword || adminPassword.length === 0) {
         toast({
             variant: "destructive",
             title: "Admin password not configured.",
@@ -452,6 +469,8 @@ function HomeContent() {
       setPassword("");
       setShowAdminLoginSection(false);
       setAdminActiveView('items');
+      setItemsVisible(false); // When admin logs in, hide main bill form
+      sessionStorage.setItem('isAdminLoggedIn', 'true');
     } else {
       toast({
         variant: "destructive",
@@ -459,6 +478,15 @@ function HomeContent() {
       });
     }
   };
+
+  const handleAdminLogout = () => {
+    setIsAdmin(false);
+    setAdminActiveView(null);
+    setShowAdminLoginSection(false); // Ensure login form is hidden
+    setItemsVisible(true);           // Make main bill form visible again
+    sessionStorage.removeItem('isAdminLoggedIn');
+  };
+
 
   const handleServiceChargeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setIsLocalDirty(true);
@@ -527,7 +555,7 @@ function HomeContent() {
     if (typeof window === "undefined") {
         setShareUrl("");
         setIsGeneratingShareUrl(false);
-        if (!editingBillId) {
+        if (!editingBillId) { // Only clear active shared order if not editing a persisted bill
             setActiveSharedOrderNumber(null);
         }
         return;
@@ -553,7 +581,7 @@ function HomeContent() {
     };
 
     try {
-      setActiveSharedOrderNumber(orderNumberToShare);
+      setActiveSharedOrderNumber(orderNumberToShare); // Set this regardless to listen for changes
       await setSharedOrderInRTDB(orderNumberToShare, sharedOrderPayload);
       const baseUrl = window.location.origin;
       const fullUrl = `${baseUrl}/orders/${orderNumberToShare}`;
@@ -563,7 +591,7 @@ function HomeContent() {
       console.error("Failed to share bill to RTDB:", error);
       toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
       setShareUrl("");
-      if (!editingBillId) {
+      if (!editingBillId) { // Only clear if not tied to a persisted bill
          setActiveSharedOrderNumber(null);
       }
     } finally {
@@ -573,6 +601,7 @@ function HomeContent() {
 
 
   useEffect(() => {
+    // Use a ref to track previous state to call handleShareBill only when dialog opens
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
       handleShareBill(orderNumber);
     }
@@ -613,7 +642,7 @@ function HomeContent() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
-        if (!editingBillId) {
+        if (!editingBillId) { // Only clear dirty flag if not editing a persisted bill
           setIsLocalDirty(false);
         }
       } catch (error) {
@@ -666,15 +695,16 @@ function HomeContent() {
 
   const handlePrimaryActionClick = () => {
     if (!itemsVisible) {
-      setItemsVisible(true);
+      setItemsVisible(true); // "Edit Items" was clicked
     } else {
-      handleSaveBill(false);
+      handleSaveBill(false); // "Save Bill" or "Update Bill" was clicked
     }
   };
 
-  const primaryButtonText = !itemsVisible ? "Edit Items" : (editingBillId ? "Update Bill" : "Save");
+  // Determine primary button text and icon
+  const primaryButtonText = !itemsVisible ? "Edit Items" : (editingBillId ? "Update Bill" : "Save Bill");
   const PrimaryButtonIcon = !itemsVisible ? Edit : Save;
-  const primaryButtonDisabled = isSavingBill;
+  const primaryButtonDisabled = isSavingBill || (!itemsVisible ? false : (editingBillId && !isLocalDirty));
 
 
   const filteredAdminItems = useMemo(() => {
@@ -698,10 +728,14 @@ function HomeContent() {
                 variant="outline"
                 size="icon"
                 onClick={() => {
-                    setShowAdminLoginSection(prev => !prev);
-                    if (!showAdminLoginSection && !isAdmin) setItemsVisible(false);
-                    else if (isAdmin) setItemsVisible(false);
-                    else if (!isAdmin && showAdminLoginSection) setItemsVisible(true);
+                    const nextShowAdminLoginSection = !showAdminLoginSection;
+                    setShowAdminLoginSection(nextShowAdminLoginSection);
+                    if (nextShowAdminLoginSection && !isAdmin) {
+                        setItemsVisible(false); // Hide main bill form when opening login
+                    } else if (!nextShowAdminLoginSection && !isAdmin) {
+                        setItemsVisible(true); // Show main bill form if closing login without logging in
+                    }
+                    // If isAdmin is true, itemsVisible is controlled by admin state/logout
                 }}
                 aria-label="Toggle Admin Login"
             >
@@ -758,125 +792,15 @@ function HomeContent() {
         </div>
       </div>
 
-      {(!isAdmin && !showAdminLoginSection && !itemsVisible) && (
+      {/* Main Bill Card - visible if not admin, admin login not shown, and itemsVisible is true OR if itemsVisible is false (showing summary) */}
+      {(!isAdmin && !showAdminLoginSection) && (
          <Card className="w-full max-w-md">
-          <CardHeader>
-             <CardTitle className="text-lg">Order {orderNumber}</CardTitle>
-             <CardDescription>{editingBillId ? `Editing Bill (Order: ${orderNumber})` : "Review current order. Click 'Edit Items' to modify."}</CardDescription>
-          </CardHeader>
-           <CardContent className="grid gap-4">
-            <div>
-              <h3 className="text-sm font-medium mb-2">Selected Items</h3>
-              {selectedItems.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No items selected.</p>
-              ) : (
-                <ul className="space-y-2 max-h-48 overflow-y-auto">
-                  {selectedItems.map((item) => (
-                    <li
-                      key={item.id}
-                      ref={(el) => listRefs.current[item.id] = el}
-                      className="flex items-center justify-between text-sm p-1.5 rounded-md hover:bg-muted/50"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <span>{item.name}</span>
-                        <div className="flex items-center border rounded-md">
-                          <Button variant="ghost" size="icon" className="h-6 w-6" disabled={true}>
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <Badge variant="outline" className="text-xs px-1.5 border-none tabular-nums">{item.quantity}</Badge>
-                          <Button variant="ghost" size="icon" className="h-6 w-6" disabled={true}>
-                            <Plus className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                      <span className="font-medium tabular-nums">₹{typeof item.price === 'number' ? (item.price * item.quantity).toFixed(2) : 'N/A'}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <Separator />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="grid gap-1.5">
-                <Label htmlFor="customer-name-display" className="text-sm">Customer Name</Label>
-                <Input id="customer-name-display" type="text" value={customerName} readOnly className="pl-8 h-9 text-sm bg-muted/50" />
-              </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="customer-phone-display" className="text-sm">Customer Phone</Label>
-                <Input id="customer-phone-display" type="tel" value={customerPhoneNumber} readOnly className="pl-8 h-9 text-sm bg-muted/50" />
-              </div>
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="service-charge-display" className="text-sm">Service Charge (₹)</Label>
-              <Input id="service-charge-display" type="text" value={serviceChargeInput} readOnly className="h-9 text-sm bg-muted/50" />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="table-number-display" className="text-sm">Table Number</Label>
-              <Input id="table-number-display" type="text" value={tableNumber} readOnly className="pl-8 h-9 text-sm bg-muted/50" />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="notes-display" className="text-sm">Notes</Label>
-              <Textarea id="notes-display" value={notes} readOnly className="pl-8 text-sm min-h-[60px] bg-muted/50" />
-            </div>
-            <Separator />
-            <div className="flex flex-col items-center justify-between gap-3">
-              <div className="flex justify-between w-full items-center">
-                <span className="text-base font-semibold">Total:</span>
-                <Badge variant="secondary" className="text-base font-semibold tabular-nums">₹{total.toFixed(2)}</Badge>
-              </div>
-              {(total > 0 || selectedItems.length > 0 || editingBillId || !itemsVisible) && (
-                <div className="flex flex-col items-center gap-3 w-full">
-                  <QRCodeCanvas value={upiLink} size={128} level="H" data-ai-hint="payment qr" />
-                  <div className="flex w-full gap-2">
-                    <Button variant="default" onClick={handlePrimaryActionClick} disabled={primaryButtonDisabled} className="flex-1">
-                      <PrimaryButtonIcon className="mr-2 h-4 w-4" /> {primaryButtonText}
-                    </Button>
-                    <Button variant="outline" onClick={() => handleSaveBill(true)} disabled={isSavingBill} className="flex-1">
-                       <PlusCircle className="mr-2 h-4 w-4" /> New Order
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {(!isAdmin && showAdminLoginSection) && (
-        <Card className="w-full max-w-md mt-4">
-          <CardHeader>
-            <CardTitle className="text-lg">Admin Login</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
-                aria-label="Admin Password"
-              />
-            </div>
-            <Button className="mt-4 w-full" onClick={handleAdminLogin}>Login</Button>
-            <Button variant="ghost" className="mt-2 w-full" onClick={() => {
-                setShowAdminLoginSection(false);
-                if(!isAdmin) setItemsVisible(true);
-            }}>Cancel</Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {(!isAdmin && !showAdminLoginSection && itemsVisible) && (
-        <Card className="w-full max-w-md">
           <CardHeader>
              <CardTitle className="text-lg">Order {orderNumber}</CardTitle>
              <CardDescription>{editingBillId ? `Editing Bill (Order: ${orderNumber})` : "Select items, add customer details, and calculate the total."}</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4">
-
-             {itemsVisible && (
+           <CardContent className="grid gap-4">
+            {itemsVisible && (
               <>
                 <div className="relative">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -972,7 +896,7 @@ function HomeContent() {
                 </ul>
               )}
             </div>
-             <Separator />
+            <Separator />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="grid gap-1.5">
                 <Label htmlFor="customer-name" className="text-sm">Customer Name</Label>
@@ -1074,17 +998,41 @@ function HomeContent() {
         </Card>
       )}
 
+      {/* Admin Login Card - visible if not admin AND admin login section is toggled */}
+      {(!isAdmin && showAdminLoginSection) && (
+        <Card className="w-full max-w-md mt-4">
+          <CardHeader>
+            <CardTitle className="text-lg">Admin Login</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
+                aria-label="Admin Password"
+              />
+            </div>
+            <Button className="mt-4 w-full" onClick={handleAdminLogin}>Login</Button>
+            <Button variant="ghost" className="mt-2 w-full" onClick={() => {
+                setShowAdminLoginSection(false);
+                setItemsVisible(true); // Show main bill form when canceling login
+            }}>Cancel</Button>
+          </CardContent>
+        </Card>
+      )}
 
+
+      {/* Admin Panel Card - visible if admin is logged in */}
       {isAdmin && (
         <Card className="w-full max-w-md mt-4">
             <CardHeader>
                 <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">Admin Panel</CardTitle>
-                    <Button variant="outline" size="sm" onClick={() => {
-                        setIsAdmin(false);
-                        setItemsVisible(true);
-                        setAdminActiveView(null);
-                    }}>Logout Admin</Button>
+                    <Button variant="outline" size="sm" onClick={handleAdminLogout}>Logout Admin</Button>
                 </div>
                 <div className="flex flex-wrap gap-2 pt-2 border-b pb-2">
                     <Button
@@ -1221,6 +1169,8 @@ function HomeContent() {
                                                 } else {
                                                 toast({ variant: "destructive", title: "Error", description: result.message });
                                                 }
+                                                // Need to manually close the dialog here if using Radix DialogClose
+                                                // For ShadCN, DialogClose asChild should handle it.
                                             }}>
                                                 Delete
                                             </Button>
@@ -1271,4 +1221,3 @@ export default function HomePage() {
     </Suspense>
   );
 }
-
