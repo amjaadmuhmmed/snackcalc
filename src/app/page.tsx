@@ -67,6 +67,9 @@ const generateOrderNumber = () => {
 };
 
 type AdminActiveView = 'items' | 'purchasing' | null;
+const SESSION_STORAGE_ADMIN_LOGGED_IN_KEY = 'isAdminLoggedIn';
+const SESSION_STORAGE_ADMIN_VIEW_KEY = 'adminActiveView';
+
 
 function HomeContent() {
   const router = useRouter();
@@ -147,17 +150,19 @@ function HomeContent() {
 
   useEffect(() => {
     const adminPass = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
-    if (adminPass && adminPass.length > 0) { // Check if admin password is set and not empty
-      const adminLoggedIn = sessionStorage.getItem('isAdminLoggedIn');
+    if (adminPass && adminPass.length > 0) {
+      const adminLoggedIn = sessionStorage.getItem(SESSION_STORAGE_ADMIN_LOGGED_IN_KEY);
+      const storedAdminView = sessionStorage.getItem(SESSION_STORAGE_ADMIN_VIEW_KEY) as AdminActiveView;
+
       if (adminLoggedIn === 'true') {
         setIsAdmin(true);
-        setShowAdminLoginSection(false); // Ensure login section is hidden
-        setAdminActiveView('items');    // Default to items view
-        setItemsVisible(false);         // Explicitly hide the main bill form's item section
+        setShowAdminLoginSection(false);
+        setAdminActiveView(storedAdminView || 'items'); // Restore view or default to items
+        setItemsVisible(false);
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Runs once on mount
+  }, []);
 
   useEffect(() => {
     loadItems();
@@ -169,15 +174,15 @@ function HomeContent() {
       setOrderNumber(editOrderNum);
       setEditingBillId(editFsBillId);
       setActiveSharedOrderNumber(editOrderNum);
-      setItemsVisible(true); // Ensure item selection is visible when loading a bill for edit
-      setIsLocalDirty(false); // Bill is initially not dirty when loaded
+      setItemsVisible(true);
+      setIsLocalDirty(false);
       console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
     } else if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
       setItemsVisible(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadItems, searchParams]); // Removed orderNumber from dependencies to avoid re-triggering new order number generation
+  }, [loadItems, searchParams]);
 
 
   useEffect(() => {
@@ -406,7 +411,7 @@ function HomeContent() {
       try {
           const result = await saveBill(billData, editingBillId || undefined);
           if (result.success) {
-              await loadItems(); // Refresh item list for stock counts
+              await loadItems();
               if (resetFormAfterSave) {
                 setSelectedItems([]);
                 setServiceCharge(0);
@@ -420,25 +425,20 @@ function HomeContent() {
                 setEditingBillId(null);
                 setShareUrl("");
                 setIsLocalDirty(false);
-                setItemsVisible(true); // Show item selection for new order
+                setItemsVisible(true);
 
                 if (searchParams.get('editOrder') || searchParams.get('editBillId')) {
-                  router.replace('/', { scroll: false }); // Clear query params
+                  router.replace('/', { scroll: false });
                 }
               } else {
-                // "Save" or "Update Bill" without reset
                 if (!editingBillId && result.billId) {
-                  setEditingBillId(result.billId); // If it was a new bill, now it has an ID
+                  setEditingBillId(result.billId);
                 }
-                setIsLocalDirty(false); // Changes have been saved
-                if (itemsVisible) { // If items were visible, hide them after save
+                setIsLocalDirty(false);
+                if (itemsVisible) {
                     setItemsVisible(false);
                 }
               }
-               // Do not show "Bill Saved" toast on auto-syncs
-               // toast({ title: result.message });
-
-
           } else {
               toast({ variant: "destructive", title: editingBillId ? "Failed to update bill." : "Failed to save bill.", description: result.message });
           }
@@ -468,9 +468,12 @@ function HomeContent() {
       setIsAdmin(true);
       setPassword("");
       setShowAdminLoginSection(false);
-      setAdminActiveView('items');
-      setItemsVisible(false); // When admin logs in, hide main bill form
-      sessionStorage.setItem('isAdminLoggedIn', 'true');
+      const storedAdminView = sessionStorage.getItem(SESSION_STORAGE_ADMIN_VIEW_KEY) as AdminActiveView;
+      const viewToSet = storedAdminView || 'items';
+      setAdminActiveView(viewToSet);
+      sessionStorage.setItem(SESSION_STORAGE_ADMIN_LOGGED_IN_KEY, 'true');
+      sessionStorage.setItem(SESSION_STORAGE_ADMIN_VIEW_KEY, viewToSet);
+      setItemsVisible(false);
     } else {
       toast({
         variant: "destructive",
@@ -482,9 +485,10 @@ function HomeContent() {
   const handleAdminLogout = () => {
     setIsAdmin(false);
     setAdminActiveView(null);
-    setShowAdminLoginSection(false); // Ensure login form is hidden
-    setItemsVisible(true);           // Make main bill form visible again
-    sessionStorage.removeItem('isAdminLoggedIn');
+    setShowAdminLoginSection(false);
+    setItemsVisible(true);
+    sessionStorage.removeItem(SESSION_STORAGE_ADMIN_LOGGED_IN_KEY);
+    sessionStorage.removeItem(SESSION_STORAGE_ADMIN_VIEW_KEY);
   };
 
 
@@ -555,7 +559,7 @@ function HomeContent() {
     if (typeof window === "undefined") {
         setShareUrl("");
         setIsGeneratingShareUrl(false);
-        if (!editingBillId) { // Only clear active shared order if not editing a persisted bill
+        if (!editingBillId) {
             setActiveSharedOrderNumber(null);
         }
         return;
@@ -581,7 +585,7 @@ function HomeContent() {
     };
 
     try {
-      setActiveSharedOrderNumber(orderNumberToShare); // Set this regardless to listen for changes
+      setActiveSharedOrderNumber(orderNumberToShare);
       await setSharedOrderInRTDB(orderNumberToShare, sharedOrderPayload);
       const baseUrl = window.location.origin;
       const fullUrl = `${baseUrl}/orders/${orderNumberToShare}`;
@@ -591,7 +595,7 @@ function HomeContent() {
       console.error("Failed to share bill to RTDB:", error);
       toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
       setShareUrl("");
-      if (!editingBillId) { // Only clear if not tied to a persisted bill
+      if (!editingBillId) {
          setActiveSharedOrderNumber(null);
       }
     } finally {
@@ -601,7 +605,6 @@ function HomeContent() {
 
 
   useEffect(() => {
-    // Use a ref to track previous state to call handleShareBill only when dialog opens
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
       handleShareBill(orderNumber);
     }
@@ -642,7 +645,7 @@ function HomeContent() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
-        if (!editingBillId) { // Only clear dirty flag if not editing a persisted bill
+        if (!editingBillId) {
           setIsLocalDirty(false);
         }
       } catch (error) {
@@ -695,16 +698,15 @@ function HomeContent() {
 
   const handlePrimaryActionClick = () => {
     if (!itemsVisible) {
-      setItemsVisible(true); // "Edit Items" was clicked
+      setItemsVisible(true);
     } else {
-      handleSaveBill(false); // "Save Bill" or "Update Bill" was clicked
+      handleSaveBill(false);
     }
   };
 
-  // Determine primary button text and icon
   const primaryButtonText = !itemsVisible ? "Edit Items" : (editingBillId ? "Update Bill" : "Save Bill");
   const PrimaryButtonIcon = !itemsVisible ? Edit : Save;
-  const primaryButtonDisabled = isSavingBill || (!itemsVisible ? false : (editingBillId && !isLocalDirty));
+  const primaryButtonDisabled = isSavingBill;
 
 
   const filteredAdminItems = useMemo(() => {
@@ -717,6 +719,15 @@ function HomeContent() {
         (item.itemCode && item.itemCode.toLowerCase().includes(lowerSearchTerm))
     );
   }, [items, adminItemSearchTerm]);
+
+  const handleAdminViewChange = (view: AdminActiveView) => {
+    setAdminActiveView(view);
+    if (view) {
+        sessionStorage.setItem(SESSION_STORAGE_ADMIN_VIEW_KEY, view);
+    } else {
+        sessionStorage.removeItem(SESSION_STORAGE_ADMIN_VIEW_KEY);
+    }
+  };
 
 
   return (
@@ -731,11 +742,10 @@ function HomeContent() {
                     const nextShowAdminLoginSection = !showAdminLoginSection;
                     setShowAdminLoginSection(nextShowAdminLoginSection);
                     if (nextShowAdminLoginSection && !isAdmin) {
-                        setItemsVisible(false); // Hide main bill form when opening login
+                        setItemsVisible(false);
                     } else if (!nextShowAdminLoginSection && !isAdmin) {
-                        setItemsVisible(true); // Show main bill form if closing login without logging in
+                        setItemsVisible(true);
                     }
-                    // If isAdmin is true, itemsVisible is controlled by admin state/logout
                 }}
                 aria-label="Toggle Admin Login"
             >
@@ -792,7 +802,6 @@ function HomeContent() {
         </div>
       </div>
 
-      {/* Main Bill Card - visible if not admin, admin login not shown, and itemsVisible is true OR if itemsVisible is false (showing summary) */}
       {(!isAdmin && !showAdminLoginSection) && (
          <Card className="w-full max-w-md">
           <CardHeader>
@@ -998,7 +1007,6 @@ function HomeContent() {
         </Card>
       )}
 
-      {/* Admin Login Card - visible if not admin AND admin login section is toggled */}
       {(!isAdmin && showAdminLoginSection) && (
         <Card className="w-full max-w-md mt-4">
           <CardHeader>
@@ -1019,14 +1027,13 @@ function HomeContent() {
             <Button className="mt-4 w-full" onClick={handleAdminLogin}>Login</Button>
             <Button variant="ghost" className="mt-2 w-full" onClick={() => {
                 setShowAdminLoginSection(false);
-                setItemsVisible(true); // Show main bill form when canceling login
+                setItemsVisible(true);
             }}>Cancel</Button>
           </CardContent>
         </Card>
       )}
 
 
-      {/* Admin Panel Card - visible if admin is logged in */}
       {isAdmin && (
         <Card className="w-full max-w-md mt-4">
             <CardHeader>
@@ -1038,14 +1045,14 @@ function HomeContent() {
                     <Button
                         variant={adminActiveView === 'items' ? 'default' : 'outline'}
                         size="sm"
-                        onClick={() => setAdminActiveView('items')}
+                        onClick={() => handleAdminViewChange('items')}
                     >
                        <Package className="mr-2 h-4 w-4" /> Item Management
                     </Button>
                     <Button
                         variant={adminActiveView === 'purchasing' ? 'default' : 'outline'}
                         size="sm"
-                        onClick={() => setAdminActiveView('purchasing')}
+                        onClick={() => handleAdminViewChange('purchasing')}
                     >
                         <ShoppingBag className="mr-2 h-4 w-4" /> Purchasing & Suppliers
                     </Button>
@@ -1062,7 +1069,7 @@ function HomeContent() {
             <CardContent>
                 {adminActiveView === 'items' && (
                     <>
-                        <div className="mb-6"> {/* Add Item Form Section */}
+                        <div className="mb-6">
                             <h3 className="text-md font-semibold mb-2">{editingItemId ? "Update Item" : "Add an Item"}</h3>
                             <form onSubmit={handleSubmit(handleFormSubmit)} className="grid gap-4">
                                 <div className="grid gap-2">
@@ -1106,7 +1113,7 @@ function HomeContent() {
                             </form>
                         </div>
                         <Separator className="my-6" />
-                        <div> {/* Manage Items Section */}
+                        <div>
                             <h3 className="text-md font-semibold mb-2">Manage Existing Items</h3>
                             <div className="relative mt-2">
                                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -1169,8 +1176,6 @@ function HomeContent() {
                                                 } else {
                                                 toast({ variant: "destructive", title: "Error", description: result.message });
                                                 }
-                                                // Need to manually close the dialog here if using Radix DialogClose
-                                                // For ShadCN, DialogClose asChild should handle it.
                                             }}>
                                                 Delete
                                             </Button>
@@ -1221,3 +1226,4 @@ export default function HomePage() {
     </Suspense>
   );
 }
+
