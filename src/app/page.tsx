@@ -103,7 +103,7 @@ function HomeContent() {
   const listRefs = useRef<Record<string, HTMLLIElement | null>>({});
   const lastInteractedItemIdRef = useRef<string | null>(null);
 
-  const [itemsVisible, setItemsVisible] = useState(true);
+  const [itemsVisible, setItemsVisible] = useState(true); // Renamed from snacksVisible
   const prevShowShareDialogRef = useRef<boolean | undefined>();
 
   const [adminActiveView, setAdminActiveView] = useState<AdminActiveView>('items');
@@ -451,7 +451,7 @@ function HomeContent() {
       setIsAdmin(true);
       setPassword("");
       setShowAdminLoginSection(false);
-      setAdminActiveView('items'); // Default to items view on login
+      setAdminActiveView('items'); 
     } else {
       toast({
         variant: "destructive",
@@ -1092,7 +1092,7 @@ function HomeContent() {
                         setAdminActiveView(null);
                     }}>Logout Admin</Button>
                 </div>
-                <div className="flex space-x-2 pt-2 border-b pb-2">
+                <div className="flex flex-wrap space-x-2 pt-2 border-b pb-2">
                     <Button 
                         variant={adminActiveView === 'items' ? 'default' : 'outline'} 
                         size="sm"
@@ -1107,6 +1107,15 @@ function HomeContent() {
                     >
                         <ShoppingBag className="mr-2 h-4 w-4" /> Purchasing & Suppliers
                     </Button>
+                    <Link href="/bills" passHref>
+                        <Button 
+                            variant={'outline'} 
+                            size="sm"
+                            className="mt-2 sm:mt-0" // Add margin for smaller screens if needed
+                        >
+                           <History className="mr-2 h-4 w-4" /> Sales History
+                        </Button>
+                    </Link>
                 </div>
             </CardHeader>
             <CardContent>
