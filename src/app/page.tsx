@@ -17,10 +17,10 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History } from "lucide-react";
+import { Plus, Minus, Edit, Trash2, ClipboardList, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
 import { addItem, getItems, updateItem, deleteItem, saveBill } from "./actions";
-import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db";
+import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db"; // Snack is used as an internal type for items
 import Link from "next/link";
 import {
   Dialog,
@@ -35,7 +35,7 @@ import {
 import { setSharedOrderInRTDB, SharedOrderItem, SharedOrderData, subscribeToSharedOrder, SharedOrderDataSnapshot } from "@/lib/rt_db";
 
 
-interface SelectedItem extends Snack {
+interface SelectedItem extends Snack { // Snack here refers to the item structure
   quantity: number;
 }
 
@@ -69,7 +69,7 @@ const generateOrderNumber = () => {
 function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [items, setItems] = useState<Snack[]>([]);
+  const [items, setItems] = useState<Snack[]>([]); // Snack is used as an internal type for items
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [serviceCharge, setServiceCharge] = useState<number>(0);
@@ -150,14 +150,14 @@ function HomeContent() {
       setOrderNumber(editOrderNum);
       setEditingBillId(editFsBillId);
       setActiveSharedOrderNumber(editOrderNum);
-      setItemsVisible(true);
-      setIsLocalDirty(false);
+      setItemsVisible(true); // Make items visible when editing from history
+      setIsLocalDirty(false); // Start clean when loading an existing bill
       console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
     } else if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
       setItemsVisible(true);
     }
-  }, [loadItems, searchParams]);
+  }, [loadItems, searchParams]); // orderNumber removed from deps to avoid re-triggering on its change
 
 
   useEffect(() => {
@@ -242,7 +242,7 @@ function HomeContent() {
     return itemsTotal + serviceCharge;
   };
 
-  const handleItemIncrement = (item: Snack) => {
+  const handleItemIncrement = (item: Snack) => { // Snack is used as an internal type for items
     setIsLocalDirty(true);
     lastInteractedItemIdRef.current = item.id;
     setSelectedItems((prevSelected) => {
@@ -295,7 +295,7 @@ function HomeContent() {
   }, [selectedItems]);
 
 
-  const handleEditItem = (item: Snack) => {
+  const handleEditItem = (item: Snack) => { // Snack is used as an internal type for items
     setEditingItemId(item.id);
     setValue("name", item.name);
     setValue("price", item.price.toString());
@@ -373,7 +373,7 @@ function HomeContent() {
           tableNumber: tableNumber,
           notes: notes,
           items: selectedItems.map(s => ({
-            itemId: s.id,
+            itemId: s.id, // Ensure itemId is included for stock updates
             name: s.name,
             price: Number(s.price),
             quantity: s.quantity,
@@ -386,7 +386,7 @@ function HomeContent() {
       try {
           const result = await saveBill(billData, editingBillId || undefined);
           if (result.success) {
-              loadItems();
+              await loadItems(); // Reload items to reflect stock changes
               if (resetFormAfterSave) {
                 setSelectedItems([]);
                 setServiceCharge(0);
@@ -409,9 +409,9 @@ function HomeContent() {
                 if (!editingBillId && result.billId) {
                   setEditingBillId(result.billId);
                 }
-                setIsLocalDirty(false);
-                if (itemsVisible) {
-                    setItemsVisible(false);
+                setIsLocalDirty(false); // Reset dirty flag after successful save/update
+                if (itemsVisible) { // If items were visible (meaning it was "Save Bill" or "Update Bill" action)
+                    setItemsVisible(false); // Hide item selection area
                 }
               }
                toast({ title: result.message });
@@ -534,7 +534,7 @@ function HomeContent() {
       name: s.name,
       price: Number(s.price),
       quantity: s.quantity,
-      itemCode: s.itemCode || '',
+      itemCode: s.itemCode || '', // Ensure itemCode is included
     }));
 
     const sharedOrderPayload: Omit<SharedOrderData, 'lastUpdatedAt' | 'orderNumber'> = {
@@ -567,6 +567,7 @@ function HomeContent() {
 
 
   useEffect(() => {
+    // Only call handleShareBill if the dialog is being opened (not on every re-render or when closing)
     if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
       handleShareBill(orderNumber);
     }
@@ -607,7 +608,7 @@ function HomeContent() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
-        if (!editingBillId) {
+        if (!editingBillId) { // Only clear dirty flag if not in Firestore edit mode
           setIsLocalDirty(false);
         }
       } catch (error) {
@@ -662,7 +663,7 @@ function HomeContent() {
     if (!itemsVisible) {
       setItemsVisible(true);
     } else {
-      handleSaveBill(false);
+      handleSaveBill(false); // For "Save Bill" or "Update Bill"
     }
   };
 
@@ -693,8 +694,9 @@ function HomeContent() {
                 size="icon"
                 onClick={() => {
                     setShowAdminLoginSection(prev => !prev);
-                    if (!showAdminLoginSection && !isAdmin) setItemsVisible(false);
-                    else if (!isAdmin) setItemsVisible(true);
+                    if (!showAdminLoginSection && !isAdmin) setItemsVisible(false); // Hide items if opening admin and not admin
+                    else if (isAdmin) setItemsVisible(false); // If admin, always hide items when admin button is clicked
+                    else if (!isAdmin && showAdminLoginSection) setItemsVisible(true); // If closing admin login and not admin, show items
                 }}
                 aria-label="Toggle Admin Login"
             >
@@ -1129,12 +1131,15 @@ function HomeContent() {
             <CardHeader>
                 <div className="flex justify-between items-center">
                     <CardTitle className="text-lg">Manage Items</CardTitle>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                         <Link href="/purchases/create" passHref>
                             <Button variant="outline" size="sm"><ShoppingCart className="mr-2 h-4 w-4" /> New Purchase</Button>
                         </Link>
                         <Link href="/purchases/history" passHref>
                             <Button variant="outline" size="sm"><History className="mr-2 h-4 w-4" /> Purchase History</Button>
+                        </Link>
+                        <Link href="/suppliers" passHref>
+                            <Button variant="outline" size="sm"><ListChecks className="mr-2 h-4 w-4" /> View Suppliers</Button>
                         </Link>
                     </div>
                 </div>
@@ -1176,17 +1181,37 @@ function HomeContent() {
                         <Button variant="outline" size="icon" onClick={() => handleEditItem(item)} aria-label={`Edit ${item.name}`}>
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="destructive" size="icon" onClick={async () => {
-                             const result = await deleteItem(item.id);
-                             if(result.success) {
-                               toast({title: result.message});
-                               loadItems();
-                             } else {
-                               toast({variant: "destructive", title: "Error", description: result.message});
-                             }
-                        }} aria-label={`Delete ${item.name}`}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="destructive" size="icon" aria-label={`Delete ${item.name}`}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Confirm Deletion</DialogTitle>
+                              <DialogDescription>
+                                Are you sure you want to delete the item "{item.name}"? This action cannot be undone.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <DialogFooter>
+                              <DialogClose asChild>
+                                <Button variant="outline">Cancel</Button>
+                              </DialogClose>
+                              <Button variant="destructive" onClick={async () => {
+                                const result = await deleteItem(item.id);
+                                if (result.success) {
+                                  toast({ title: result.message });
+                                  loadItems();
+                                } else {
+                                  toast({ variant: "destructive", title: "Error", description: result.message });
+                                }
+                              }}>
+                                Delete
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
                       </div>
                     </li>
                    )
@@ -1197,7 +1222,7 @@ function HomeContent() {
           </Card>
            <Button variant="outline" className="mt-4" onClick={() => {
                setIsAdmin(false);
-               setItemsVisible(true);
+               setItemsVisible(true); // Ensure items section is visible after admin logout
            }}>Logout Admin</Button>
         </>
       ) }
@@ -1218,3 +1243,4 @@ export default function HomePage() {
     </Suspense>
   );
 }
+
