@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, Minus, Search, User as UserIcon, Phone, ArrowLeft, CopyIcon, Hash, FileText } from "lucide-react"; 
 import { QRCodeCanvas } from 'qrcode.react';
 
-import { getSnacks } from "@/app/actions"; 
+import { getItems as getSnacks } from "@/app/actions"; // Renamed getSnacks to getItems
 import type { Snack } from "@/lib/db"; // Internal type remains Snack
 import {
   SharedOrderData,
@@ -28,6 +28,8 @@ import {
 } from "@/lib/rt_db";
 
 interface SelectedItemForOrder extends SharedOrderItem {} 
+
+const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
 
 export default function SharedOrderPage() {
   const params = useParams();
@@ -66,7 +68,7 @@ export default function SharedOrderPage() {
       setAllItems(itemsFromDb || []); 
     } catch (error: any) {
       console.error("Failed to load all items:", error); 
-      toast({ variant: "destructive", title: "Failed to load item list." }); 
+      // toast({ variant: "destructive", title: "Failed to load item list." }); 
     } finally {
       setIsLoadingItems(false); 
     }
@@ -98,8 +100,8 @@ export default function SharedOrderPage() {
         setIsUpdatingFromRTDBSync(true);
 
         const newSelectedItemsData = Array.isArray(data.items) ? [...data.items] : []; 
-        const currentSimpleSelected = selectedItems.map(s => ({id: s.id, quantity: s.quantity, price: s.price, name: s.name})); 
-        const newSimpleSelected = newSelectedItemsData.map(s => ({id: s.id, quantity: s.quantity, price: s.price, name: s.name})); 
+        const currentSimpleSelected = selectedItems.map(s => ({id: s.id, quantity: s.quantity, price: s.price, name: s.name, itemCode: s.itemCode})); 
+        const newSimpleSelected = newSelectedItemsData.map(s => ({id: s.id, quantity: s.quantity, price: s.price, name: s.name, itemCode: s.itemCode})); 
 
 
         if (JSON.stringify(currentSimpleSelected) !== JSON.stringify(newSimpleSelected)) {
@@ -163,7 +165,7 @@ export default function SharedOrderPage() {
       setIsLocalDirty(false); 
     } catch (error) {
       console.error("Failed to update RTDB:", error);
-      toast({ variant: "destructive", title: "Sync Error", description: "Failed to save changes." });
+      // toast({ variant: "destructive", title: "Sync Error", description: "Failed to save changes." });
     } finally {
         setIsUpdatingRTDB(false);
     }
@@ -224,8 +226,9 @@ export default function SharedOrderPage() {
         const newItemData: SelectedItemForOrder = { 
             id: item.id,
             name: item.name,
-            price: Number(item.price),
-            quantity: 1
+            price: Number(item.price), // Initialize with item's default price
+            quantity: 1,
+            itemCode: item.itemCode || '',
         };
         return [newItemData, ...prevSelected];
       }
@@ -253,6 +256,19 @@ export default function SharedOrderPage() {
         return [updatedItem, ...newSelected];
       }
     });
+  };
+
+  const handleSelectedPriceChange = (itemId: string, newPriceString: string) => {
+    const newPrice = parseFloat(newPriceString);
+    if (isNaN(newPrice) || newPrice < 0) return; 
+
+    setIsLocalDirty(true);
+    lastInteractedItemIdRef.current = itemId;
+    setSelectedItems(prevSelected =>
+      prevSelected.map(item =>
+        item.id === itemId ? { ...item, price: newPrice } : item
+      )
+    );
   };
 
   const getItemQuantity = (itemId: string) => { 
@@ -393,7 +409,7 @@ export default function SharedOrderPage() {
                   className="rounded-full px-3 py-1 h-auto text-xs"
                   onClick={() => handleItemIncrement(item)} 
                 >
-                  {item.name} (₹{Number(item.price).toFixed(2)})
+                  {item.name} ({currencySymbol}{Number(item.price).toFixed(2)})
                 </Button>
                 {getItemQuantity(item.id) > 0 && ( 
                   <Badge variant="secondary" className="text-xs px-1.5 py-0.5">
@@ -418,8 +434,24 @@ export default function SharedOrderPage() {
                     ref={(el) => listRefs.current[item.id] = el} 
                     className="flex items-center justify-between text-sm p-1.5 rounded-md hover:bg-muted/50"
                   >
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 flex-grow">
                       <span>{item.name}</span>
+                       <Input
+                          type="number"
+                          value={item.price.toString()}
+                          onChange={(e) => handleSelectedPriceChange(item.id, e.target.value)}
+                          onBlur={(e) => {
+                            const newPrice = parseFloat(e.target.value);
+                            if (!isNaN(newPrice) && newPrice >=0) {
+                                handleSelectedPriceChange(item.id, newPrice.toFixed(2));
+                            } else {
+                                const originalItem = allItems.find(i => i.id === item.id);
+                                handleSelectedPriceChange(item.id, (originalItem ? originalItem.price : 0).toFixed(2));
+                            }
+                          }}
+                          className="h-7 w-20 text-xs px-1 text-right"
+                          aria-label={`Price for ${item.name}`}
+                        />
                       <div className="flex items-center border rounded-md">
                         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleItemDecrement(item.id)} aria-label={`Decrease ${item.name}`}> 
                           <Minus className="h-3 w-3" />
@@ -433,7 +465,7 @@ export default function SharedOrderPage() {
                         </Button>
                       </div>
                     </div>
-                    <span className="font-medium tabular-nums">₹{(Number(item.price) * item.quantity).toFixed(2)}</span>
+                    <span className="font-medium tabular-nums ml-2">{currencySymbol}{(Number(item.price) * item.quantity).toFixed(2)}</span>
                   </li>
                 ))}
               </ul>
@@ -459,7 +491,7 @@ export default function SharedOrderPage() {
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="shared-service-charge" className="text-sm">Service Charge (₹)</Label>
+            <Label htmlFor="shared-service-charge" className="text-sm">Service Charge ({currencySymbol})</Label>
             <Input id="shared-service-charge" type="text" placeholder="0.00" value={serviceChargeInput} onChange={handleServiceChargeInputChange} onBlur={handleServiceChargeInputBlur} onFocus={handleServiceChargeInputFocus} className="h-9 text-sm" inputMode="decimal" />
           </div>
           <div className="grid gap-1.5">
@@ -488,7 +520,7 @@ export default function SharedOrderPage() {
           <div className="flex flex-col items-center justify-between gap-3">
             <div className="flex justify-between w-full items-center">
               <span className="text-base font-semibold">Total:</span>
-              <Badge variant="secondary" className="text-base font-semibold tabular-nums">₹{total.toFixed(2)}</Badge>
+              <Badge variant="secondary" className="text-base font-semibold tabular-nums">{currencySymbol}{total.toFixed(2)}</Badge>
             </div>
             {total > 0 && (
               <div className="flex flex-col items-center gap-3 w-full">
