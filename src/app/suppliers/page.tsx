@@ -2,7 +2,7 @@
 // src/app/suppliers/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from "@/components/ui/table";
@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Edit, Loader2, PlusCircle } from "lucide-react";
+import { ArrowLeft, Edit, Loader2, PlusCircle, Search } from "lucide-react"; // Added Search
 import { getSuppliers, updateSupplier, addSupplier } from "@/app/actions";
 import type { Supplier, SupplierInput } from "@/lib/db";
 import { Toaster } from "@/components/ui/toaster";
@@ -50,13 +50,14 @@ const supplierSchema = z.object({
 type SupplierFormData = z.infer<typeof supplierSchema>;
 
 export default function SuppliersPage() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
   const [dialogMode, setDialogMode] = useState<'add' | 'edit' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
+  const [searchTerm, setSearchTerm] = useState("");
 
   const form = useForm<SupplierFormData>({
     resolver: zodResolver(supplierSchema),
@@ -74,12 +75,12 @@ export default function SuppliersPage() {
     try {
       setLoading(true);
       const fetchedSuppliers = await getSuppliers();
-      setSuppliers(fetchedSuppliers);
+      setAllSuppliers(fetchedSuppliers);
       setError(null);
     } catch (err: any) {
       console.error("Failed to fetch suppliers:", err);
       setError("Failed to load suppliers. Please try again later.");
-      setSuppliers([]);
+      setAllSuppliers([]);
     } finally {
       setLoading(false);
     }
@@ -129,7 +130,7 @@ export default function SuppliersPage() {
       if (dialogMode === 'edit' && editingSupplier) {
         result = await updateSupplier(editingSupplier.id, formData);
       } else if (dialogMode === 'add') {
-        const addResult = await addSupplier(formData); // addSupplier returns { success, id?, supplier?, message? }
+        const addResult = await addSupplier(formData);
         result = { success: addResult.success, message: addResult.message };
       } else {
         toast({ variant: "destructive", title: "Error", description: "Invalid dialog mode." });
@@ -152,6 +153,20 @@ export default function SuppliersPage() {
     }
   };
 
+  const filteredSuppliers = useMemo(() => {
+    if (!searchTerm) {
+      return allSuppliers;
+    }
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    return allSuppliers.filter(supplier =>
+      supplier.name.toLowerCase().includes(lowerSearchTerm) ||
+      (supplier.contactPerson && supplier.contactPerson.toLowerCase().includes(lowerSearchTerm)) ||
+      (supplier.phoneNumber && supplier.phoneNumber.toLowerCase().includes(lowerSearchTerm)) ||
+      (supplier.email && supplier.email.toLowerCase().includes(lowerSearchTerm)) ||
+      (supplier.gstNumber && supplier.gstNumber.toLowerCase().includes(lowerSearchTerm))
+    );
+  }, [allSuppliers, searchTerm]);
+
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-4 md:p-8">
       <div className="w-full max-w-5xl mb-4 flex justify-between items-center">
@@ -169,15 +184,28 @@ export default function SuppliersPage() {
       <Card className="w-full max-w-5xl">
         <CardHeader>
           <CardTitle>All Suppliers</CardTitle>
-          <CardDescription>A list of all suppliers registered in the system. Click Edit to update details or Add New Supplier.</CardDescription>
+          <CardDescription>Manage your suppliers. Search, edit, or add new suppliers.</CardDescription>
+          <div className="relative mt-2">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search suppliers by name, contact, phone, email, GSTIN..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 w-full sm:w-1/2 md:w-1/3 h-9"
+              aria-label="Search suppliers"
+            />
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
             <p className="text-center text-muted-foreground">Loading suppliers...</p>
           ) : error ? (
             <p className="text-center text-destructive">{error}</p>
-          ) : suppliers.length === 0 ? (
-            <p className="text-center text-muted-foreground">No suppliers recorded yet. Click "Add New Supplier" to get started.</p>
+          ) : filteredSuppliers.length === 0 ? (
+            <p className="text-center text-muted-foreground">
+              {allSuppliers.length === 0 ? "No suppliers recorded yet. Click 'Add New Supplier' to get started." : "No suppliers match your search criteria."}
+            </p>
           ) : (
             <Table>
               <TableCaption>Details of all registered suppliers.</TableCaption>
@@ -193,7 +221,7 @@ export default function SuppliersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {suppliers.map((supplier) => (
+                {filteredSuppliers.map((supplier) => (
                   <TableRow key={supplier.id}>
                     <TableCell className="font-medium">{supplier.name}</TableCell>
                     <TableCell>{supplier.contactPerson || '-'}</TableCell>
@@ -224,7 +252,7 @@ export default function SuppliersPage() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {dialogMode === 'add' ? "Add New Supplier" : `Edit Supplier: ${editingSupplier?.name}`}
+              {dialogMode === 'add' ? "Add New Supplier" : `Edit Supplier: ${editingSupplier?.name || ""}`}
             </DialogTitle>
             <DialogDescription>
               {dialogMode === 'add' 
@@ -313,7 +341,7 @@ export default function SuppliersPage() {
                 )}
               />
               <DialogFooter className="sticky bottom-0 bg-background py-4 border-t">
-                <Button type="button" variant="outline" onClick={() => setDialogMode(null)}>
+                <Button type="button" variant="outline" onClick={() => { setDialogMode(null); form.reset(); }}>
                     Cancel
                 </Button>
                 <Button type="submit" disabled={isSubmitting}>
@@ -329,3 +357,6 @@ export default function SuppliersPage() {
     </div>
   );
 }
+
+
+    
