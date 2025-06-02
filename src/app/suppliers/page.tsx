@@ -10,9 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Edit, Loader2 } from "lucide-react";
-import { getSuppliers, updateSupplier } from "@/app/actions";
-import type { Supplier } from "@/lib/db";
+import { ArrowLeft, Edit, Loader2, PlusCircle } from "lucide-react";
+import { getSuppliers, updateSupplier, addSupplier } from "@/app/actions";
+import type { Supplier, SupplierInput } from "@/lib/db";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -54,7 +54,7 @@ export default function SuppliersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<'add' | 'edit' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
@@ -89,49 +89,59 @@ export default function SuppliersPage() {
     fetchSuppliers();
   }, [fetchSuppliers]);
 
-  const handleEdit = (supplier: Supplier) => {
-    setEditingSupplier(supplier);
-    form.reset({
-      name: supplier.name,
-      contactPerson: supplier.contactPerson || "",
-      phoneNumber: supplier.phoneNumber || "",
-      email: supplier.email || "",
-      address: supplier.address || "",
-      gstNumber: supplier.gstNumber || "",
-    });
-    setIsEditDialogOpen(true);
+  const handleOpenDialog = (mode: 'add' | 'edit', supplier?: Supplier) => {
+    setDialogMode(mode);
+    if (mode === 'edit' && supplier) {
+      setEditingSupplier(supplier);
+      form.reset({
+        name: supplier.name,
+        contactPerson: supplier.contactPerson || "",
+        phoneNumber: supplier.phoneNumber || "",
+        email: supplier.email || "",
+        address: supplier.address || "",
+        gstNumber: supplier.gstNumber || "",
+      });
+    } else {
+      setEditingSupplier(null);
+      form.reset({ // Reset to defaults for 'add' mode
+        name: "",
+        contactPerson: "",
+        phoneNumber: "",
+        email: "",
+        address: "",
+        gstNumber: "",
+      });
+    }
   };
 
   const onSubmit = async (data: SupplierFormData) => {
-    if (!editingSupplier) return;
     setIsSubmitting(true);
-
     const formData = new FormData();
     formData.append('name', data.name);
-    // Only append if value is not empty, to allow clearing fields
-    if (data.contactPerson) formData.append('contactPerson', data.contactPerson);
-    else formData.append('contactPerson', '');
-
-    if (data.phoneNumber) formData.append('phoneNumber', data.phoneNumber);
-    else formData.append('phoneNumber', '');
-
-    if (data.email) formData.append('email', data.email);
-    else formData.append('email', '');
-
-    if (data.address) formData.append('address', data.address);
-    else formData.append('address', '');
-    
-    if (data.gstNumber) formData.append('gstNumber', data.gstNumber);
-    else formData.append('gstNumber', '');
-
+    formData.append('contactPerson', data.contactPerson || '');
+    formData.append('phoneNumber', data.phoneNumber || '');
+    formData.append('email', data.email || '');
+    formData.append('address', data.address || '');
+    formData.append('gstNumber', data.gstNumber || '');
 
     try {
-      const result = await updateSupplier(editingSupplier.id, formData);
+      let result;
+      if (dialogMode === 'edit' && editingSupplier) {
+        result = await updateSupplier(editingSupplier.id, formData);
+      } else if (dialogMode === 'add') {
+        const addResult = await addSupplier(formData); // addSupplier returns { success, id?, supplier?, message? }
+        result = { success: addResult.success, message: addResult.message };
+      } else {
+        toast({ variant: "destructive", title: "Error", description: "Invalid dialog mode." });
+        setIsSubmitting(false);
+        return;
+      }
+
       if (result.success) {
-        toast({ title: "Success", description: result.message });
-        setIsEditDialogOpen(false);
+        toast({ title: "Success", description: result.message || (dialogMode === 'add' ? "Supplier added successfully!" : "Supplier updated successfully!") });
+        setDialogMode(null);
         setEditingSupplier(null);
-        fetchSuppliers(); // Re-fetch suppliers to show updated data
+        fetchSuppliers(); 
       } else {
         toast({ variant: "destructive", title: "Error", description: result.message });
       }
@@ -151,13 +161,15 @@ export default function SuppliersPage() {
           </Link>
         </Button>
         <h1 className="text-2xl font-semibold">Supplier List</h1>
-        <div style={{ width: '36px' }}></div> {/* Spacer */}
+        <Button variant="outline" onClick={() => handleOpenDialog('add')}>
+          <PlusCircle className="mr-2 h-4 w-4" /> Add New Supplier
+        </Button>
       </div>
 
       <Card className="w-full max-w-5xl">
         <CardHeader>
           <CardTitle>All Suppliers</CardTitle>
-          <CardDescription>A list of all suppliers registered in the system. Click Edit to update details.</CardDescription>
+          <CardDescription>A list of all suppliers registered in the system. Click Edit to update details or Add New Supplier.</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -165,7 +177,7 @@ export default function SuppliersPage() {
           ) : error ? (
             <p className="text-center text-destructive">{error}</p>
           ) : suppliers.length === 0 ? (
-            <p className="text-center text-muted-foreground">No suppliers recorded yet. You can add suppliers during Purchase Order creation.</p>
+            <p className="text-center text-muted-foreground">No suppliers recorded yet. Click "Add New Supplier" to get started.</p>
           ) : (
             <Table>
               <TableCaption>Details of all registered suppliers.</TableCaption>
@@ -190,7 +202,7 @@ export default function SuppliersPage() {
                     <TableCell className="whitespace-pre-wrap max-w-xs">{supplier.address || '-'}</TableCell>
                     <TableCell>{supplier.gstNumber || '-'}</TableCell>
                     <TableCell className="text-center">
-                      <Button variant="outline" size="sm" onClick={() => handleEdit(supplier)}>
+                      <Button variant="outline" size="sm" onClick={() => handleOpenDialog('edit', supplier)}>
                         <Edit className="h-4 w-4 mr-1 sm:mr-2" /> <span className="hidden sm:inline">Edit</span>
                       </Button>
                     </TableCell>
@@ -202,22 +214,26 @@ export default function SuppliersPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+      <Dialog open={dialogMode !== null} onOpenChange={(open) => {
           if (!open) {
-            setEditingSupplier(null); // Clear editing supplier when dialog closes
-            form.reset(); // Reset form when dialog closes
+            setDialogMode(null);
+            setEditingSupplier(null); 
+            form.reset(); 
           }
-          setIsEditDialogOpen(open);
       }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Edit Supplier: {editingSupplier?.name}</DialogTitle>
+            <DialogTitle>
+              {dialogMode === 'add' ? "Add New Supplier" : `Edit Supplier: ${editingSupplier?.name}`}
+            </DialogTitle>
             <DialogDescription>
-              Update the details for this supplier. Click save when you're done.
+              {dialogMode === 'add' 
+                ? "Enter the details for the new supplier." 
+                : "Update the details for this supplier. Click save when you're done."}
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4 max-h-[75vh] overflow-y-auto pr-2"> {/* Added max-h and overflow */}
+            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4 max-h-[75vh] overflow-y-auto pr-2">
               <FormField
                 control={form.control}
                 name="name"
@@ -296,15 +312,13 @@ export default function SuppliersPage() {
                   </FormItem>
                 )}
               />
-              <DialogFooter className="sticky bottom-0 bg-background py-4 border-t"> {/* Make footer sticky */}
-                <DialogClose asChild>
-                  <Button type="button" variant="outline">
+              <DialogFooter className="sticky bottom-0 bg-background py-4 border-t">
+                <Button type="button" variant="outline" onClick={() => setDialogMode(null)}>
                     Cancel
-                  </Button>
-                </DialogClose>
+                </Button>
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Save Changes
+                  {dialogMode === 'add' ? "Add Supplier" : "Save Changes"}
                 </Button>
               </DialogFooter>
             </form>
@@ -315,4 +329,3 @@ export default function SuppliersPage() {
     </div>
   );
 }
-

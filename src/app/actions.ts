@@ -346,28 +346,18 @@ export async function updateSupplier(id: string, data: FormData): Promise<{ succ
 
         const supplierUpdate: Partial<SupplierInput> = {
             name: name.trim(),
-            contactPerson: (data.get('contactPerson') as string | null) || undefined,
-            phoneNumber: (data.get('phoneNumber') as string | null) || undefined,
-            email: (data.get('email') as string | null) || undefined,
-            address: (data.get('address') as string | null) || undefined,
-            gstNumber: (data.get('gstNumber') as string | null) || undefined,
+            contactPerson: (data.get('contactPerson') as string) || '', // Use empty string if null/undefined
+            phoneNumber: (data.get('phoneNumber') as string) || '',   // Use empty string if null/undefined
+            email: (data.get('email') as string) || '',             // Use empty string if null/undefined
+            address: (data.get('address') as string) || '',           // Use empty string if null/undefined
+            gstNumber: (data.get('gstNumber') as string) || '',         // Use empty string if null/undefined
         };
-
-        // Filter out any null values passed from form if field was intended to be cleared but not explicitly set to empty string.
-        // Firestore update with `undefined` will not change the field, whereas `''` will set it to empty.
-        Object.keys(supplierUpdate).forEach(key => {
-            const typedKey = key as keyof Partial<SupplierInput>;
-            if (supplierUpdate[typedKey] === null) {
-                supplierUpdate[typedKey] = ''; // Explicitly set to empty string if cleared in form
-            }
-        });
-
 
         const result = await updateSupplierInDb(id, supplierUpdate);
 
         if (result.success) {
             revalidatePath('/suppliers');
-            revalidatePath('/purchases/create'); // In case supplier name was changed and it's listed there
+            revalidatePath('/purchases/create'); 
             return { success: true, message: 'Supplier updated successfully!' };
         } else {
             return { success: false, message: result.message || 'Failed to update supplier.' };
@@ -382,3 +372,5 @@ export async function updateSupplier(id: string, data: FormData): Promise<{ succ
 export async function getSuppliers(): Promise<Supplier[]> {
     return getSuppliersFromDb();
 }
+
+
