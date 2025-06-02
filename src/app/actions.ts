@@ -22,6 +22,7 @@ import {
     SupplierInput,
     addSupplierToDb,
     getSuppliersFromDb,
+    updateSupplierInDb,
     Supplier,
     getDoc
 } from '@/lib/db';
@@ -80,6 +81,7 @@ export async function addItem(data: FormData) {
       revalidatePath('/bills');
       revalidatePath('/purchases/create'); 
       revalidatePath('/purchases/history');
+      revalidatePath('/suppliers');
       return {success: true, message: 'Item added successfully!', id: result.id};
     } else {
       return {success: false, message: result.message || 'Failed to add item.'};
@@ -138,6 +140,7 @@ export async function updateItem(id: string, data: FormData) {
       revalidatePath('/bills');
       revalidatePath('/purchases/create');
       revalidatePath('/purchases/history');
+      revalidatePath('/suppliers');
       return {success: true, message: 'Item updated successfully!'};
     } else {
       return {success: false, message: result.message || 'Failed to update item.'};
@@ -157,6 +160,7 @@ export async function deleteItem(id: string) {
       revalidatePath('/bills');
       revalidatePath('/purchases/create');
       revalidatePath('/purchases/history');
+      revalidatePath('/suppliers');
       return {success: true, message: 'Item deleted successfully!'};
     } else {
       return {success: false, message: result.message || 'Failed to delete item.'};
@@ -234,6 +238,7 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
             
             revalidatePath('/bills');
             revalidatePath('/'); 
+            revalidatePath('/suppliers');
             
             let finalMessage = billIdToUpdate ? 'Bill updated successfully!' : 'Bill saved successfully!';
             if (stockUpdateResultMessage) {
@@ -282,6 +287,7 @@ export async function savePurchase(purchaseData: PurchaseInput) {
         revalidatePath('/'); 
         revalidatePath('/purchases/create');
         revalidatePath('/purchases/history');
+        revalidatePath('/suppliers');
 
         return {
             success: true,
@@ -308,18 +314,67 @@ export async function addSupplier(data: FormData): Promise<{ success: boolean; i
             return { success: false, message: 'Supplier name cannot be empty.' };
         }
 
-        const newSupplier: SupplierInput = { name };
+        const newSupplier: SupplierInput = {
+          name: name.trim(),
+          contactPerson: (data.get('contactPerson') as string) || '',
+          phoneNumber: (data.get('phoneNumber') as string) || '',
+          email: (data.get('email') as string) || '',
+          address: (data.get('address') as string) || '',
+          gstNumber: (data.get('gstNumber') as string) || '',
+        };
         const result = await addSupplierToDb(newSupplier);
 
-        if (result.success && result.id) {
-            revalidatePath('/purchases/create'); // Revalidate if suppliers are listed there
-            return { success: true, message: 'Supplier added successfully!', id: result.id, supplier: {id: result.id, name }};
+        if (result.success && result.id && result.supplier) {
+            revalidatePath('/purchases/create');
+            revalidatePath('/suppliers');
+            return { success: true, message: 'Supplier added successfully!', id: result.id, supplier: result.supplier};
         } else {
             return { success: false, message: result.message || 'Failed to add supplier.' };
         }
     } catch (error: any) {
         console.error('Error adding supplier:', error);
         return { success: false, message: error.message || 'An unexpected error occurred while adding supplier.' };
+    }
+}
+
+export async function updateSupplier(id: string, data: FormData): Promise<{ success: boolean; message?: string }> {
+    try {
+        const name = data.get('name') as string;
+        if (!name || name.trim() === "") {
+            return { success: false, message: 'Supplier name cannot be empty.' };
+        }
+
+        const supplierUpdate: Partial<SupplierInput> = {
+            name: name.trim(),
+            contactPerson: (data.get('contactPerson') as string | null) || undefined,
+            phoneNumber: (data.get('phoneNumber') as string | null) || undefined,
+            email: (data.get('email') as string | null) || undefined,
+            address: (data.get('address') as string | null) || undefined,
+            gstNumber: (data.get('gstNumber') as string | null) || undefined,
+        };
+
+        // Filter out any null values passed from form if field was intended to be cleared but not explicitly set to empty string.
+        // Firestore update with `undefined` will not change the field, whereas `''` will set it to empty.
+        Object.keys(supplierUpdate).forEach(key => {
+            const typedKey = key as keyof Partial<SupplierInput>;
+            if (supplierUpdate[typedKey] === null) {
+                supplierUpdate[typedKey] = ''; // Explicitly set to empty string if cleared in form
+            }
+        });
+
+
+        const result = await updateSupplierInDb(id, supplierUpdate);
+
+        if (result.success) {
+            revalidatePath('/suppliers');
+            revalidatePath('/purchases/create'); // In case supplier name was changed and it's listed there
+            return { success: true, message: 'Supplier updated successfully!' };
+        } else {
+            return { success: false, message: result.message || 'Failed to update supplier.' };
+        }
+    } catch (error: any) {
+        console.error('Error updating supplier:', error);
+        return { success: false, message: error.message || 'An unexpected error occurred while updating supplier.' };
     }
 }
 

@@ -345,32 +345,72 @@ export async function getPurchasesFromDb(): Promise<Purchase[]> {
 export interface Supplier {
   id: string;
   name: string;
-  // Add other fields like contact, address as needed in the future
+  contactPerson?: string;
+  phoneNumber?: string;
+  email?: string;
+  address?: string;
+  gstNumber?: string;
+  createdAt?: Timestamp | Date;
+  updatedAt?: Timestamp | Date;
 }
-export interface SupplierInput extends Omit<Supplier, 'id'> {}
+export interface SupplierInput extends Omit<Supplier, 'id' | 'createdAt' | 'updatedAt'> {}
 
 const suppliersCollection = collection(db, 'suppliers');
 
-export async function addSupplierToDb(supplier: SupplierInput): Promise<{ success: boolean; id?: string; message?: string }> {
+export async function addSupplierToDb(supplier: SupplierInput): Promise<{ success: boolean; id?: string; message?: string; supplier?: Supplier }> {
     try {
-        // Check if supplier with the same name already exists (case-insensitive)
         const q = query(suppliersCollection, where("name_lowercase", "==", supplier.name.toLowerCase()));
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
             return { success: false, message: `Supplier with name '${supplier.name}' already exists.` };
         }
 
-        const docRef = await addDoc(suppliersCollection, {
+        const dataToSave: any = {
             ...supplier,
-            name_lowercase: supplier.name.toLowerCase(), // For case-insensitive checks
+            name: supplier.name.trim(),
+            name_lowercase: supplier.name.trim().toLowerCase(),
+            contactPerson: supplier.contactPerson || '',
+            phoneNumber: supplier.phoneNumber || '',
+            email: supplier.email || '',
+            address: supplier.address || '',
+            gstNumber: supplier.gstNumber || '',
             createdAt: serverTimestamp()
-        });
-        return { success: true, id: docRef.id };
+        };
+
+        const docRef = await addDoc(suppliersCollection, dataToSave);
+        return { success: true, id: docRef.id, supplier: { id: docRef.id, ...dataToSave, createdAt: new Date()} };
     } catch (e: any) {
         console.error('Error adding supplier document: ', e);
         return { success: false, message: e.message };
     }
 }
+
+export async function updateSupplierInDb(id: string, supplierData: Partial<SupplierInput>): Promise<{ success: boolean; message?: string }> {
+    try {
+        const supplierDocRef = doc(db, 'suppliers', id);
+        const dataToUpdate: any = { ...supplierData };
+
+        if (supplierData.name) {
+            dataToUpdate.name = supplierData.name.trim();
+            dataToUpdate.name_lowercase = supplierData.name.trim().toLowerCase();
+        }
+        // Ensure empty strings for optional fields if explicitly set to empty
+        if (supplierData.contactPerson !== undefined) dataToUpdate.contactPerson = supplierData.contactPerson || '';
+        if (supplierData.phoneNumber !== undefined) dataToUpdate.phoneNumber = supplierData.phoneNumber || '';
+        if (supplierData.email !== undefined) dataToUpdate.email = supplierData.email || '';
+        if (supplierData.address !== undefined) dataToUpdate.address = supplierData.address || '';
+        if (supplierData.gstNumber !== undefined) dataToUpdate.gstNumber = supplierData.gstNumber || '';
+
+        dataToUpdate.updatedAt = serverTimestamp();
+
+        await updateDoc(supplierDocRef, dataToUpdate);
+        return { success: true, message: "Supplier updated successfully." };
+    } catch (e: any) {
+        console.error(`Error updating supplier document ${id}: `, e);
+        return { success: false, message: e.message };
+    }
+}
+
 
 export async function getSuppliersFromDb(): Promise<Supplier[]> {
     try {
@@ -381,6 +421,13 @@ export async function getSuppliersFromDb(): Promise<Supplier[]> {
             return {
                 id: docSnap.id,
                 name: data.name || 'Unnamed Supplier',
+                contactPerson: data.contactPerson || '',
+                phoneNumber: data.phoneNumber || '',
+                email: data.email || '',
+                address: data.address || '',
+                gstNumber: data.gstNumber || '',
+                createdAt: data.createdAt,
+                updatedAt: data.updatedAt,
             } as Supplier;
         });
     } catch (e: any) {
@@ -391,4 +438,3 @@ export async function getSuppliersFromDb(): Promise<Supplier[]> {
 
 
 export { firestoreGetDoc as getDoc };
-
