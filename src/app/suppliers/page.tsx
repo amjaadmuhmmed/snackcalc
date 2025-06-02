@@ -108,11 +108,22 @@ export default function SuppliersPage() {
 
     const formData = new FormData();
     formData.append('name', data.name);
+    // Only append if value is not empty, to allow clearing fields
     if (data.contactPerson) formData.append('contactPerson', data.contactPerson);
+    else formData.append('contactPerson', '');
+
     if (data.phoneNumber) formData.append('phoneNumber', data.phoneNumber);
+    else formData.append('phoneNumber', '');
+
     if (data.email) formData.append('email', data.email);
+    else formData.append('email', '');
+
     if (data.address) formData.append('address', data.address);
+    else formData.append('address', '');
+    
     if (data.gstNumber) formData.append('gstNumber', data.gstNumber);
+    else formData.append('gstNumber', '');
+
 
     try {
       const result = await updateSupplier(editingSupplier.id, formData);
@@ -206,7 +217,7 @@ export default function SuppliersPage() {
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 py-4 max-h-[75vh] overflow-y-auto pr-2"> {/* Added max-h and overflow */}
               <FormField
                 control={form.control}
                 name="name"
@@ -285,7 +296,7 @@ export default function SuppliersPage() {
                   </FormItem>
                 )}
               />
-              <DialogFooter>
+              <DialogFooter className="sticky bottom-0 bg-background py-4 border-t"> {/* Make footer sticky */}
                 <DialogClose asChild>
                   <Button type="button" variant="outline">
                     Cancel
@@ -304,3 +315,4 @@ export default function SuppliersPage() {
     </div>
   );
 }
+
