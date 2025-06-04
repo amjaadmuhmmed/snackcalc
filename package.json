@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "cypress:open": "cypress open"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.0.4",
@@ -59,6 +60,7 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "cypress": "^13.13.1",
     "genkit-cli": "^1.0.4",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
