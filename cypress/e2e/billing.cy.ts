@@ -25,7 +25,7 @@ describe('Billing Workflow', () => {
 
     // Verify total
     cy.contains('span', 'Total:')
-      .next('span.badge')
+      .next('div.badge') // Changed from span.badge to div.badge
       .should($badge => {
         const text = $badge.text();
         expect(text).to.match(new RegExp(`${currencySymbol}\\d+\\.\\d{2}`)); // Wait for format
@@ -44,7 +44,8 @@ describe('Billing Workflow', () => {
     cy.contains('ul li', item1Name).find('button[aria-label*="Increase quantity"]').click();
 
     // Verify Shawaya quantity and subtotal
-    cy.get('ul').contains('li', item1Name).find('span.badge').contains('2').should('be.visible');
+    // The quantity badge is inside the li, then usually a div.badge for ShadCN
+    cy.get('ul').contains('li', item1Name).find('div.badge').contains('2').should('be.visible'); // Changed span.badge to div.badge
     cy.get('ul').contains('li', item1Name).find('span.font-medium').should('contain.text', `${currencySymbol}${(item1Price * 2).toFixed(2)}`);
 
     // Add Coffee
@@ -56,7 +57,7 @@ describe('Billing Workflow', () => {
     // Verify total
     const expectedTotal = (item1Price * 2) + item2Price;
     cy.contains('span', 'Total:')
-      .next('span.badge')
+      .next('div.badge') // Changed from span.badge to div.badge
       .should($badge => {
         const text = $badge.text();
         expect(text).to.match(new RegExp(`${currencySymbol}\\d+\\.\\d{2}`));
@@ -79,7 +80,7 @@ describe('Billing Workflow', () => {
 
     // Verify overall total
     cy.contains('span', 'Total:')
-      .next('span.badge')
+      .next('div.badge') // Changed from span.badge to div.badge
       .should($badge => {
         const text = $badge.text();
         expect(text).to.match(new RegExp(`${currencySymbol}\\d+\\.\\d{2}`));
@@ -100,7 +101,7 @@ describe('Billing Workflow', () => {
     // Verify total
     const expectedTotal = itemPrice + serviceCharge;
     cy.contains('span', 'Total:')
-      .next('span.badge')
+      .next('div.badge') // Changed from span.badge to div.badge
       .should($badge => {
         const text = $badge.text();
         expect(text).to.match(new RegExp(`${currencySymbol}\\d+\\.\\d{2}`));
@@ -128,7 +129,7 @@ describe('Billing Workflow', () => {
 
     // Verify total is reset (assuming service charge also resets)
     cy.contains('span', 'Total:')
-        .next('span.badge')
+        .next('div.badge') // Changed from span.badge to div.badge
         .should('contain.text', `${currencySymbol}0.00`); // Ensure it's properly zeroed
     cy.contains('button', 'Save Bill').should('be.visible'); // Button text reverts
   });
