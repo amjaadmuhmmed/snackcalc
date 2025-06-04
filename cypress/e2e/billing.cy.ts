@@ -8,17 +8,17 @@ describe('Billing Workflow', () => {
     // Ensure items are loaded (adjust item name and price as per your data)
     // This is a simple check; more robust would be to wait for a specific element
     // that indicates items are ready.
-    cy.contains('Samosa', { timeout: 10000 }).should('be.visible'); // Example item
+    cy.contains('Shawaya', { timeout: 10000 }).should('be.visible'); // Updated item
   });
 
   it('should add an item to the bill and update total', () => {
-    const itemName = 'Samosa'; // Replace with an actual item name from your app
-    const itemPrice = 15;   // Replace with the item's price
+    const itemName = 'Shawaya'; 
+    const itemPrice = 300;   
 
-    // Find the Samosa button and click it
+    // Find the Shawaya button and click it
     cy.contains('button', itemName).click();
 
-    // Verify Samosa is in selected items
+    // Verify Shawaya is in selected items
     cy.get('ul').contains('li', itemName).should('be.visible');
     cy.get('ul').contains('li', itemName).find('input[type="number"]').should('have.value', itemPrice.toString());
     cy.get('ul').contains('li', itemName).find('span.font-medium').should('contain.text', `${currencySymbol}${itemPrice.toFixed(2)}`);
@@ -34,23 +34,23 @@ describe('Billing Workflow', () => {
   });
 
   it('should add multiple items and update quantity and total', () => {
-    const item1Name = 'Samosa'; // Replace
-    const item1Price = 15;    // Replace
-    const item2Name = 'Tea';    // Replace with another item
-    const item2Price = 10;   // Replace
+    const item1Name = 'Shawaya'; 
+    const item1Price = 300;    
+    const item2Name = 'Coffee';    
+    const item2Price = 15;   
 
-    // Add Samosa twice
+    // Add Shawaya twice
     cy.contains('button', item1Name).click();
     cy.contains('ul li', item1Name).find('button[aria-label*="Increase quantity"]').click();
 
-    // Verify Samosa quantity and subtotal
+    // Verify Shawaya quantity and subtotal
     cy.get('ul').contains('li', item1Name).find('span.badge').contains('2').should('be.visible');
     cy.get('ul').contains('li', item1Name).find('span.font-medium').should('contain.text', `${currencySymbol}${(item1Price * 2).toFixed(2)}`);
 
-    // Add Tea
+    // Add Coffee
     cy.contains('button', item2Name).click();
 
-    // Verify Tea is in selected items
+    // Verify Coffee is in selected items
     cy.get('ul').contains('li', item2Name).should('be.visible');
 
     // Verify total
@@ -65,11 +65,11 @@ describe('Billing Workflow', () => {
   });
 
   it('should allow changing the price of a selected item', () => {
-    const itemName = 'Samosa';
-    const originalPrice = 15;
-    const newPrice = 20;
+    const itemName = 'Shawaya';
+    const originalPrice = 300;
+    const newPrice = 320; // Example new price for Shawaya
 
-    cy.contains('button', itemName).click(); // Add Samosa
+    cy.contains('button', itemName).click(); // Add Shawaya
 
     // Change price
     cy.get('ul').contains('li', itemName).find('input[type="number"]').clear().type(newPrice.toString()).blur();
@@ -88,11 +88,11 @@ describe('Billing Workflow', () => {
   });
 
   it('should add service charge and update total', () => {
-    const itemName = 'Samosa';
-    const itemPrice = 15;
-    const serviceCharge = 5;
+    const itemName = 'Shawaya';
+    const itemPrice = 300;
+    const serviceCharge = 25; // Example service charge
 
-    cy.contains('button', itemName).click(); // Add Samosa
+    cy.contains('button', itemName).click(); // Add Shawaya
 
     // Add service charge
     cy.get('input#service-charge').clear().type(serviceCharge.toString()).blur();
@@ -109,7 +109,7 @@ describe('Billing Workflow', () => {
   });
 
   it('should save a bill and then allow starting a new order', () => {
-    const itemName = 'Samosa';
+    const itemName = 'Shawaya';
     cy.contains('button', itemName).click();
 
     // Click "Save Bill"
