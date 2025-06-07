@@ -308,6 +308,7 @@ export async function savePurchase(purchaseData: PurchaseInput) {
 }
 
 export async function getPurchases(supplierName?: string): Promise<Purchase[]> {
+    console.log(`[Action getPurchases] Called with supplierName: "${supplierName === undefined ? 'undefined' : supplierName}"`);
     return getPurchasesFromDb(supplierName);
 }
 
@@ -380,3 +381,6 @@ export async function updateSupplier(id: string, data: FormData): Promise<{ succ
 export async function getSuppliers(): Promise<Supplier[]> {
     return getSuppliersFromDb();
 }
+
+
+    
