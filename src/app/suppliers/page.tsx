@@ -234,7 +234,7 @@ export default function SuppliersPage() {
                         <Edit className="h-4 w-4 mr-1 sm:mr-0" /> <span className="hidden sm:inline">Edit</span>
                       </Button>
                       <Button variant="outline" size="sm" asChild aria-label={`View report for ${supplier.name}`}>
-                        <Link href={`/reports/supplier?name=${encodeURIComponent(supplier.name)}`}>
+                        <Link href={`/reports/supplier?id=${supplier.id}&name=${encodeURIComponent(supplier.name)}`}>
                             <FileText className="h-4 w-4 mr-1 sm:mr-0" /> <span className="hidden sm:inline">Report</span>
                         </Link>
                       </Button>
@@ -362,3 +362,4 @@ export default function SuppliersPage() {
     </div>
   );
 }
+

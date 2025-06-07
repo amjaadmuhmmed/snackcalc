@@ -307,9 +307,9 @@ export async function savePurchase(purchaseData: PurchaseInput) {
     }
 }
 
-export async function getPurchases(supplierName?: string): Promise<Purchase[]> {
-    console.log(`[Action getPurchases] Called with supplierName: "${supplierName === undefined ? 'undefined' : supplierName}"`);
-    return getPurchasesFromDb(supplierName);
+export async function getPurchases(supplierId?: string): Promise<Purchase[]> {
+    console.log(`[Action getPurchases] Called with supplierId: "${supplierId === undefined ? 'undefined' : supplierId}"`);
+    return getPurchasesFromDb(supplierId);
 }
 
 

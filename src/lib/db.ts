@@ -252,6 +252,7 @@ export interface Purchase {
     id: string;
     purchaseOrderNumber: string;
     supplierName?: string;
+    supplierId?: string; // Added supplierId
     purchaseDate: Timestamp | Date;
     items: PurchaseItem[];
     totalAmount: number;
@@ -265,12 +266,17 @@ const purchasesCollection = collection(db, 'purchases');
 
 export async function addPurchaseToDb(purchase: PurchaseInput): Promise<{ success: boolean; id?: string; message?: string }> {
     try {
-        const docRef = await addDoc(purchasesCollection, {
+        const purchaseData: any = {
             ...purchase,
             supplierName: purchase.supplierName || '',
             notes: purchase.notes || '',
             createdAt: serverTimestamp()
-        });
+        };
+        if (purchase.supplierId) {
+            purchaseData.supplierId = purchase.supplierId;
+        }
+
+        const docRef = await addDoc(purchasesCollection, purchaseData);
         return { success: true, id: docRef.id };
     } catch (e: any) {
         console.error('Error adding purchase document: ', e);
@@ -310,13 +316,18 @@ export async function updateStockAfterPurchase(
     }
 }
 
-export async function getPurchasesFromDb(supplierName?: string): Promise<Purchase[]> {
+export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[]> {
     try {
-      let purchasesQuery = query(purchasesCollection, orderBy('purchaseDate', 'desc'));
-      if (supplierName) {
-        purchasesQuery = query(purchasesCollection, where("supplierName", "==", supplierName), orderBy('purchaseDate', 'desc'));
+      let purchasesQuery;
+      if (supplierId) {
+        console.log(`[DB getPurchasesFromDb] Querying purchases for supplierId: "${supplierId}"`);
+        purchasesQuery = query(purchasesCollection, where("supplierId", "==", supplierId), orderBy('purchaseDate', 'desc'));
+      } else {
+        console.log(`[DB getPurchasesFromDb] Querying all purchases.`);
+        purchasesQuery = query(purchasesCollection, orderBy('purchaseDate', 'desc'));
       }
       const purchaseSnapshot = await getDocs(purchasesQuery);
+      console.log(`[DB getPurchasesFromDb] Found ${purchaseSnapshot.docs.length} purchases for supplierId: "${supplierId}"`);
       return purchaseSnapshot.docs.map(docSnap => {
         const data = docSnap.data();
         const items = (data.items || []).map((item: any) => ({
@@ -331,6 +342,7 @@ export async function getPurchasesFromDb(supplierName?: string): Promise<Purchas
           id: docSnap.id,
           purchaseOrderNumber: data.purchaseOrderNumber,
           supplierName: data.supplierName || '',
+          supplierId: data.supplierId || '', // Include supplierId
           purchaseDate: data.purchaseDate,
           items: items,
           totalAmount: data.totalAmount,
@@ -381,7 +393,18 @@ export async function addSupplierToDb(supplier: SupplierInput): Promise<{ succes
         };
 
         const docRef = await addDoc(suppliersCollection, dataToSave);
-        return { success: true, id: docRef.id, supplier: { id: docRef.id, ...dataToSave, createdAt: new Date()} };
+        // Construct the supplier object to return, ensuring createdAt is a usable Date for client
+        const createdSupplier: Supplier = {
+             id: docRef.id,
+             name: dataToSave.name,
+             contactPerson: dataToSave.contactPerson,
+             phoneNumber: dataToSave.phoneNumber,
+             email: dataToSave.email,
+             address: dataToSave.address,
+             gstNumber: dataToSave.gstNumber,
+             createdAt: new Date() // Use current date as placeholder, Firestore will set serverTimestamp
+        };
+        return { success: true, id: docRef.id, supplier: createdSupplier };
     } catch (e: any) {
         console.error('Error adding supplier document: ', e);
         return { success: false, message: e.message };

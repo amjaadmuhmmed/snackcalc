@@ -57,31 +57,33 @@ const formatDisplayDate = (timestamp: any): string => {
 
 function SupplierReportContent() {
   const searchParams = useSearchParams();
+  const supplierIdFromUrl = searchParams.get("id");
   const supplierNameFromUrl = searchParams.get("name");
+
 
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!supplierNameFromUrl) {
-      setError("Supplier name not provided in the URL.");
+    if (!supplierIdFromUrl) {
+      setError("Supplier ID not provided in the URL.");
       setLoading(false);
       return;
     }
 
-    const decodedSupplierName = decodeURIComponent(supplierNameFromUrl);
-    console.log("[Supplier Report Page] Decoded Supplier Name for query:", decodedSupplierName);
+    const decodedSupplierName = supplierNameFromUrl ? decodeURIComponent(supplierNameFromUrl) : "Supplier";
+    console.log(`[Supplier Report Page] Querying for supplierId: "${supplierIdFromUrl}", Name: "${decodedSupplierName}"`);
 
     const fetchPurchases = async () => {
       try {
         setLoading(true);
-        const fetchedPurchases = await getPurchases(decodedSupplierName);
-        console.log("[Supplier Report Page] Fetched Purchases:", fetchedPurchases);
+        const fetchedPurchases = await getPurchases(supplierIdFromUrl);
+        console.log(`[Supplier Report Page] Fetched ${fetchedPurchases.length} Purchases for supplierId ${supplierIdFromUrl}:`, fetchedPurchases);
         setPurchases(fetchedPurchases);
         setError(null);
       } catch (err: any) {
-        console.error(`[Supplier Report Page] Failed to fetch purchases for supplier ${decodedSupplierName}:`, err);
+        console.error(`[Supplier Report Page] Failed to fetch purchases for supplierId ${supplierIdFromUrl}:`, err);
         setError(`Failed to load purchase history for ${decodedSupplierName}. Please try again later.`);
         setPurchases([]);
       } finally {
@@ -90,11 +92,11 @@ function SupplierReportContent() {
     };
 
     fetchPurchases();
-  }, [supplierNameFromUrl]); // Depend on the raw URL parameter
+  }, [supplierIdFromUrl, supplierNameFromUrl]); 
 
   const pageTitleSupplierName = useMemo(() => {
-    return supplierNameFromUrl ? decodeURIComponent(supplierNameFromUrl) : "Unknown Supplier";
-  }, [supplierNameFromUrl]);
+    return supplierNameFromUrl ? decodeURIComponent(supplierNameFromUrl) : (supplierIdFromUrl ? `Supplier ID: ${supplierIdFromUrl}` : "Unknown Supplier");
+  }, [supplierNameFromUrl, supplierIdFromUrl]);
 
   const totalPurchaseValue = useMemo(() => {
     return purchases.reduce((sum, purchase) => sum + purchase.totalAmount, 0);

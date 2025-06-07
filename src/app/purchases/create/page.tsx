@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, Calendar as CalendarIconLucide, AlertCircle, Info } from "lucide-react";
+import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, Calendar as CalendarIconLucide, AlertCircle, Info, Loader2 } from "lucide-react";
 import { getItems, savePurchase, getSuppliers, addSupplier } from "@/app/actions";
 import type { Snack, PurchaseInput, PurchaseItem as DbPurchaseItem, Supplier } from "@/lib/db";
 import { Timestamp } from "firebase/firestore";
@@ -115,7 +115,7 @@ export default function CreatePurchasePage() {
     );
     if (foundSupplier) {
       setSelectedSupplier(foundSupplier);
-      setSupplierNameInput(foundSupplier.name); // Ensure casing matches DB
+      setSupplierNameInput(foundSupplier.name); 
     } else {
       setSelectedSupplier(null);
     }
@@ -177,12 +177,13 @@ export default function CreatePurchasePage() {
     return selected ? selected.quantity : 0;
   };
 
-  const proceedToSavePurchase = async (finalSupplierName: string) => {
+  const proceedToSavePurchase = async (finalSupplierName: string, finalSupplierId?: string) => {
     setIsSavingPurchase(true);
 
     const purchaseData: PurchaseInput = {
       purchaseOrderNumber: purchaseOrderNumber,
       supplierName: finalSupplierName,
+      supplierId: finalSupplierId, // Pass supplierId
       purchaseDate: Timestamp.fromDate(purchaseDate!),
       items: selectedItems.map(s => ({
         itemId: s.id,
@@ -208,7 +209,8 @@ export default function CreatePurchasePage() {
         
         const updatedSuppliers = await getSuppliers(); 
         setAllSuppliers(updatedSuppliers);
-        router.push('/purchases/history');
+        // Optionally redirect or clear form, for now, just toast and reset
+        // router.push('/purchases/history'); 
       } else {
         toast({ variant: "destructive", title: "Failed to save purchase.", description: result.message });
       }
@@ -236,39 +238,39 @@ export default function CreatePurchasePage() {
 
     const trimmedSupplierName = supplierNameInput.trim();
 
-    if (selectedSupplier) { // An existing supplier was matched and selected
-        proceedToSavePurchase(selectedSupplier.name);
+    if (selectedSupplier && selectedSupplier.id) { // An existing supplier was matched and selected
+        proceedToSavePurchase(selectedSupplier.name, selectedSupplier.id);
     } else if (trimmedSupplierName) { // No existing supplier matched, but a name was typed
         setNewSupplierNameToCreate(trimmedSupplierName);
         setShowNewSupplierDialog(true);
     } else { // No supplier name entered
-        proceedToSavePurchase(""); // Save with empty supplier name
+        proceedToSavePurchase("", undefined); // Save with empty supplier name and no ID
     }
   };
 
   const handleCreateNewSupplierAndSave = async () => {
     if (!newSupplierNameToCreate) return;
+    setIsSavingPurchase(true); // Indicate saving process starts
 
     const formData = new FormData();
     formData.append('name', newSupplierNameToCreate);
-    // Optional: Add other fields here if your dialog collects them
-    // formData.append('contactPerson', ''); 
-    // formData.append('phoneNumber', '');
-    // ... etc.
+    // Add other fields if your dialog collects them
 
     const result = await addSupplier(formData);
     if (result.success && result.id && result.supplier) {
       toast({ title: `Supplier '${result.supplier.name}' created successfully.` });
       setAllSuppliers(prev => [...prev, result.supplier!]); 
       
-      setSupplierNameInput(result.supplier.name); // Update input with created canonical name
-      setSelectedSupplier(result.supplier);      // Set the newly created supplier as selected
+      setSupplierNameInput(result.supplier.name); 
+      setSelectedSupplier(result.supplier);      
       
       setShowNewSupplierDialog(false);
-      proceedToSavePurchase(result.supplier.name); 
+      // Proceed to save purchase with the new supplier's ID and name
+      proceedToSavePurchase(result.supplier.name, result.supplier.id); 
     } else {
       toast({ variant: "destructive", title: "Failed to create supplier.", description: result.message });
       setShowNewSupplierDialog(false); 
+      setIsSavingPurchase(false); // Reset saving state if supplier creation failed
     }
   };
 
@@ -476,8 +478,9 @@ export default function CreatePurchasePage() {
                 disabled={isSavingPurchase || selectedItems.length === 0}
                 className="w-full sm:w-auto"
             >
+              {isSavingPurchase && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <ShoppingBag className="mr-2 h-4 w-4" />
-              {isSavingPurchase ? "Saving Purchase..." : "Save Purchase & Update Stock"}
+              {isSavingPurchase ? "Saving..." : "Save Purchase & Update Stock"}
             </Button>
           </div>
         </CardContent>
@@ -496,11 +499,12 @@ export default function CreatePurchasePage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-4">
-            <Button variant="outline" onClick={() => setShowNewSupplierDialog(false)}>
+            <Button variant="outline" onClick={() => {setShowNewSupplierDialog(false); setIsSavingPurchase(false);}}>
               Cancel
             </Button>
             <Button onClick={handleCreateNewSupplierAndSave} disabled={isSavingPurchase}>
-              Yes, Create Supplier and Save PO
+              {isSavingPurchase && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Yes, Create & Save PO
             </Button>
           </DialogFooter>
         </DialogContent>
