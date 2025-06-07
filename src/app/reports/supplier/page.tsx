@@ -12,33 +12,40 @@ import { ArrowLeft, Calendar as CalendarIcon } from "lucide-react";
 import { getPurchases } from "@/app/actions"; // Use the modified getPurchases action
 import type { Purchase } from "@/lib/db";
 import { format, isValid } from 'date-fns';
-import { Timestamp } from "firebase/firestore";
-import { Toaster } from "@/components/ui/toaster"; 
+import { Timestamp } from "firebase/firestore"; // Explicit import
+import { Toaster } from "@/components/ui/toaster";
 
 const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
 
+// Consistent timestamp conversion, ensuring Firestore Timestamp is handled
 const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
   if (!timestamp) return null;
   try {
-    if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+    if (timestamp instanceof Timestamp) { // Check for Firestore Timestamp first
       return timestamp.toDate();
-    } else if (timestamp instanceof Timestamp) {
-        return timestamp.toDate();
-    } else if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') {
+    }
+    if (timestamp.toDate && typeof timestamp.toDate === 'function') { // General toDate method
+      return timestamp.toDate();
+    }
+    if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') { // For serialized timestamps
       return new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
-    } else if (typeof timestamp === 'number') {
-      const d = new Date(timestamp);
-      if (isValid(d)) return d;
-    } else if (typeof timestamp === 'string') {
+    }
+    if (typeof timestamp === 'number') { // For Unix ms timestamps
       const d = new Date(timestamp);
       if (isValid(d)) return d;
     }
+    if (typeof timestamp === 'string') { // For ISO strings
+      const d = new Date(timestamp);
+      if (isValid(d)) return d;
+    }
+    console.warn('Invalid or unsupported timestamp format for conversion:', typeof timestamp, timestamp);
     return null;
   } catch (e) {
     console.error("Error converting timestamp to Date:", e, "Timestamp value:", timestamp);
     return null;
   }
 };
+
 
 const formatDisplayDate = (timestamp: any): string => {
     const date = convertFirestoreTimestampToDate(timestamp);
@@ -50,28 +57,32 @@ const formatDisplayDate = (timestamp: any): string => {
 
 function SupplierReportContent() {
   const searchParams = useSearchParams();
-  const supplierName = searchParams.get("name");
+  const supplierNameFromUrl = searchParams.get("name");
 
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!supplierName) {
+    if (!supplierNameFromUrl) {
       setError("Supplier name not provided in the URL.");
       setLoading(false);
       return;
     }
 
+    const decodedSupplierName = decodeURIComponent(supplierNameFromUrl);
+    console.log("[Supplier Report Page] Decoded Supplier Name for query:", decodedSupplierName);
+
     const fetchPurchases = async () => {
       try {
         setLoading(true);
-        const fetchedPurchases = await getPurchases(supplierName); // Pass supplierName to filter
+        const fetchedPurchases = await getPurchases(decodedSupplierName);
+        console.log("[Supplier Report Page] Fetched Purchases:", fetchedPurchases);
         setPurchases(fetchedPurchases);
         setError(null);
       } catch (err: any) {
-        console.error(`Failed to fetch purchases for supplier ${supplierName}:`, err);
-        setError(`Failed to load purchase history for ${supplierName}. Please try again later.`);
+        console.error(`[Supplier Report Page] Failed to fetch purchases for supplier ${decodedSupplierName}:`, err);
+        setError(`Failed to load purchase history for ${decodedSupplierName}. Please try again later.`);
         setPurchases([]);
       } finally {
         setLoading(false);
@@ -79,11 +90,11 @@ function SupplierReportContent() {
     };
 
     fetchPurchases();
-  }, [supplierName]);
+  }, [supplierNameFromUrl]); // Depend on the raw URL parameter
 
-  const decodedSupplierName = useMemo(() => {
-    return supplierName ? decodeURIComponent(supplierName) : "Unknown Supplier";
-  }, [supplierName]);
+  const pageTitleSupplierName = useMemo(() => {
+    return supplierNameFromUrl ? decodeURIComponent(supplierNameFromUrl) : "Unknown Supplier";
+  }, [supplierNameFromUrl]);
 
   const totalPurchaseValue = useMemo(() => {
     return purchases.reduce((sum, purchase) => sum + purchase.totalAmount, 0);
@@ -97,13 +108,13 @@ function SupplierReportContent() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <h1 className="text-xl sm:text-2xl font-semibold text-center">Purchase Report for {decodedSupplierName}</h1>
+        <h1 className="text-xl sm:text-2xl font-semibold text-center">Purchase Report for {pageTitleSupplierName}</h1>
         <div style={{ width: '36px' }}></div> {/* Spacer */}
       </div>
 
       <Card className="w-full max-w-5xl">
         <CardHeader>
-          <CardTitle>Purchase Orders from {decodedSupplierName}</CardTitle>
+          <CardTitle>Purchase Orders from {pageTitleSupplierName}</CardTitle>
           <CardDescription>
             A list of all purchase orders recorded from this supplier.
             Total purchase value from this supplier: <span className="font-semibold">{currencySymbol}{totalPurchaseValue.toFixed(2)}</span>
@@ -115,10 +126,10 @@ function SupplierReportContent() {
           ) : error ? (
             <p className="text-center text-destructive">{error}</p>
           ) : purchases.length === 0 ? (
-            <p className="text-center text-muted-foreground">No purchases recorded from {decodedSupplierName} yet.</p>
+            <p className="text-center text-muted-foreground">No purchases recorded from {pageTitleSupplierName} yet.</p>
           ) : (
             <Table>
-              <TableCaption>Details of past purchase orders from {decodedSupplierName}.</TableCaption>
+              <TableCaption>Details of past purchase orders from {pageTitleSupplierName}.</TableCaption>
               <TableHeader>
                 <TableRow>
                   <TableHead>PO #</TableHead>
@@ -166,3 +177,4 @@ export default function SupplierReportPage() {
     </Suspense>
   )
 }
+
