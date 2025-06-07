@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, Calendar as CalendarIconLucide, AlertCircle } from "lucide-react";
+import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, Calendar as CalendarIconLucide, AlertCircle, Info } from "lucide-react";
 import { getItems, savePurchase, getSuppliers, addSupplier } from "@/app/actions";
 import type { Snack, PurchaseInput, PurchaseItem as DbPurchaseItem, Supplier } from "@/lib/db";
 import { Timestamp } from "firebase/firestore";
@@ -49,7 +49,10 @@ export default function CreatePurchasePage() {
   const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
   const [selectedItems, setSelectedItems] = useState<SelectedItemForPurchase[]>([]);
   const [purchaseOrderNumber, setPurchaseOrderNumber] = useState<string>("");
+  
   const [supplierNameInput, setSupplierNameInput] = useState<string>("");
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
+
   const [purchaseDate, setPurchaseDate] = useState<Date | undefined>(undefined);
   const [notes, setNotes] = useState<string>("");
   const [isSavingPurchase, setIsSavingPurchase] = useState(false);
@@ -102,6 +105,22 @@ export default function CreatePurchasePage() {
       });
     }
   }, [selectedItems]);
+
+  const handleSupplierInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const currentInputName = e.target.value;
+    setSupplierNameInput(currentInputName);
+
+    const foundSupplier = allSuppliers.find(
+      (s) => s.name.toLowerCase() === currentInputName.trim().toLowerCase()
+    );
+    if (foundSupplier) {
+      setSelectedSupplier(foundSupplier);
+      setSupplierNameInput(foundSupplier.name); // Ensure casing matches DB
+    } else {
+      setSelectedSupplier(null);
+    }
+  };
+
 
   const calculateTotal = useMemo(() => {
     return selectedItems.reduce((total, item) => total + Number(item.purchaseCost) * item.quantity, 0);
@@ -158,21 +177,12 @@ export default function CreatePurchasePage() {
     return selected ? selected.quantity : 0;
   };
 
-  const proceedToSavePurchase = async (currentSupplierNameFromDialogOrInput: string) => {
+  const proceedToSavePurchase = async (finalSupplierName: string) => {
     setIsSavingPurchase(true);
-
-    let canonicalSupplierName = currentSupplierNameFromDialogOrInput;
-    if (currentSupplierNameFromDialogOrInput.trim() !== "") { // Only try to find canonical if name is not empty
-        const existingSupplier = allSuppliers.find(s => s.name.toLowerCase() === currentSupplierNameFromDialogOrInput.trim().toLowerCase());
-        if (existingSupplier) {
-            canonicalSupplierName = existingSupplier.name; // Use the name from the suppliers collection (with original casing)
-        }
-    }
-
 
     const purchaseData: PurchaseInput = {
       purchaseOrderNumber: purchaseOrderNumber,
-      supplierName: canonicalSupplierName, // Use the canonical (potentially case-corrected) name
+      supplierName: finalSupplierName,
       purchaseDate: Timestamp.fromDate(purchaseDate!),
       items: selectedItems.map(s => ({
         itemId: s.id,
@@ -191,11 +201,12 @@ export default function CreatePurchasePage() {
         toast({ title: result.message });
         setSelectedItems([]);
         setSupplierNameInput("");
+        setSelectedSupplier(null);
         setNotes("");
         setPurchaseOrderNumber(generatePurchaseOrderNumber());
         setPurchaseDate(new Date());
-        // Optionally, navigate or refresh suppliers list if new one was added implicitly
-        const updatedSuppliers = await getSuppliers(); // Re-fetch suppliers
+        
+        const updatedSuppliers = await getSuppliers(); 
         setAllSuppliers(updatedSuppliers);
         router.push('/purchases/history');
       } else {
@@ -225,21 +236,14 @@ export default function CreatePurchasePage() {
 
     const trimmedSupplierName = supplierNameInput.trim();
 
-    // If supplier name is entered, check if it's new
-    if (trimmedSupplierName) {
-      const supplierExists = allSuppliers.some(
-        (s) => s.name.toLowerCase() === trimmedSupplierName.toLowerCase()
-      );
-
-      if (!supplierExists) {
+    if (selectedSupplier) { // An existing supplier was matched and selected
+        proceedToSavePurchase(selectedSupplier.name);
+    } else if (trimmedSupplierName) { // No existing supplier matched, but a name was typed
         setNewSupplierNameToCreate(trimmedSupplierName);
         setShowNewSupplierDialog(true);
-        return; // Stop here, let dialog handle next step
-      }
+    } else { // No supplier name entered
+        proceedToSavePurchase(""); // Save with empty supplier name
     }
-    // If supplier name is empty OR already exists, proceed directly.
-    // proceedToSavePurchase will handle finding the canonical name if it exists.
-    proceedToSavePurchase(trimmedSupplierName);
   };
 
   const handleCreateNewSupplierAndSave = async () => {
@@ -247,17 +251,24 @@ export default function CreatePurchasePage() {
 
     const formData = new FormData();
     formData.append('name', newSupplierNameToCreate);
+    // Optional: Add other fields here if your dialog collects them
+    // formData.append('contactPerson', ''); 
+    // formData.append('phoneNumber', '');
+    // ... etc.
 
     const result = await addSupplier(formData);
-    if (result.success && result.supplier) {
+    if (result.success && result.id && result.supplier) {
       toast({ title: `Supplier '${result.supplier.name}' created successfully.` });
-      setAllSuppliers(prev => [...prev, result.supplier!]); // Add to local list
-      setShowNewSupplierDialog(false);
+      setAllSuppliers(prev => [...prev, result.supplier!]); 
+      
       setSupplierNameInput(result.supplier.name); // Update input with created canonical name
-      proceedToSavePurchase(result.supplier.name); // Now save the purchase with the canonical name
+      setSelectedSupplier(result.supplier);      // Set the newly created supplier as selected
+      
+      setShowNewSupplierDialog(false);
+      proceedToSavePurchase(result.supplier.name); 
     } else {
       toast({ variant: "destructive", title: "Failed to create supplier.", description: result.message });
-      setShowNewSupplierDialog(false); // Still close dialog
+      setShowNewSupplierDialog(false); 
     }
   };
 
@@ -318,14 +329,15 @@ export default function CreatePurchasePage() {
                 <DatePicker date={purchaseDate} setDate={setPurchaseDate} />
             </div>
             <div className="grid gap-1.5 sm:col-span-2">
-              <Label htmlFor="supplier-name">Supplier Name</Label>
+              <Label htmlFor="supplier-name-input">Supplier Name</Label>
               <Input
-                id="supplier-name"
+                id="supplier-name-input"
                 type="text"
                 value={supplierNameInput}
-                onChange={(e) => setSupplierNameInput(e.target.value)}
-                placeholder="Enter supplier name (optional)"
+                onChange={handleSupplierInputChange}
+                placeholder="Type or select supplier (optional)"
                 list="suppliers-datalist"
+                autoComplete="off"
               />
               {isLoadingSuppliers ? (
                 <p className="text-xs text-muted-foreground">Loading suppliers...</p>
@@ -335,6 +347,14 @@ export default function CreatePurchasePage() {
                         <option key={supplier.id} value={supplier.name} />
                     ))}
                 </datalist>
+              )}
+              {selectedSupplier && (
+                <div className="text-xs text-muted-foreground mt-1 p-2 border border-dashed rounded-md bg-muted/50">
+                  <div className="flex items-center">
+                    <Info className="h-3 w-3 mr-1.5 text-primary" />
+                    <span>Selected Supplier ID: <strong>{selectedSupplier.id}</strong></span>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -472,7 +492,7 @@ export default function CreatePurchasePage() {
             </DialogTitle>
             <DialogDescription>
               The supplier "<strong>{newSupplierNameToCreate}</strong>" was not found in your records.
-              Would you like to create this new supplier?
+              Would you like to create this new supplier? You can add more details later from the Suppliers List page.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-4">
