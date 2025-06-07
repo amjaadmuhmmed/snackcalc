@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Edit, Loader2, PlusCircle, Search } from "lucide-react"; // Added Search
+import { ArrowLeft, Edit, Loader2, PlusCircle, Search, FileText } from "lucide-react"; // Added Search, FileText
 import { getSuppliers, updateSupplier, addSupplier } from "@/app/actions";
 import type { Supplier, SupplierInput } from "@/lib/db";
 import { Toaster } from "@/components/ui/toaster";
@@ -215,9 +215,9 @@ export default function SuppliersPage() {
                   <TableHead className="w-[15%]">Contact Person</TableHead>
                   <TableHead className="w-[15%]">Phone Number</TableHead>
                   <TableHead className="w-[15%]">Email</TableHead>
-                  <TableHead className="w-[20%]">Address</TableHead>
+                  <TableHead className="w-[15%]">Address</TableHead>
                   <TableHead className="w-[10%]">GSTIN</TableHead>
-                  <TableHead className="text-center w-[5%]">Actions</TableHead>
+                  <TableHead className="text-center w-[10%]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -229,9 +229,14 @@ export default function SuppliersPage() {
                     <TableCell>{supplier.email || '-'}</TableCell>
                     <TableCell className="whitespace-pre-wrap max-w-xs">{supplier.address || '-'}</TableCell>
                     <TableCell>{supplier.gstNumber || '-'}</TableCell>
-                    <TableCell className="text-center">
-                      <Button variant="outline" size="sm" onClick={() => handleOpenDialog('edit', supplier)}>
-                        <Edit className="h-4 w-4 mr-1 sm:mr-2" /> <span className="hidden sm:inline">Edit</span>
+                    <TableCell className="text-center space-x-1">
+                      <Button variant="outline" size="sm" onClick={() => handleOpenDialog('edit', supplier)} aria-label={`Edit ${supplier.name}`}>
+                        <Edit className="h-4 w-4 mr-1 sm:mr-0" /> <span className="hidden sm:inline">Edit</span>
+                      </Button>
+                      <Button variant="outline" size="sm" asChild aria-label={`View report for ${supplier.name}`}>
+                        <Link href={`/reports/supplier?name=${encodeURIComponent(supplier.name)}`}>
+                            <FileText className="h-4 w-4 mr-1 sm:mr-0" /> <span className="hidden sm:inline">Report</span>
+                        </Link>
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -357,6 +362,3 @@ export default function SuppliersPage() {
     </div>
   );
 }
-
-
-    

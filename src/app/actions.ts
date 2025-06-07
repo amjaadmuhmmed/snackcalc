@@ -24,7 +24,8 @@ import {
     getSuppliersFromDb,
     updateSupplierInDb,
     Supplier,
-    getDoc
+    getDoc,
+    Purchase
 } from '@/lib/db';
 import {revalidatePath} from 'next/cache';
 import { db } from '@/lib/firebase'; // For getDoc
@@ -82,6 +83,7 @@ export async function addItem(data: FormData) {
       revalidatePath('/purchases/create'); 
       revalidatePath('/purchases/history');
       revalidatePath('/suppliers');
+      revalidatePath('/reports/supplier');
       return {success: true, message: 'Item added successfully!', id: result.id};
     } else {
       return {success: false, message: result.message || 'Failed to add item.'};
@@ -141,6 +143,7 @@ export async function updateItem(id: string, data: FormData) {
       revalidatePath('/purchases/create');
       revalidatePath('/purchases/history');
       revalidatePath('/suppliers');
+      revalidatePath('/reports/supplier');
       return {success: true, message: 'Item updated successfully!'};
     } else {
       return {success: false, message: result.message || 'Failed to update item.'};
@@ -161,6 +164,7 @@ export async function deleteItem(id: string) {
       revalidatePath('/purchases/create');
       revalidatePath('/purchases/history');
       revalidatePath('/suppliers');
+      revalidatePath('/reports/supplier');
       return {success: true, message: 'Item deleted successfully!'};
     } else {
       return {success: false, message: result.message || 'Failed to delete item.'};
@@ -239,6 +243,7 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
             revalidatePath('/bills');
             revalidatePath('/'); 
             revalidatePath('/suppliers');
+            revalidatePath('/reports/supplier');
             
             let finalMessage = billIdToUpdate ? 'Bill updated successfully!' : 'Bill saved successfully!';
             if (stockUpdateResultMessage) {
@@ -288,6 +293,7 @@ export async function savePurchase(purchaseData: PurchaseInput) {
         revalidatePath('/purchases/create');
         revalidatePath('/purchases/history');
         revalidatePath('/suppliers');
+        revalidatePath('/reports/supplier');
 
         return {
             success: true,
@@ -301,8 +307,8 @@ export async function savePurchase(purchaseData: PurchaseInput) {
     }
 }
 
-export async function getPurchases() {
-    return getPurchasesFromDb();
+export async function getPurchases(supplierName?: string): Promise<Purchase[]> {
+    return getPurchasesFromDb(supplierName);
 }
 
 
@@ -327,6 +333,7 @@ export async function addSupplier(data: FormData): Promise<{ success: boolean; i
         if (result.success && result.id && result.supplier) {
             revalidatePath('/purchases/create');
             revalidatePath('/suppliers');
+            revalidatePath('/reports/supplier');
             return { success: true, message: 'Supplier added successfully!', id: result.id, supplier: result.supplier};
         } else {
             return { success: false, message: result.message || 'Failed to add supplier.' };
@@ -358,6 +365,7 @@ export async function updateSupplier(id: string, data: FormData): Promise<{ succ
         if (result.success) {
             revalidatePath('/suppliers');
             revalidatePath('/purchases/create'); 
+            revalidatePath('/reports/supplier');
             return { success: true, message: 'Supplier updated successfully!' };
         } else {
             return { success: false, message: result.message || 'Failed to update supplier.' };
@@ -372,5 +380,3 @@ export async function updateSupplier(id: string, data: FormData): Promise<{ succ
 export async function getSuppliers(): Promise<Supplier[]> {
     return getSuppliersFromDb();
 }
-
-

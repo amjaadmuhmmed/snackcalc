@@ -310,9 +310,12 @@ export async function updateStockAfterPurchase(
     }
 }
 
-export async function getPurchasesFromDb(): Promise<Purchase[]> {
+export async function getPurchasesFromDb(supplierName?: string): Promise<Purchase[]> {
     try {
-      const purchasesQuery = query(purchasesCollection, orderBy('purchaseDate', 'desc'));
+      let purchasesQuery = query(purchasesCollection, orderBy('purchaseDate', 'desc'));
+      if (supplierName) {
+        purchasesQuery = query(purchasesCollection, where("supplierName", "==", supplierName), orderBy('purchaseDate', 'desc'));
+      }
       const purchaseSnapshot = await getDocs(purchasesQuery);
       return purchaseSnapshot.docs.map(docSnap => {
         const data = docSnap.data();
