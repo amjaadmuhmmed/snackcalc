@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Edit, Loader2, PlusCircle, Search } from "lucide-react"; // Removed FileText
+import { ArrowLeft, Edit, Loader2, PlusCircle, Search } from "lucide-react";
 import { getSuppliers, updateSupplier, addSupplier } from "@/app/actions";
 import type { Supplier, SupplierInput } from "@/lib/db";
 import { Toaster } from "@/components/ui/toaster";
@@ -211,30 +211,29 @@ export default function SuppliersPage() {
               <TableCaption>Details of all registered suppliers.</TableCaption>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="text-center w-[10%]">Actions</TableHead>
                   <TableHead className="w-[20%]">Supplier Name</TableHead>
                   <TableHead className="w-[15%]">Contact Person</TableHead>
                   <TableHead className="w-[15%]">Phone Number</TableHead>
                   <TableHead className="w-[15%]">Email</TableHead>
                   <TableHead className="w-[15%]">Address</TableHead>
                   <TableHead className="w-[10%]">GSTIN</TableHead>
-                  <TableHead className="text-center w-[10%]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredSuppliers.map((supplier) => (
                   <TableRow key={supplier.id}>
+                    <TableCell className="text-center space-x-1">
+                      <Button variant="outline" size="sm" onClick={() => handleOpenDialog('edit', supplier)} aria-label={`Edit ${supplier.name}`}>
+                        <Edit className="h-4 w-4 mr-1 sm:mr-0" /> <span className="hidden sm:inline">Edit</span>
+                      </Button>
+                    </TableCell>
                     <TableCell className="font-medium">{supplier.name}</TableCell>
                     <TableCell>{supplier.contactPerson || '-'}</TableCell>
                     <TableCell>{supplier.phoneNumber || '-'}</TableCell>
                     <TableCell>{supplier.email || '-'}</TableCell>
                     <TableCell className="whitespace-pre-wrap max-w-xs">{supplier.address || '-'}</TableCell>
                     <TableCell>{supplier.gstNumber || '-'}</TableCell>
-                    <TableCell className="text-center space-x-1">
-                      <Button variant="outline" size="sm" onClick={() => handleOpenDialog('edit', supplier)} aria-label={`Edit ${supplier.name}`}>
-                        <Edit className="h-4 w-4 mr-1 sm:mr-0" /> <span className="hidden sm:inline">Edit</span>
-                      </Button>
-                      {/* Report button removed */}
-                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -358,4 +357,3 @@ export default function SuppliersPage() {
     </div>
   );
 }
-

@@ -525,6 +525,7 @@ export default function BillsPage() {
                <TableCaption>A list of your recent transactions. Click Edit to modify a bill or Print to get a receipt.</TableCaption>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="text-center">Actions</TableHead>
                   <TableHead>Order #</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Customer</TableHead>
@@ -532,13 +533,20 @@ export default function BillsPage() {
                   <TableHead className="min-w-[200px] sm:min-w-[250px] md:min-w-[300px]">Items</TableHead>
                   <TableHead className="text-right">Service Ch.</TableHead>
                   <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-center">Actions</TableHead>
                   <TableHead>Notes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredBills.map((bill) => (
                   <TableRow key={bill.id}>
+                    <TableCell className="text-center space-x-1">
+                      <Button variant="outline" size="sm" onClick={() => handleEditBill(bill)} aria-label="Edit Bill">
+                        <Edit className="h-3 w-3 mr-1" /> Edit
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handlePrintBill(bill)} aria-label="Print Bill">
+                        <Printer className="h-3 w-3 mr-1" /> Print
+                      </Button>
+                    </TableCell>
                     <TableCell className="font-medium">{bill.orderNumber}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatFirestoreTimestampForDisplay(bill.createdAt)}</TableCell>
                     <TableCell>
@@ -557,14 +565,6 @@ export default function BillsPage() {
                     </TableCell>
                     <TableCell className="text-right">{currencySymbol}{bill.serviceCharge.toFixed(2)}</TableCell>
                     <TableCell className="text-right font-semibold">{currencySymbol}{bill.totalAmount.toFixed(2)}</TableCell>
-                    <TableCell className="text-center space-x-1">
-                      <Button variant="outline" size="sm" onClick={() => handleEditBill(bill)} aria-label="Edit Bill">
-                        <Edit className="h-3 w-3 mr-1" /> Edit
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => handlePrintBill(bill)} aria-label="Print Bill">
-                        <Printer className="h-3 w-3 mr-1" /> Print
-                      </Button>
-                    </TableCell>
                     <TableCell className="text-xs whitespace-pre-wrap max-w-xs">{bill.notes || '-'}</TableCell>
                   </TableRow>
                 ))}
