@@ -252,7 +252,7 @@ export interface Purchase {
     id: string;
     purchaseOrderNumber: string;
     supplierName?: string;
-    supplierId?: string; // Added supplierId
+    supplierId?: string;
     purchaseDate: Timestamp | Date;
     items: PurchaseItem[];
     totalAmount: number;
@@ -266,17 +266,26 @@ const purchasesCollection = collection(db, 'purchases');
 
 export async function addPurchaseToDb(purchase: PurchaseInput): Promise<{ success: boolean; id?: string; message?: string }> {
     try {
-        const purchaseData: any = {
-            ...purchase,
+        console.log('[DB addPurchaseToDb] Received purchase input for saving:', JSON.stringify(purchase, null, 2));
+
+        const dataToSave: { [key: string]: any } = {
+            purchaseOrderNumber: purchase.purchaseOrderNumber,
             supplierName: purchase.supplierName || '',
+            purchaseDate: purchase.purchaseDate, // Assumed to be a Firestore Timestamp from the client
+            items: purchase.items,
+            totalAmount: purchase.totalAmount,
             notes: purchase.notes || '',
-            createdAt: serverTimestamp()
+            createdAt: serverTimestamp(),
         };
-        if (purchase.supplierId) {
-            purchaseData.supplierId = purchase.supplierId;
+
+        // Explicitly add supplierId if it exists and is a non-empty string
+        if (purchase.supplierId && typeof purchase.supplierId === 'string' && purchase.supplierId.trim() !== '') {
+            dataToSave.supplierId = purchase.supplierId;
         }
 
-        const docRef = await addDoc(purchasesCollection, purchaseData);
+        console.log('[DB addPurchaseToDb] Data prepared for Firestore:', JSON.stringify(dataToSave, null, 2));
+
+        const docRef = await addDoc(purchasesCollection, dataToSave);
         return { success: true, id: docRef.id };
     } catch (e: any) {
         console.error('Error adding purchase document: ', e);
@@ -327,7 +336,7 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
         purchasesQuery = query(purchasesCollection, orderBy('purchaseDate', 'desc'));
       }
       const purchaseSnapshot = await getDocs(purchasesQuery);
-      console.log(`[DB getPurchasesFromDb] Found ${purchaseSnapshot.docs.length} purchases for supplierId: "${supplierId}"`);
+      console.log(`[DB getPurchasesFromDb] Found ${purchaseSnapshot.docs.length} purchases for supplierId: "${supplierId === undefined ? 'all' : supplierId}"`);
       return purchaseSnapshot.docs.map(docSnap => {
         const data = docSnap.data();
         const items = (data.items || []).map((item: any) => ({
@@ -342,7 +351,7 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
           id: docSnap.id,
           purchaseOrderNumber: data.purchaseOrderNumber,
           supplierName: data.supplierName || '',
-          supplierId: data.supplierId || '', // Include supplierId
+          supplierId: data.supplierId || '',
           purchaseDate: data.purchaseDate,
           items: items,
           totalAmount: data.totalAmount,
@@ -393,16 +402,16 @@ export async function addSupplierToDb(supplier: SupplierInput): Promise<{ succes
         };
 
         const docRef = await addDoc(suppliersCollection, dataToSave);
-        // Construct the supplier object to return, ensuring createdAt is a usable Date for client
+        const createdSupplierData = (await firestoreGetDoc(docRef)).data();
         const createdSupplier: Supplier = {
              id: docRef.id,
-             name: dataToSave.name,
-             contactPerson: dataToSave.contactPerson,
-             phoneNumber: dataToSave.phoneNumber,
-             email: dataToSave.email,
-             address: dataToSave.address,
-             gstNumber: dataToSave.gstNumber,
-             createdAt: new Date() // Use current date as placeholder, Firestore will set serverTimestamp
+             name: createdSupplierData?.name,
+             contactPerson: createdSupplierData?.contactPerson,
+             phoneNumber: createdSupplierData?.phoneNumber,
+             email: createdSupplierData?.email,
+             address: createdSupplierData?.address,
+             gstNumber: createdSupplierData?.gstNumber,
+             createdAt: createdSupplierData?.createdAt.toDate()
         };
         return { success: true, id: docRef.id, supplier: createdSupplier };
     } catch (e: any) {
@@ -420,7 +429,6 @@ export async function updateSupplierInDb(id: string, supplierData: Partial<Suppl
             dataToUpdate.name = supplierData.name.trim();
             dataToUpdate.name_lowercase = supplierData.name.trim().toLowerCase();
         }
-        // Ensure empty strings for optional fields if explicitly set to empty
         if (supplierData.contactPerson !== undefined) dataToUpdate.contactPerson = supplierData.contactPerson || '';
         if (supplierData.phoneNumber !== undefined) dataToUpdate.phoneNumber = supplierData.phoneNumber || '';
         if (supplierData.email !== undefined) dataToUpdate.email = supplierData.email || '';
@@ -464,3 +472,4 @@ export async function getSuppliersFromDb(): Promise<Supplier[]> {
 
 
 export { firestoreGetDoc as getDoc };
+
