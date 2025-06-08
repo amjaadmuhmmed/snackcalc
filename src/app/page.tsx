@@ -17,10 +17,10 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList } from "lucide-react";
+import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2 } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
-import { addItem, getItems, updateItem, deleteItem, saveBill } from "./actions";
-import type { Snack, BillInput, BillItem as DbBillItem } from "@/lib/db"; // Snack is now effectively Item
+import { addItem, getItems, updateItem, deleteItem, saveBill, addSupplier } from "./actions";
+import type { Snack, BillInput, BillItem as DbBillItem, SupplierInput } from "@/lib/db"; // Snack is now effectively Item
 import Link from "next/link";
 import {
   Dialog,
@@ -32,6 +32,14 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { setSharedOrderInRTDB, SharedOrderItem, SharedOrderData, subscribeToSharedOrder, SharedOrderDataSnapshot } from "@/lib/rt_db";
 
 
@@ -62,6 +70,18 @@ const itemSchema = z.object({
 });
 
 type ItemFormDataType = z.infer<typeof itemSchema>;
+
+const supplierSchema = z.object({
+  name: z.string().min(1, { message: "Supplier name cannot be empty." }),
+  contactPerson: z.string().optional(),
+  phoneNumber: z.string().optional(),
+  email: z.string().email({ message: "Invalid email address." }).optional().or(z.literal('')),
+  address: z.string().optional(),
+  gstNumber: z.string().optional(),
+});
+
+type SupplierFormData = z.infer<typeof supplierSchema>;
+
 
 const generateOrderNumber = () => {
     return `ORD-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
@@ -114,6 +134,11 @@ function HomeContent() {
 
   const [adminActiveView, setAdminActiveView] = useState<AdminActiveView>(null);
 
+  // State for supplier dialog on main page
+  const [showSupplierDialog, setShowSupplierDialog] = useState(false);
+  const [supplierDialogMode, setSupplierDialogMode] = useState<'add' | 'edit' | null>(null); // 'edit' won't be used here yet
+  const [isSubmittingSupplier, setIsSubmittingSupplier] = useState(false);
+
 
   const {
     register,
@@ -131,6 +156,18 @@ function HomeContent() {
       itemCode: "",
       stockQuantity: "0",
     }
+  });
+
+  const supplierForm = useForm<SupplierFormData>({
+    resolver: zodResolver(supplierSchema),
+    defaultValues: {
+      name: "",
+      contactPerson: "",
+      phoneNumber: "",
+      email: "",
+      address: "",
+      gstNumber: "",
+    },
   });
 
   const loadItems = useCallback(async () => {
@@ -348,7 +385,7 @@ function HomeContent() {
     setValue("stockQuantity", item.stockQuantity?.toString() || "0");
   };
 
-  const handleFormSubmit = async (data: ItemFormDataType) => {
+  const handleItemFormSubmit = async (data: ItemFormDataType) => {
     const formData = new FormData();
     formData.append('name', data.name);
     formData.append('price', String(data.price));
@@ -389,6 +426,51 @@ function HomeContent() {
     }
   };
 
+
+  const handleSupplierFormSubmit = async (data: SupplierFormData) => {
+    setIsSubmittingSupplier(true);
+    const formData = new FormData();
+    formData.append('name', data.name);
+    formData.append('contactPerson', data.contactPerson || '');
+    formData.append('phoneNumber', data.phoneNumber || '');
+    formData.append('email', data.email || '');
+    formData.append('address', data.address || '');
+    formData.append('gstNumber', data.gstNumber || '');
+
+    try {
+      const result = await addSupplier(formData);
+
+      if (result.success) {
+        toast({ title: "Success", description: result.message || "Supplier added successfully!" });
+        setShowSupplierDialog(false);
+        supplierForm.reset();
+        // Optionally, refresh any lists that depend on suppliers if they are used on this page
+        // For now, we mostly care about `loadItems` in case suppliers affect item availability or something.
+        await loadItems(); 
+      } else {
+        toast({ variant: "destructive", title: "Error", description: result.message });
+      }
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: "An unexpected error occurred while adding supplier." });
+    } finally {
+      setIsSubmittingSupplier(false);
+    }
+  };
+
+  const handleOpenAddSupplierDialog = () => {
+    setSupplierDialogMode('add');
+    supplierForm.reset({
+      name: "",
+      contactPerson: "",
+      phoneNumber: "",
+      email: "",
+      address: "",
+      gstNumber: "",
+    });
+    setShowSupplierDialog(true);
+  };
+
+
   const handleSaveBill = async (resetFormAfterSave: boolean) => {
       const currentTotal = calculateTotal();
       if (isSavingBill) return;
@@ -428,8 +510,6 @@ function HomeContent() {
 
       try {
           const result = await saveBill(billData, editingBillId || undefined);
-          // Do not show toast on auto-save/sync
-          // toast({ title: result.message }); 
           if (result.success) {
               await loadItems(); // Reload items to reflect any stock changes
               if (resetFormAfterSave) {
@@ -459,6 +539,7 @@ function HomeContent() {
                     setItemsVisible(false);
                 }
               }
+              toast({ title: result.message }); 
           } else {
               toast({ variant: "destructive", title: editingBillId ? "Failed to update bill." : "Failed to save bill.", description: result.message });
           }
@@ -764,7 +845,7 @@ function HomeContent() {
                     setShowAdminLoginSection(nextShowAdminLoginSection);
                     if (nextShowAdminLoginSection && !isAdmin) {
                         setItemsVisible(false);
-                    } else if (!nextShowAdminLoginSection && !isAdmin && !isEditing) { // Ensure items are visible if not admin and not editing
+                    } else if (!nextShowAdminLoginSection && !isAdmin) { 
                         setItemsVisible(true);
                     }
                 }}
@@ -1110,7 +1191,7 @@ function HomeContent() {
                     <>
                         <div className="mb-6">
                             <h3 className="text-md font-semibold mb-2">{editingItemId ? "Update Item" : "Add an Item"}</h3>
-                            <form onSubmit={handleSubmit(handleFormSubmit)} className="grid gap-4">
+                            <form onSubmit={handleSubmit(handleItemFormSubmit)} className="grid gap-4">
                                 <div className="grid gap-2">
                                 <Label htmlFor="name">Name</Label>
                                 <Input id="name" type="text" placeholder="Item Name" {...register("name")} required/>
@@ -1215,6 +1296,9 @@ function HomeContent() {
                                                 } else {
                                                 toast({ variant: "destructive", title: "Error", description: result.message });
                                                 }
+                                                // Close the dialog after action
+                                                const closeButton = document.querySelector('[data-radix-dialog-close]');
+                                                if (closeButton instanceof HTMLElement) closeButton.click();
                                             }}>
                                                 Delete
                                             </Button>
@@ -1234,6 +1318,9 @@ function HomeContent() {
                 {adminActiveView === 'purchasing' && (
                      <div className="flex flex-col space-y-3">
                         <h3 className="text-md font-semibold mb-1">Purchasing & Supplier Management</h3>
+                        <Button variant="outline" className="w-full justify-start" onClick={handleOpenAddSupplierDialog}>
+                           <PlusCircle className="mr-2 h-4 w-4" /> Add New Supplier
+                        </Button>
                         <Link href="/purchases/create" passHref>
                             <Button variant="outline" className="w-full justify-start"><ShoppingCart className="mr-2 h-4 w-4" /> New Purchase Order</Button>
                         </Link>
@@ -1248,6 +1335,120 @@ function HomeContent() {
             </CardContent>
         </Card>
       ) }
+
+      {/* Supplier Add/Edit Dialog for Main Page Admin Panel */}
+      <Dialog open={showSupplierDialog} onOpenChange={(open) => {
+          if (!open) {
+            setShowSupplierDialog(false);
+            setSupplierDialogMode(null);
+            supplierForm.reset(); 
+          }
+      }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {supplierDialogMode === 'add' ? "Add New Supplier" : "Edit Supplier"}
+            </DialogTitle>
+            <DialogDescription>
+              {supplierDialogMode === 'add' 
+                ? "Enter the details for the new supplier." 
+                : "Update the details for this supplier. Click save when you're done."}
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...supplierForm}>
+            <form onSubmit={supplierForm.handleSubmit(handleSupplierFormSubmit)} className="grid gap-4 py-4 max-h-[75vh] overflow-y-auto pr-2">
+              <FormField
+                control={supplierForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Supplier Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Supplier's full name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={supplierForm.control}
+                name="contactPerson"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contact Person (Optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., John Doe" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={supplierForm.control}
+                name="phoneNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone Number (Optional)</FormLabel>
+                    <FormControl>
+                      <Input type="tel" placeholder="e.g., +919876543210" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={supplierForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email (Optional)</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="e.g., contact@supplier.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={supplierForm.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Address (Optional)</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Supplier's full address" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={supplierForm.control}
+                name="gstNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>GSTIN (Optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., 29ABCDE1234F1Z5" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter className="sticky bottom-0 bg-background py-4 border-t">
+                <Button type="button" variant="outline" onClick={() => { setShowSupplierDialog(false); supplierForm.reset(); }}>
+                    Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmittingSupplier}>
+                  {isSubmittingSupplier && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {supplierDialogMode === 'add' ? "Add Supplier" : "Save Changes"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
       <Toaster />
     </div>
   );
@@ -1265,4 +1466,3 @@ export default function HomePage() {
     </Suspense>
   );
 }
-
