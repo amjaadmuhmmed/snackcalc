@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import type { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
 
@@ -121,6 +122,10 @@ export default function PurchaseHistoryPage() {
     setFilteredPurchases(tempFiltered);
 
   }, [allPurchases, dateRange, searchTerm, loading]);
+
+  const totalForFilteredPurchases = useMemo(() => {
+    return filteredPurchases.reduce((sum, purchase) => sum + purchase.totalAmount, 0);
+  }, [filteredPurchases]);
 
 
   return (
@@ -251,8 +256,19 @@ export default function PurchaseHistoryPage() {
             </Table>
           )}
         </CardContent>
+        {filteredPurchases.length > 0 && (
+            <CardFooter className="flex justify-end pt-4 border-t">
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-muted-foreground">Total for Filtered Purchases:</span>
+                    <Badge variant="secondary" className="text-base font-semibold">
+                        {currencySymbol}{totalForFilteredPurchases.toFixed(2)}
+                    </Badge>
+                </div>
+            </CardFooter>
+        )}
       </Card>
       <Toaster />
     </div>
   );
 }
+
