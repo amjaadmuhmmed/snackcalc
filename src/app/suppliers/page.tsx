@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, Edit, Loader2, PlusCircle, Search, FileText } from "lucide-react"; // Added Search, FileText
+import { ArrowLeft, Edit, Loader2, PlusCircle, Search } from "lucide-react"; // Removed FileText
 import { getSuppliers, updateSupplier, addSupplier } from "@/app/actions";
 import type { Supplier, SupplierInput } from "@/lib/db";
 import { Toaster } from "@/components/ui/toaster";
@@ -233,11 +233,7 @@ export default function SuppliersPage() {
                       <Button variant="outline" size="sm" onClick={() => handleOpenDialog('edit', supplier)} aria-label={`Edit ${supplier.name}`}>
                         <Edit className="h-4 w-4 mr-1 sm:mr-0" /> <span className="hidden sm:inline">Edit</span>
                       </Button>
-                      <Button variant="outline" size="sm" asChild aria-label={`View report for ${supplier.name}`}>
-                        <Link href={`/reports/supplier?id=${supplier.id}&name=${encodeURIComponent(supplier.name)}`}>
-                            <FileText className="h-4 w-4 mr-1 sm:mr-0" /> <span className="hidden sm:inline">Report</span>
-                        </Link>
-                      </Button>
+                      {/* Report button removed */}
                     </TableCell>
                   </TableRow>
                 ))}
