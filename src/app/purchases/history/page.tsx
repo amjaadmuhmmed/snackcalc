@@ -202,7 +202,13 @@ export default function PurchaseHistoryPage() {
                   type="search"
                   placeholder="Search PO#, supplier, items..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => {
+                    const newSearchTerm = e.target.value;
+                    setSearchTerm(newSearchTerm);
+                    if (newSearchTerm.trim() !== "" && dateRange !== undefined) {
+                      setDateRange(undefined);
+                    }
+                  }}
                   className="pl-8 w-full sm:w-1/2 md:w-1/3 h-9"
                   aria-label="Search purchases"
               />
