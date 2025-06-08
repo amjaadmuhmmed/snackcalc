@@ -178,7 +178,6 @@ export default function CreatePurchasePage() {
   };
 
   const proceedToSavePurchase = async (finalSupplierName: string, finalSupplierId?: string) => {
-    console.log(`[CreatePurchasePage - proceedToSavePurchase] finalSupplierName: "${finalSupplierName}", finalSupplierId: "${finalSupplierId}"`);
     setIsSavingPurchase(true);
 
     const purchaseData: PurchaseInput = {
@@ -197,9 +196,6 @@ export default function CreatePurchasePage() {
       notes: notes,
     };
 
-    console.log('[CreatePurchasePage] PurchaseInput to be saved (from proceedToSavePurchase):', JSON.stringify(purchaseData, null, 2));
-
-
     try {
       const result = await savePurchase(purchaseData);
       if (result.success) {
@@ -211,8 +207,6 @@ export default function CreatePurchasePage() {
         setPurchaseOrderNumber(generatePurchaseOrderNumber());
         setPurchaseDate(new Date());
         
-        // Re-fetch suppliers in case a new one was added and we want the list updated
-        // although the new one is already added to allSuppliers locally by handleCreateNewSupplierAndSave
         const updatedSuppliers = await getSuppliers(); 
         setAllSuppliers(updatedSuppliers);
       } else {
@@ -248,7 +242,6 @@ export default function CreatePurchasePage() {
         setNewSupplierNameToCreate(trimmedSupplierName);
         setShowNewSupplierDialog(true);
     } else {
-        // Allows saving PO without a supplier name (supplierId will be undefined)
         proceedToSavePurchase("", undefined);
     }
   };
@@ -260,14 +253,11 @@ export default function CreatePurchasePage() {
     const formData = new FormData();
     formData.append('name', newSupplierNameToCreate);
 
-    console.log('[CreatePurchasePage] Calling addSupplier action for:', newSupplierNameToCreate);
     const result = await addSupplier(formData);
-    console.log('[CreatePurchasePage] addSupplier action result:', JSON.stringify(result, null, 2));
     
     if (result.success && result.id && result.supplier) {
       toast({ title: `Supplier '${result.supplier.name}' created successfully.` });
       const newSupplier = result.supplier;
-      console.log('[CreatePurchasePage] New supplier object from action:', JSON.stringify(newSupplier, null, 2));
       
       setAllSuppliers(prev => [...prev, newSupplier]); 
       
@@ -275,7 +265,6 @@ export default function CreatePurchasePage() {
       setSelectedSupplier(newSupplier);      
       
       setShowNewSupplierDialog(false);
-      console.log(`[CreatePurchasePage] Calling proceedToSavePurchase with new supplier - Name: "${newSupplier.name}", ID: "${newSupplier.id}"`);
       proceedToSavePurchase(newSupplier.name, newSupplier.id); 
     } else {
       toast({ variant: "destructive", title: "Failed to create supplier.", description: result.message || "Unknown error creating supplier." });
