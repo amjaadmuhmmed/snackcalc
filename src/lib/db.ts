@@ -265,30 +265,30 @@ export interface PurchaseInput extends Omit<Purchase, 'id' | 'createdAt'> {}
 const purchasesCollection = collection(db, 'purchases');
 
 export async function addPurchaseToDb(purchase: PurchaseInput): Promise<{ success: boolean; id?: string; message?: string }> {
+    console.log('[DB addPurchaseToDb] Received purchase input for saving:', JSON.stringify(purchase, null, 2));
     try {
-        console.log('[DB addPurchaseToDb] Received purchase input for saving:', JSON.stringify(purchase, null, 2));
-
         const dataToSave: { [key: string]: any } = {
             purchaseOrderNumber: purchase.purchaseOrderNumber,
             supplierName: purchase.supplierName || '',
-            purchaseDate: purchase.purchaseDate, // Assumed to be a Firestore Timestamp from the client
+            purchaseDate: purchase.purchaseDate,
             items: purchase.items,
             totalAmount: purchase.totalAmount,
             notes: purchase.notes || '',
             createdAt: serverTimestamp(),
         };
 
-        // Explicitly add supplierId if it exists and is a non-empty string
         if (purchase.supplierId && typeof purchase.supplierId === 'string' && purchase.supplierId.trim() !== '') {
-            dataToSave.supplierId = purchase.supplierId;
+            dataToSave.supplierId = purchase.supplierId.trim();
+        } else {
+            console.warn('[DB addPurchaseToDb] supplierId is missing or invalid in the input. It will not be saved.', purchase.supplierId);
         }
-
+        
         console.log('[DB addPurchaseToDb] Data prepared for Firestore:', JSON.stringify(dataToSave, null, 2));
 
         const docRef = await addDoc(purchasesCollection, dataToSave);
         return { success: true, id: docRef.id };
     } catch (e: any) {
-        console.error('Error adding purchase document: ', e);
+        console.error('[DB addPurchaseToDb] Error adding purchase document: ', e);
         return { success: false, message: e.message };
     }
 }
@@ -326,10 +326,11 @@ export async function updateStockAfterPurchase(
 }
 
 export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[]> {
+    console.log(`[DB getPurchasesFromDb] Called with supplierId: "${supplierId === undefined ? 'undefined' : supplierId}"`);
     try {
       let purchasesQuery;
       if (supplierId) {
-        console.log(`[DB getPurchasesFromDb] Querying purchases for supplierId: "${supplierId}"`);
+        console.log(`[DB getPurchasesFromDb] Querying purchases for supplierId: "${supplierId}" (Type: ${typeof supplierId})`);
         purchasesQuery = query(purchasesCollection, where("supplierId", "==", supplierId), orderBy('purchaseDate', 'desc'));
       } else {
         console.log(`[DB getPurchasesFromDb] Querying all purchases.`);
@@ -337,6 +338,17 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
       }
       const purchaseSnapshot = await getDocs(purchasesQuery);
       console.log(`[DB getPurchasesFromDb] Found ${purchaseSnapshot.docs.length} purchases for supplierId: "${supplierId === undefined ? 'all' : supplierId}"`);
+
+      if (supplierId && purchaseSnapshot.docs.length === 0) {
+        console.warn(`[DB getPurchasesFromDb] No purchases found for supplierId "${supplierId}". Fetching ALL purchases for diagnostic purposes...`);
+        const allPurchasesSnapshot = await getDocs(query(purchasesCollection, orderBy('purchaseDate', 'desc')));
+        console.log(`[DB getPurchasesFromDb] Diagnostic - All Purchases (${allPurchasesSnapshot.docs.length} total):`);
+        allPurchasesSnapshot.docs.forEach(docSnap => {
+          const data = docSnap.data();
+          console.log(`  - Purchase ID: ${docSnap.id}, PO: ${data.purchaseOrderNumber}, Stored SupplierID: ${data.supplierId} (Type: ${typeof data.supplierId}), SupplierName: ${data.supplierName}`);
+        });
+      }
+
       return purchaseSnapshot.docs.map(docSnap => {
         const data = docSnap.data();
         const items = (data.items || []).map((item: any) => ({
@@ -360,7 +372,7 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
         } as Purchase;
       });
     } catch (e: any) {
-      console.error('Error getting purchase documents: ', e);
+      console.error('[DB getPurchasesFromDb] Error getting purchase documents: ', e);
       return [];
     }
 }
@@ -402,7 +414,9 @@ export async function addSupplierToDb(supplier: SupplierInput): Promise<{ succes
         };
 
         const docRef = await addDoc(suppliersCollection, dataToSave);
-        const createdSupplierData = (await firestoreGetDoc(docRef)).data();
+        const createdSupplierDoc = await firestoreGetDoc(docRef); // Fetch the newly created doc
+        const createdSupplierData = createdSupplierDoc.data();
+
         const createdSupplier: Supplier = {
              id: docRef.id,
              name: createdSupplierData?.name,
@@ -411,7 +425,7 @@ export async function addSupplierToDb(supplier: SupplierInput): Promise<{ succes
              email: createdSupplierData?.email,
              address: createdSupplierData?.address,
              gstNumber: createdSupplierData?.gstNumber,
-             createdAt: createdSupplierData?.createdAt.toDate()
+             createdAt: createdSupplierData?.createdAt ? (createdSupplierData.createdAt as Timestamp).toDate() : new Date() // Handle timestamp
         };
         return { success: true, id: docRef.id, supplier: createdSupplier };
     } catch (e: any) {
@@ -472,4 +486,3 @@ export async function getSuppliersFromDb(): Promise<Supplier[]> {
 
 
 export { firestoreGetDoc as getDoc };
-
