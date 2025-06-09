@@ -17,10 +17,10 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2 } from "lucide-react";
+import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
-import { addItem, getItems, updateItem, deleteItem, saveBill, addSupplier } from "./actions";
-import type { Snack, BillInput, BillItem as DbBillItem, SupplierInput } from "@/lib/db"; // Snack is now effectively Item
+import { addItem, getItems, updateItem, deleteItem, saveBill, addSupplier, addCustomer } from "./actions";
+import type { Snack, BillInput, BillItem as DbBillItem, SupplierInput, CustomerInput } from "@/lib/db"; 
 import Link from "next/link";
 import {
   Dialog,
@@ -43,9 +43,8 @@ import {
 import { setSharedOrderInRTDB, SharedOrderItem, SharedOrderData, subscribeToSharedOrder, SharedOrderDataSnapshot } from "@/lib/rt_db";
 
 
-interface SelectedItem extends Snack { // Snack here refers to the item structure
+interface SelectedItem extends Snack { 
   quantity: number;
-  // price is already here from Snack, it will represent the actual selling price for this instance
 }
 
 const itemSchema = z.object({
@@ -82,12 +81,21 @@ const supplierSchema = z.object({
 
 type SupplierFormData = z.infer<typeof supplierSchema>;
 
+const customerSchema = z.object({
+  name: z.string().min(1, { message: "Customer name cannot be empty." }),
+  phoneNumber: z.string().optional(),
+  email: z.string().email({ message: "Invalid email address." }).optional().or(z.literal('')),
+  address: z.string().optional(),
+});
+
+type CustomerFormData = z.infer<typeof customerSchema>;
+
 
 const generateOrderNumber = () => {
     return `ORD-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 };
 
-type AdminActiveView = 'items' | 'purchasing' | null;
+type AdminActiveView = 'items' | 'purchasing' | 'salesAndCustomer' | null;
 const SESSION_STORAGE_ADMIN_LOGGED_IN_KEY = 'isAdminLoggedIn';
 const SESSION_STORAGE_ADMIN_VIEW_KEY = 'adminActiveView';
 
@@ -136,8 +144,12 @@ function HomeContent() {
 
   // State for supplier dialog on main page
   const [showSupplierDialog, setShowSupplierDialog] = useState(false);
-  const [supplierDialogMode, setSupplierDialogMode] = useState<'add' | 'edit' | null>(null); // 'edit' won't be used here yet
+  const [supplierDialogMode, setSupplierDialogMode] = useState<'add' | 'edit' | null>(null);
   const [isSubmittingSupplier, setIsSubmittingSupplier] = useState(false);
+  
+  // State for customer dialog on main page
+  const [showCustomerDialog, setShowCustomerDialog] = useState(false);
+  const [isSubmittingCustomer, setIsSubmittingCustomer] = useState(false);
 
 
   const {
@@ -167,6 +179,16 @@ function HomeContent() {
       email: "",
       address: "",
       gstNumber: "",
+    },
+  });
+
+  const customerForm = useForm<CustomerFormData>({
+    resolver: zodResolver(customerSchema),
+    defaultValues: {
+      name: "",
+      phoneNumber: "",
+      email: "",
+      address: "",
     },
   });
 
@@ -215,7 +237,7 @@ function HomeContent() {
       setEditingBillId(editFsBillId);
       setActiveSharedOrderNumber(editOrderNum);
       setItemsVisible(true);
-      setIsLocalDirty(false); // Start clean when loading an existing bill
+      setIsLocalDirty(false); 
       console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
     } else if (!orderNumber) {
       setOrderNumber(generateOrderNumber());
@@ -253,7 +275,7 @@ function HomeContent() {
           return {
             id: baseItem?.id || item.id,
             name: item.name,
-            price: Number(item.price), // Use price from RTDB data
+            price: Number(item.price), 
             quantity: item.quantity,
             category: baseItem?.category || 'Unknown',
             cost: baseItem?.cost,
@@ -318,7 +340,6 @@ function HomeContent() {
         newSelected.splice(existingItemIndex, 1);
         return [updated, ...newSelected];
       } else {
-        // Initialize with the item's default price
         const newItemData: SelectedItem = { ...item, price: Number(item.price), quantity: 1 };
         return [newItemData, ...prevSelected];
       }
@@ -348,7 +369,7 @@ function HomeContent() {
 
   const handleSelectedPriceChange = (itemId: string, newPriceString: string) => {
     const newPrice = parseFloat(newPriceString);
-    if (isNaN(newPrice) || newPrice < 0) return; // Or handle error, set to 0, etc.
+    if (isNaN(newPrice) || newPrice < 0) return; 
 
     setIsLocalDirty(true);
     lastInteractedItemIdRef.current = itemId;
@@ -444,8 +465,6 @@ function HomeContent() {
         toast({ title: "Success", description: result.message || "Supplier added successfully!" });
         setShowSupplierDialog(false);
         supplierForm.reset();
-        // Optionally, refresh any lists that depend on suppliers if they are used on this page
-        // For now, we mostly care about `loadItems` in case suppliers affect item availability or something.
         await loadItems(); 
       } else {
         toast({ variant: "destructive", title: "Error", description: result.message });
@@ -468,6 +487,36 @@ function HomeContent() {
       gstNumber: "",
     });
     setShowSupplierDialog(true);
+  };
+
+  const handleCustomerFormSubmit = async (data: CustomerFormData) => {
+    setIsSubmittingCustomer(true);
+    const formData = new FormData();
+    formData.append('name', data.name);
+    formData.append('phoneNumber', data.phoneNumber || '');
+    formData.append('email', data.email || '');
+    formData.append('address', data.address || '');
+
+    try {
+      const result = await addCustomer(formData);
+      if (result.success) {
+        toast({ title: "Success", description: result.message || "Customer added successfully!" });
+        setShowCustomerDialog(false);
+        customerForm.reset();
+        // Potentially revalidate paths or fetch customer list if needed elsewhere on this page
+      } else {
+        toast({ variant: "destructive", title: "Error", description: result.message });
+      }
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: "An unexpected error occurred while adding customer." });
+    } finally {
+      setIsSubmittingCustomer(false);
+    }
+  };
+
+  const handleOpenAddCustomerDialog = () => {
+    customerForm.reset();
+    setShowCustomerDialog(true);
   };
 
 
@@ -511,7 +560,7 @@ function HomeContent() {
       try {
           const result = await saveBill(billData, editingBillId || undefined);
           if (result.success) {
-              await loadItems(); // Reload items to reflect any stock changes
+              await loadItems(); 
               if (resetFormAfterSave) {
                 setSelectedItems([]);
                 setServiceCharge(0);
@@ -535,7 +584,7 @@ function HomeContent() {
                   setEditingBillId(result.billId);
                 }
                 setIsLocalDirty(false);
-                if (itemsVisible) { // If items were visible, hide them after saving
+                if (itemsVisible) { 
                     setItemsVisible(false);
                 }
               }
@@ -569,7 +618,7 @@ function HomeContent() {
       setIsAdmin(true);
       setPassword("");
       setShowAdminLoginSection(false);
-      setItemsVisible(false); // Hide bill section when admin logs in
+      setItemsVisible(false); 
       sessionStorage.setItem(SESSION_STORAGE_ADMIN_LOGGED_IN_KEY, 'true');
       const storedAdminView = sessionStorage.getItem(SESSION_STORAGE_ADMIN_VIEW_KEY) as AdminActiveView;
       const viewToSet = storedAdminView || 'items';
@@ -587,7 +636,7 @@ function HomeContent() {
     setIsAdmin(false);
     setAdminActiveView(null);
     setShowAdminLoginSection(false);
-    setItemsVisible(true); // Show bill section when admin logs out
+    setItemsVisible(true); 
     sessionStorage.removeItem(SESSION_STORAGE_ADMIN_LOGGED_IN_KEY);
     sessionStorage.removeItem(SESSION_STORAGE_ADMIN_VIEW_KEY);
   };
@@ -660,7 +709,7 @@ function HomeContent() {
     if (typeof window === "undefined") {
         setShareUrl("");
         setIsGeneratingShareUrl(false);
-        if (!editingBillId) { // Only reset activeSharedOrderNumber if not editing a Firestore bill
+        if (!editingBillId) { 
             setActiveSharedOrderNumber(null);
         }
         return;
@@ -686,7 +735,7 @@ function HomeContent() {
     };
 
     try {
-      setActiveSharedOrderNumber(orderNumberToShare); // Set this regardless of editingBillId for sharing
+      setActiveSharedOrderNumber(orderNumberToShare); 
       await setSharedOrderInRTDB(orderNumberToShare, sharedOrderPayload);
       const baseUrl = window.location.origin;
       const fullUrl = `${baseUrl}/orders/${orderNumberToShare}`;
@@ -696,7 +745,7 @@ function HomeContent() {
       console.error("Failed to share bill to RTDB:", error);
       toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
       setShareUrl("");
-      if (!editingBillId) { // Only reset activeSharedOrderNumber if not editing a Firestore bill
+      if (!editingBillId) { 
          setActiveSharedOrderNumber(null);
       }
     } finally {
@@ -746,7 +795,7 @@ function HomeContent() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
-        if (!editingBillId) { // Only clear dirty flag if not in Firestore edit mode.
+        if (!editingBillId) { 
           setIsLocalDirty(false);
         }
       } catch (error) {
@@ -974,14 +1023,13 @@ function HomeContent() {
                         <span>{item.name}</span>
                         <Input
                           type="number"
-                          value={item.price.toString()} // Ensure it's a string for input value
+                          value={item.price.toString()} 
                           onChange={(e) => handleSelectedPriceChange(item.id, e.target.value)}
-                          onBlur={(e) => { // Optional: Format on blur
+                          onBlur={(e) => { 
                             const newPrice = parseFloat(e.target.value);
                             if (!isNaN(newPrice) && newPrice >=0) {
                                 handleSelectedPriceChange(item.id, newPrice.toFixed(2));
                             } else {
-                                // Reset to original if invalid, or keep current valid price
                                 const originalItem = items.find(i => i.id === item.id);
                                 handleSelectedPriceChange(item.id, (originalItem ? originalItem.price : 0).toFixed(2));
                             }
@@ -1147,7 +1195,7 @@ function HomeContent() {
             <Button className="mt-4 w-full" onClick={handleAdminLogin}>Login</Button>
             <Button variant="ghost" className="mt-2 w-full" onClick={() => {
                 setShowAdminLoginSection(false);
-                setItemsVisible(true); // Ensure items are visible when canceling admin login
+                setItemsVisible(true); 
             }}>Cancel</Button>
           </CardContent>
         </Card>
@@ -1174,16 +1222,15 @@ function HomeContent() {
                         size="sm"
                         onClick={() => handleAdminViewChange('purchasing')}
                     >
-                        <ShoppingBag className="mr-2 h-4 w-4" /> Purchasing & Suppliers
+                        <Building className="mr-2 h-4 w-4" /> Purchasing & Suppliers
                     </Button>
-                    <Link href="/bills" passHref>
-                        <Button
-                            variant={'outline'}
-                            size="sm"
-                        >
-                           <History className="mr-2 h-4 w-4" /> Sales History
-                        </Button>
-                    </Link>
+                    <Button
+                        variant={adminActiveView === 'salesAndCustomer' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => handleAdminViewChange('salesAndCustomer')}
+                    >
+                       <Users className="mr-2 h-4 w-4" /> Sales & Customer
+                    </Button>
                 </div>
             </CardHeader>
             <CardContent>
@@ -1296,7 +1343,6 @@ function HomeContent() {
                                                 } else {
                                                 toast({ variant: "destructive", title: "Error", description: result.message });
                                                 }
-                                                // Close the dialog after action
                                                 const closeButton = document.querySelector('[data-radix-dialog-close]');
                                                 if (closeButton instanceof HTMLElement) closeButton.click();
                                             }}>
@@ -1332,6 +1378,28 @@ function HomeContent() {
                         </Link>
                     </div>
                 )}
+                
+                {adminActiveView === 'salesAndCustomer' && (
+                     <div className="flex flex-col space-y-3">
+                        <h3 className="text-md font-semibold mb-1">Sales & Customer Management</h3>
+                        <Button variant="outline" className="w-full justify-start" onClick={handleOpenAddCustomerDialog}>
+                           <PlusCircle className="mr-2 h-4 w-4" /> Add New Customer
+                        </Button>
+                        <Link href="/customers" passHref>
+                            <Button variant="outline" className="w-full justify-start"><Users className="mr-2 h-4 w-4" /> View Customers</Button>
+                        </Link>
+                        <Button variant="outline" className="w-full justify-start" onClick={() => {
+                            setAdminActiveView(null);
+                            setItemsVisible(true);
+                            sessionStorage.removeItem(SESSION_STORAGE_ADMIN_VIEW_KEY);
+                        }}>
+                           <Newspaper className="mr-2 h-4 w-4" /> New Sales Order
+                        </Button>
+                        <Link href="/bills" passHref>
+                            <Button variant="outline" className="w-full justify-start"><History className="mr-2 h-4 w-4" /> Sales Order History</Button>
+                        </Link>
+                    </div>
+                )}
             </CardContent>
         </Card>
       ) }
@@ -1346,14 +1414,8 @@ function HomeContent() {
       }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>
-              {supplierDialogMode === 'add' ? "Add New Supplier" : "Edit Supplier"}
-            </DialogTitle>
-            <DialogDescription>
-              {supplierDialogMode === 'add' 
-                ? "Enter the details for the new supplier." 
-                : "Update the details for this supplier. Click save when you're done."}
-            </DialogDescription>
+            <DialogTitle>Add New Supplier</DialogTitle>
+            <DialogDescription>Enter the details for the new supplier.</DialogDescription>
           </DialogHeader>
           <Form {...supplierForm}>
             <form onSubmit={supplierForm.handleSubmit(handleSupplierFormSubmit)} className="grid gap-4 py-4 max-h-[75vh] overflow-y-auto pr-2">
@@ -1441,7 +1503,87 @@ function HomeContent() {
                 </Button>
                 <Button type="submit" disabled={isSubmittingSupplier}>
                   {isSubmittingSupplier && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {supplierDialogMode === 'add' ? "Add Supplier" : "Save Changes"}
+                  Add Supplier
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Customer Add Dialog for Main Page Admin Panel */}
+      <Dialog open={showCustomerDialog} onOpenChange={(open) => {
+          if (!open) {
+            setShowCustomerDialog(false);
+            customerForm.reset(); 
+          }
+      }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add New Customer</DialogTitle>
+            <DialogDescription>Enter the details for the new customer.</DialogDescription>
+          </DialogHeader>
+          <Form {...customerForm}>
+            <form onSubmit={customerForm.handleSubmit(handleCustomerFormSubmit)} className="grid gap-4 py-4 max-h-[75vh] overflow-y-auto pr-2">
+              <FormField
+                control={customerForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Customer Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Customer's full name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={customerForm.control}
+                name="phoneNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone Number (Optional)</FormLabel>
+                    <FormControl>
+                      <Input type="tel" placeholder="e.g., +919876543210" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={customerForm.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email (Optional)</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="e.g., customer@example.com" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={customerForm.control}
+                name="address"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Address (Optional)</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Customer's full address" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter className="sticky bottom-0 bg-background py-4 border-t">
+                <Button type="button" variant="outline" onClick={() => { setShowCustomerDialog(false); customerForm.reset(); }}>
+                    Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmittingCustomer}>
+                  {isSubmittingCustomer && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Add Customer
                 </Button>
               </DialogFooter>
             </form>
@@ -1466,3 +1608,4 @@ export default function HomePage() {
     </Suspense>
   );
 }
+

@@ -24,6 +24,11 @@ import {
     getSuppliersFromDb,
     updateSupplierInDb,
     Supplier,
+    CustomerInput,
+    addCustomerToDb,
+    getCustomersFromDb,
+    updateCustomerInDb,
+    Customer,
     getDoc,
     Purchase
 } from '@/lib/db';
@@ -83,7 +88,7 @@ export async function addItem(data: FormData) {
       revalidatePath('/purchases/create'); 
       revalidatePath('/purchases/history');
       revalidatePath('/suppliers');
-      revalidatePath('/reports/supplier');
+      revalidatePath('/customers');
       return {success: true, message: 'Item added successfully!', id: result.id};
     } else {
       return {success: false, message: result.message || 'Failed to add item.'};
@@ -143,7 +148,7 @@ export async function updateItem(id: string, data: FormData) {
       revalidatePath('/purchases/create');
       revalidatePath('/purchases/history');
       revalidatePath('/suppliers');
-      revalidatePath('/reports/supplier');
+      revalidatePath('/customers');
       return {success: true, message: 'Item updated successfully!'};
     } else {
       return {success: false, message: result.message || 'Failed to update item.'};
@@ -164,7 +169,7 @@ export async function deleteItem(id: string) {
       revalidatePath('/purchases/create');
       revalidatePath('/purchases/history');
       revalidatePath('/suppliers');
-      revalidatePath('/reports/supplier');
+      revalidatePath('/customers');
       return {success: true, message: 'Item deleted successfully!'};
     } else {
       return {success: false, message: result.message || 'Failed to delete item.'};
@@ -212,10 +217,9 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
             if (!itemId) return;
             const newQty = currentBillItemsMap.get(itemId) || 0;
             const oldQty = oldBillItemsMap.get(itemId) || 0;
-            const quantityDelta = newQty - oldQty; // For sales, positive delta means more sold (stock decreases)
+            const quantityDelta = newQty - oldQty; 
 
             if (quantityDelta !== 0) {
-                 // For sales, quantityChange to updateStockQuantitiesForBill should represent the amount *sold*
                 stockAdjustments.push({ itemId, quantityChange: quantityDelta });
             }
         });
@@ -232,7 +236,6 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
 
         if (billActionResult.success) {
             if (stockAdjustments.length > 0) {
-                // Pass the net change; updateStockQuantitiesForBill will subtract this from current stock
                 const stockUpdateResult = await updateStockQuantitiesForBill(stockAdjustments);
                 if (!stockUpdateResult.success) {
                     stockUpdateResultMessage = stockUpdateResult.message || "Stock update failed.";
@@ -243,7 +246,7 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
             revalidatePath('/bills');
             revalidatePath('/'); 
             revalidatePath('/suppliers');
-            revalidatePath('/reports/supplier');
+            revalidatePath('/customers');
             
             let finalMessage = billIdToUpdate ? 'Bill updated successfully!' : 'Bill saved successfully!';
             if (stockUpdateResultMessage) {
@@ -293,7 +296,7 @@ export async function savePurchase(purchaseData: PurchaseInput) {
         revalidatePath('/purchases/create');
         revalidatePath('/purchases/history');
         revalidatePath('/suppliers');
-        revalidatePath('/reports/supplier');
+        revalidatePath('/customers');
 
         return {
             success: true,
@@ -308,7 +311,6 @@ export async function savePurchase(purchaseData: PurchaseInput) {
 }
 
 export async function getPurchases(supplierId?: string): Promise<Purchase[]> {
-    console.log(`[Action getPurchases] Called with supplierId: "${supplierId === undefined ? 'undefined' : supplierId}"`);
     return getPurchasesFromDb(supplierId);
 }
 
@@ -334,7 +336,7 @@ export async function addSupplier(data: FormData): Promise<{ success: boolean; i
         if (result.success && result.id && result.supplier) {
             revalidatePath('/purchases/create');
             revalidatePath('/suppliers');
-            revalidatePath('/reports/supplier');
+            revalidatePath('/customers');
             return { success: true, message: 'Supplier added successfully!', id: result.id, supplier: result.supplier};
         } else {
             return { success: false, message: result.message || 'Failed to add supplier.' };
@@ -354,11 +356,11 @@ export async function updateSupplier(id: string, data: FormData): Promise<{ succ
 
         const supplierUpdate: Partial<SupplierInput> = {
             name: name.trim(),
-            contactPerson: (data.get('contactPerson') as string) || '', // Use empty string if null/undefined
-            phoneNumber: (data.get('phoneNumber') as string) || '',   // Use empty string if null/undefined
-            email: (data.get('email') as string) || '',             // Use empty string if null/undefined
-            address: (data.get('address') as string) || '',           // Use empty string if null/undefined
-            gstNumber: (data.get('gstNumber') as string) || '',         // Use empty string if null/undefined
+            contactPerson: (data.get('contactPerson') as string) || '', 
+            phoneNumber: (data.get('phoneNumber') as string) || '',   
+            email: (data.get('email') as string) || '',             
+            address: (data.get('address') as string) || '',           
+            gstNumber: (data.get('gstNumber') as string) || '',         
         };
 
         const result = await updateSupplierInDb(id, supplierUpdate);
@@ -366,7 +368,7 @@ export async function updateSupplier(id: string, data: FormData): Promise<{ succ
         if (result.success) {
             revalidatePath('/suppliers');
             revalidatePath('/purchases/create'); 
-            revalidatePath('/reports/supplier');
+            revalidatePath('/customers');
             return { success: true, message: 'Supplier updated successfully!' };
         } else {
             return { success: false, message: result.message || 'Failed to update supplier.' };
@@ -382,5 +384,66 @@ export async function getSuppliers(): Promise<Supplier[]> {
     return getSuppliersFromDb();
 }
 
+// --- Customer Actions ---
+export async function addCustomer(data: FormData): Promise<{ success: boolean; id?: string; customer?: Customer; message?: string }> {
+    try {
+        const name = data.get('name') as string;
+        if (!name || name.trim() === "") {
+            return { success: false, message: 'Customer name cannot be empty.' };
+        }
 
+        const newCustomer: CustomerInput = {
+          name: name.trim(),
+          phoneNumber: (data.get('phoneNumber') as string) || '',
+          email: (data.get('email') as string) || '',
+          address: (data.get('address') as string) || '',
+        };
+        const result = await addCustomerToDb(newCustomer);
+
+        if (result.success && result.id && result.customer) {
+            revalidatePath('/customers'); // For the new customer list page
+            revalidatePath('/'); // Revalidate main page if customer info is used there
+            return { success: true, message: 'Customer added successfully!', id: result.id, customer: result.customer};
+        } else {
+            return { success: false, message: result.message || 'Failed to add customer.' };
+        }
+    } catch (error: any) {
+        console.error('Error adding customer:', error);
+        return { success: false, message: error.message || 'An unexpected error occurred while adding customer.' };
+    }
+}
+
+export async function updateCustomer(id: string, data: FormData): Promise<{ success: boolean; message?: string }> {
+    try {
+        const name = data.get('name') as string;
+        if (!name || name.trim() === "") {
+            return { success: false, message: 'Customer name cannot be empty.' };
+        }
+
+        const customerUpdate: Partial<CustomerInput> = {
+            name: name.trim(),
+            phoneNumber: (data.get('phoneNumber') as string) || '',
+            email: (data.get('email') as string) || '',
+            address: (data.get('address') as string) || '',
+        };
+
+        const result = await updateCustomerInDb(id, customerUpdate);
+
+        if (result.success) {
+            revalidatePath('/customers');
+            revalidatePath('/');
+            return { success: true, message: 'Customer updated successfully!' };
+        } else {
+            return { success: false, message: result.message || 'Failed to update customer.' };
+        }
+    } catch (error: any) {
+        console.error('Error updating customer:', error);
+        return { success: false, message: error.message || 'An unexpected error occurred while updating customer.' };
+    }
+}
+
+export async function getCustomers(): Promise<Customer[]> {
+    return getCustomersFromDb();
+}
     
+

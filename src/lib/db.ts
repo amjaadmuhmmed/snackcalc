@@ -122,8 +122,9 @@ export interface BillItem {
 export interface Bill {
     id: string;
     orderNumber: string;
-    customerName?: string;
-    customerPhoneNumber?: string;
+    customerName?: string; // This remains free text for now
+    customerPhoneNumber?: string; // This remains free text for now
+    customerId?: string; // Optional: To link to a customer record
     tableNumber?: string;
     notes?: string;
     items: BillItem[];
@@ -191,6 +192,7 @@ export async function getBillsFromDb(): Promise<Bill[]> {
           orderNumber: data.orderNumber,
           customerName: data.customerName || '',
           customerPhoneNumber: data.customerPhoneNumber || '',
+          customerId: data.customerId || '',
           tableNumber: data.tableNumber || '',
           notes: data.notes || '',
           items: itemsWithCode,
@@ -265,7 +267,6 @@ export interface PurchaseInput extends Omit<Purchase, 'id' | 'createdAt'> {}
 const purchasesCollection = collection(db, 'purchases');
 
 export async function addPurchaseToDb(purchase: PurchaseInput): Promise<{ success: boolean; id?: string; message?: string }> {
-    console.log('[DB addPurchaseToDb] Received purchase input for saving:', JSON.stringify(purchase, null, 2));
     try {
         const dataToSave: { [key: string]: any } = {
             purchaseOrderNumber: purchase.purchaseOrderNumber,
@@ -279,12 +280,8 @@ export async function addPurchaseToDb(purchase: PurchaseInput): Promise<{ succes
 
         if (purchase.supplierId && typeof purchase.supplierId === 'string' && purchase.supplierId.trim() !== '') {
             dataToSave.supplierId = purchase.supplierId.trim();
-        } else {
-            console.warn('[DB addPurchaseToDb] supplierId is missing or invalid in the input. It will not be saved.', purchase.supplierId);
         }
         
-        console.log('[DB addPurchaseToDb] Data prepared for Firestore:', JSON.stringify(dataToSave, null, 2));
-
         const docRef = await addDoc(purchasesCollection, dataToSave);
         return { success: true, id: docRef.id };
     } catch (e: any) {
@@ -326,20 +323,16 @@ export async function updateStockAfterPurchase(
 }
 
 export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[]> {
-    console.log(`[DB getPurchasesFromDb] Called with supplierId: "${supplierId === undefined ? 'undefined' : supplierId}"`);
     try {
       let purchasesQuery;
       if (supplierId) {
-        console.log(`[DB getPurchasesFromDb] Querying purchases for supplierId: "${supplierId}" (Type: ${typeof supplierId})`);
         purchasesQuery = query(purchasesCollection, where("supplierId", "==", supplierId), orderBy('purchaseDate', 'desc'));
       } else {
-        console.log(`[DB getPurchasesFromDb] Querying all purchases.`);
         purchasesQuery = query(purchasesCollection, orderBy('purchaseDate', 'desc'));
       }
       const purchaseSnapshot = await getDocs(purchasesQuery);
-      console.log(`[DB getPurchasesFromDb] Found ${purchaseSnapshot.docs.length} purchases for supplierId: "${supplierId === undefined ? 'all' : supplierId}"`);
-
-      if (supplierId && purchaseSnapshot.docs.length === 0) {
+      
+      if (supplierId && purchaseSnapshot.empty) {
         console.warn(`[DB getPurchasesFromDb] No purchases found for supplierId "${supplierId}". Fetching ALL purchases for diagnostic purposes...`);
         const allPurchasesSnapshot = await getDocs(query(purchasesCollection, orderBy('purchaseDate', 'desc')));
         console.log(`[DB getPurchasesFromDb] Diagnostic - All Purchases (${allPurchasesSnapshot.docs.length} total):`);
@@ -395,7 +388,7 @@ const suppliersCollection = collection(db, 'suppliers');
 
 export async function addSupplierToDb(supplier: SupplierInput): Promise<{ success: boolean; id?: string; message?: string; supplier?: Supplier }> {
     try {
-        const q = query(suppliersCollection, where("name_lowercase", "==", supplier.name.toLowerCase()));
+        const q = query(suppliersCollection, where("name_lowercase", "==", supplier.name.trim().toLowerCase()));
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
             return { success: false, message: `Supplier with name '${supplier.name}' already exists.` };
@@ -414,7 +407,7 @@ export async function addSupplierToDb(supplier: SupplierInput): Promise<{ succes
         };
 
         const docRef = await addDoc(suppliersCollection, dataToSave);
-        const createdSupplierDoc = await firestoreGetDoc(docRef); // Fetch the newly created doc
+        const createdSupplierDoc = await firestoreGetDoc(docRef); 
         const createdSupplierData = createdSupplierDoc.data();
 
         const createdSupplier: Supplier = {
@@ -425,7 +418,7 @@ export async function addSupplierToDb(supplier: SupplierInput): Promise<{ succes
              email: createdSupplierData?.email,
              address: createdSupplierData?.address,
              gstNumber: createdSupplierData?.gstNumber,
-             createdAt: createdSupplierData?.createdAt ? (createdSupplierData.createdAt as Timestamp).toDate() : new Date() // Handle timestamp
+             createdAt: createdSupplierData?.createdAt ? (createdSupplierData.createdAt as Timestamp).toDate() : new Date() 
         };
         return { success: true, id: docRef.id, supplier: createdSupplier };
     } catch (e: any) {
@@ -484,5 +477,103 @@ export async function getSuppliersFromDb(): Promise<Supplier[]> {
     }
 }
 
+// --- Customers ---
+export interface Customer {
+  id: string;
+  name: string;
+  phoneNumber?: string;
+  email?: string;
+  address?: string;
+  createdAt?: Timestamp | Date;
+  updatedAt?: Timestamp | Date;
+}
+export interface CustomerInput extends Omit<Customer, 'id' | 'createdAt' | 'updatedAt'> {}
+
+const customersCollection = collection(db, 'customers');
+
+export async function addCustomerToDb(customer: CustomerInput): Promise<{ success: boolean; id?: string; message?: string; customer?: Customer }> {
+    try {
+        const q = query(customersCollection, where("name_lowercase", "==", customer.name.trim().toLowerCase()));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+            // Optional: decide if duplicate names are allowed or if phone number should also be unique.
+            // For now, we'll allow duplicate names but you might want to adjust this.
+            // return { success: false, message: `Customer with name '${customer.name}' already exists.` };
+        }
+
+        const dataToSave: any = {
+            name: customer.name.trim(),
+            name_lowercase: customer.name.trim().toLowerCase(),
+            phoneNumber: customer.phoneNumber || '',
+            email: customer.email || '',
+            address: customer.address || '',
+            createdAt: serverTimestamp()
+        };
+
+        const docRef = await addDoc(customersCollection, dataToSave);
+        const createdCustomerDoc = await firestoreGetDoc(docRef);
+        const createdCustomerData = createdCustomerDoc.data();
+
+        const newCustomer: Customer = {
+             id: docRef.id,
+             name: createdCustomerData?.name,
+             phoneNumber: createdCustomerData?.phoneNumber,
+             email: createdCustomerData?.email,
+             address: createdCustomerData?.address,
+             createdAt: createdCustomerData?.createdAt ? (createdCustomerData.createdAt as Timestamp).toDate() : new Date()
+        };
+        return { success: true, id: docRef.id, customer: newCustomer };
+    } catch (e: any) {
+        console.error('Error adding customer document: ', e);
+        return { success: false, message: e.message };
+    }
+}
+
+export async function updateCustomerInDb(id: string, customerData: Partial<CustomerInput>): Promise<{ success: boolean; message?: string }> {
+    try {
+        const customerDocRef = doc(db, 'customers', id);
+        const dataToUpdate: any = { ...customerData };
+
+        if (customerData.name) {
+            dataToUpdate.name = customerData.name.trim();
+            dataToUpdate.name_lowercase = customerData.name.trim().toLowerCase();
+        }
+        if (customerData.phoneNumber !== undefined) dataToUpdate.phoneNumber = customerData.phoneNumber || '';
+        if (customerData.email !== undefined) dataToUpdate.email = customerData.email || '';
+        if (customerData.address !== undefined) dataToUpdate.address = customerData.address || '';
+        
+        dataToUpdate.updatedAt = serverTimestamp();
+
+        await updateDoc(customerDocRef, dataToUpdate);
+        return { success: true, message: "Customer updated successfully." };
+    } catch (e: any) {
+        console.error(`Error updating customer document ${id}: `, e);
+        return { success: false, message: e.message };
+    }
+}
+
+export async function getCustomersFromDb(): Promise<Customer[]> {
+    try {
+        const customersQuery = query(customersCollection, orderBy('name'));
+        const customerSnapshot = await getDocs(customersQuery);
+        return customerSnapshot.docs.map(docSnap => {
+            const data = docSnap.data();
+            return {
+                id: docSnap.id,
+                name: data.name || 'Unnamed Customer',
+                phoneNumber: data.phoneNumber || '',
+                email: data.email || '',
+                address: data.address || '',
+                createdAt: data.createdAt,
+                updatedAt: data.updatedAt,
+            } as Customer;
+        });
+    } catch (e: any) {
+        console.error('Error getting customer documents: ', e);
+        return [];
+    }
+}
+
 
 export { firestoreGetDoc as getDoc };
+
