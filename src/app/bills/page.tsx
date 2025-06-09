@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Edit, Printer, Calendar as CalendarIcon, XCircle, BarChart3 } from "lucide-react";
+import { ArrowLeft, Edit, Printer, Calendar as CalendarIcon, XCircle, BarChart3, Search as SearchIcon } from "lucide-react";
 import { format, isValid, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
 import { setSharedOrderInRTDB, SharedOrderItem } from "@/lib/rt_db";
@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import type { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -39,10 +40,8 @@ const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
     if (timestamp.toDate && typeof timestamp.toDate === 'function') {
       return timestamp.toDate();
     } else if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') {
-      // Handling Firestore Timestamp-like objects (e.g., from RTDB or serialized)
       return new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
     } else if (typeof timestamp === 'number') {
-      // Assuming it's a Unix timestamp in milliseconds
       const d = new Date(timestamp);
       if (isValid(d)) return d;
     } else if (typeof timestamp === 'string') {
@@ -75,6 +74,7 @@ export default function BillsPage() {
     from: startOfDay(new Date()),
     to: endOfDay(new Date()),
   });
+  const [searchTerm, setSearchTerm] = useState<string>("");
   const [showSummaryDialog, setShowSummaryDialog] = useState(false);
 
   useEffect(() => {
@@ -99,28 +99,45 @@ export default function BillsPage() {
   useEffect(() => {
     if (loading) return;
 
-    if (!dateRange || !dateRange.from) {
-      setFilteredBills(allBills);
-      return;
+    let tempFilteredBills = [...allBills];
+
+    // Date Range Filter
+    if (dateRange?.from) {
+      const fromDate = startOfDay(dateRange.from);
+      const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+
+      tempFilteredBills = tempFilteredBills.filter((bill) => {
+        const billCreationDate = convertFirestoreTimestampToDate(bill.createdAt);
+        if (!billCreationDate || !isValid(billCreationDate)) {
+          console.warn(`Bill ${bill.id} has invalid createdAt:`, bill.createdAt);
+          return false;
+        }
+        return isWithinInterval(billCreationDate, {
+          start: fromDate <= toDate ? fromDate : toDate,
+          end: fromDate <= toDate ? toDate : fromDate
+        });
+      });
     }
 
-    const fromDate = startOfDay(dateRange.from);
-    const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
+    // Search Term Filter
+    if (searchTerm.trim() !== "") {
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      tempFilteredBills = tempFilteredBills.filter(bill =>
+        (bill.orderNumber && bill.orderNumber.toLowerCase().includes(lowerSearchTerm)) ||
+        (bill.customerName && bill.customerName.toLowerCase().includes(lowerSearchTerm)) ||
+        (bill.customerPhoneNumber && bill.customerPhoneNumber.toLowerCase().includes(lowerSearchTerm)) ||
+        (bill.tableNumber && bill.tableNumber.toLowerCase().includes(lowerSearchTerm)) ||
+        (bill.notes && bill.notes.toLowerCase().includes(lowerSearchTerm)) ||
+        (bill.items && bill.items.some(item =>
+          (item.name && item.name.toLowerCase().includes(lowerSearchTerm)) ||
+          (item.itemCode && item.itemCode.toLowerCase().includes(lowerSearchTerm))
+        ))
+      );
+    }
 
-    const newFilteredBills = allBills.filter((bill) => {
-      const billCreationDate = convertFirestoreTimestampToDate(bill.createdAt);
-      if (!billCreationDate || !isValid(billCreationDate)) {
-        console.warn(`Bill ${bill.id} has invalid createdAt:`, bill.createdAt);
-        return false;
-      }
-      return isWithinInterval(billCreationDate, {
-        start: fromDate <= toDate ? fromDate : toDate,
-        end: fromDate <= toDate ? toDate : fromDate
-      });
-    });
-    setFilteredBills(newFilteredBills);
+    setFilteredBills(tempFilteredBills);
 
-  }, [allBills, dateRange, loading]);
+  }, [allBills, dateRange, searchTerm, loading]);
 
 
   const formatFirestoreTimestampForDisplay = (timestamp: any): string => {
@@ -134,11 +151,11 @@ export default function BillsPage() {
   const handleEditBill = async (bill: Bill) => {
     try {
       const itemsToShare: SharedOrderItem[] = bill.items.map((item: DbBillItem) => ({
-        id: item.itemId, // Use itemId from DbBillItem as id for SharedOrderItem
+        id: item.itemId,
         name: item.name,
         price: Number(item.price),
         quantity: item.quantity,
-        itemCode: item.itemCode || '', // Include itemCode
+        itemCode: item.itemCode || '',
       }));
 
       await setSharedOrderInRTDB(bill.orderNumber, {
@@ -308,10 +325,18 @@ export default function BillsPage() {
     if (printWindow) {
       const rawHeaderTitle = process.env.NEXT_PUBLIC_RECEIPT_HEADER_TITLE || "Snackulator";
       const receiptHeaderTitle = rawHeaderTitle.replace(/\n/g, '<br>');
-      const dateRangeString = dateRange?.from && !dateRange.to ? `for ${format(dateRange.from, "LLL dd, yyyy")}` :
-                              dateRange?.from && dateRange?.to && format(dateRange.from, "yyyy-MM-dd") === format(dateRange.to, "yyyy-MM-dd") ? `for ${format(dateRange.from, "LLL dd, yyyy")}` :
-                              dateRange?.from && dateRange?.to ? `from ${format(dateRange.from, "LLL dd, yyyy")} to ${format(dateRange.to, "LLL dd, yyyy")}` :
-                              "for All Transactions";
+      let dateRangeString = "for All Transactions";
+      if (dateRange?.from && !dateRange.to) {
+        dateRangeString = `for ${format(dateRange.from, "LLL dd, yyyy")}`;
+      } else if (dateRange?.from && dateRange?.to && format(dateRange.from, "yyyy-MM-dd") === format(dateRange.to, "yyyy-MM-dd")) {
+        dateRangeString = `for ${format(dateRange.from, "LLL dd, yyyy")}`;
+      } else if (dateRange?.from && dateRange?.to) {
+        dateRangeString = `from ${format(dateRange.from, "LLL dd, yyyy")} to ${format(dateRange.to, "LLL dd, yyyy")}`;
+      }
+      if (searchTerm) {
+        dateRangeString += ` (Filtered by: "${searchTerm}")`;
+      }
+
 
       let itemsHtml = '';
       dailySummaryData.forEach(item => {
@@ -387,6 +412,29 @@ export default function BillsPage() {
     }
   };
 
+  const totalForFilteredBills = useMemo(() => {
+    return filteredBills.reduce((sum, bill) => sum + bill.totalAmount, 0);
+  }, [filteredBills]);
+
+  const getCardDescription = () => {
+    let description = "";
+    if (dateRange?.from && !dateRange.to) {
+      description = `Showing transactions for ${format(dateRange.from, "LLL dd, yyyy")}`;
+    } else if (dateRange?.from && dateRange?.to && format(dateRange.from, "yyyy-MM-dd") === format(dateRange.to, "yyyy-MM-dd")) {
+      description = `Showing transactions for ${format(dateRange.from, "LLL dd, yyyy")}`;
+    } else if (dateRange?.from && dateRange?.to) {
+      description = `Showing transactions from ${format(dateRange.from, "LLL dd, yyyy")} to ${format(dateRange.to, "LLL dd, yyyy")}`;
+    } else {
+      description = "Showing all transactions";
+    }
+
+    if (searchTerm) {
+      description += ` matching "${searchTerm}"`;
+    }
+    description += ".";
+    return description;
+  };
+
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-4 md:p-8">
@@ -402,12 +450,9 @@ export default function BillsPage() {
 
       <Card className="w-full max-w-5xl">
         <CardHeader>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
                 <CardDescription>
-                    {dateRange?.from && !dateRange.to ? "Showing transactions for " + format(dateRange.from, "LLL dd, yyyy") :
-                     dateRange?.from && dateRange?.to && format(dateRange.from, "yyyy-MM-dd") === format(dateRange.to, "yyyy-MM-dd") ? "Showing transactions for " + format(dateRange.from, "LLL dd, yyyy") :
-                     dateRange?.from && dateRange?.to ? "Showing transactions from " + format(dateRange.from, "LLL dd, yyyy") + " to " + format(dateRange.to, "LLL dd, yyyy") :
-                     "Showing all transactions."}
+                    {getCardDescription()}
                 </CardDescription>
                 <div className="flex flex-wrap gap-2 items-center">
                     <Popover>
@@ -416,7 +461,7 @@ export default function BillsPage() {
                           id="date"
                           variant={"outline"}
                           className={cn(
-                            "w-full sm:w-[260px] justify-start text-left font-normal",
+                            "w-full sm:w-[260px] justify-start text-left font-normal h-9",
                             !dateRange && "text-muted-foreground"
                           )}
                         >
@@ -447,25 +492,21 @@ export default function BillsPage() {
                       </PopoverContent>
                     </Popover>
                     {dateRange && (
-                        <Button variant="ghost" size="icon" onClick={() => setDateRange(undefined)} aria-label="Clear date filter">
+                        <Button variant="ghost" size="icon" onClick={() => setDateRange(undefined)} aria-label="Clear date filter" className="h-9 w-9">
                             <XCircle className="h-4 w-4" />
                         </Button>
                     )}
                     <Dialog open={showSummaryDialog} onOpenChange={setShowSummaryDialog}>
                       <DialogTrigger asChild>
-                        <Button variant="outline">
+                        <Button variant="outline" className="h-9">
                           <BarChart3 className="mr-2 h-4 w-4" /> View Summary
                         </Button>
                       </DialogTrigger>
                       <DialogContent className="sm:max-w-md">
                         <DialogHeader>
-                          <DialogTitle>Daily Sales Summary</DialogTitle>
+                          <DialogTitle>Sales Summary</DialogTitle>
                           <DialogDescription>
-                            Summary for {
-                            dateRange?.from && !dateRange.to ? `transactions on ${format(dateRange.from, "LLL dd, yyyy")}` :
-                            dateRange?.from && dateRange?.to && format(dateRange.from, "yyyy-MM-dd") === format(dateRange.to, "yyyy-MM-dd") ? `transactions on ${format(dateRange.from, "LLL dd, yyyy")}` :
-                            dateRange?.from && dateRange?.to ? `transactions from ${format(dateRange.from, "LLL dd, yyyy")} to ${format(dateRange.to, "LLL dd, yyyy")}` :
-                            "all recorded transactions."}
+                            Summary for {getCardDescription().replace("Showing transactions", "transactions").replace("Showing all transactions", "all recorded transactions")}
                           </DialogDescription>
                         </DialogHeader>
                         {dailySummaryData.length === 0 ? (
@@ -510,6 +551,23 @@ export default function BillsPage() {
                     </Dialog>
                 </div>
             </div>
+            <div className="relative">
+              <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                  type="search"
+                  placeholder="Search orders, customers, items, notes..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    const newSearchTerm = e.target.value;
+                    setSearchTerm(newSearchTerm);
+                    if (newSearchTerm.trim() !== "" && dateRange !== undefined) {
+                      setDateRange(undefined); // Clear date filter when search term is entered
+                    }
+                  }}
+                  className="pl-8 w-full sm:w-1/2 md:w-1/3 h-9"
+                  aria-label="Search transactions"
+              />
+            </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -518,7 +576,7 @@ export default function BillsPage() {
             <p className="text-center text-destructive">{error}</p>
           ) : filteredBills.length === 0 ? (
              <p className="text-center text-muted-foreground">
-                {allBills.length === 0 ? "No bills recorded yet." : "No bills found for the selected period."}
+                {allBills.length === 0 ? "No bills recorded yet." : "No bills found for the current filter criteria."}
             </p>
           ) : (
             <Table>
@@ -572,7 +630,18 @@ export default function BillsPage() {
             </Table>
           )}
         </CardContent>
+        {filteredBills.length > 0 && (
+            <CardFooter className="flex justify-end pt-4 border-t">
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-muted-foreground">Total for Filtered Transactions:</span>
+                    <Badge variant="secondary" className="text-base font-semibold">
+                        {currencySymbol}{totalForFilteredBills.toFixed(2)}
+                    </Badge>
+                </div>
+            </CardFooter>
+        )}
       </Card>
     </div>
   );
 }
+
