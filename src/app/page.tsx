@@ -30,6 +30,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger, // Added DialogTrigger here
 } from "@/components/ui/dialog";
 import {
   Form,
@@ -975,11 +976,9 @@ function HomeContent() {
                   )}
                 </div>
                 <DialogFooter className="mt-4">
-                  <DialogClose asChild>
-                    <Button type="button" variant="secondary">
-                      Close
-                    </Button>
-                  </DialogClose>
+                  <Button type="button" variant="secondary" onClick={() => setShowShareDialog(false)}>
+                    Close
+                  </Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
@@ -1399,9 +1398,10 @@ function HomeContent() {
                                             </DialogDescription>
                                             </DialogHeader>
                                             <DialogFooter>
-                                            <DialogClose asChild>
-                                                <Button variant="outline">Cancel</Button>
-                                            </DialogClose>
+                                              <Button variant="outline" onClick={() => {
+                                                const closeButton = document.querySelector('[data-radix-dialog-close]');
+                                                if (closeButton instanceof HTMLElement) closeButton.click();
+                                              }}>Cancel</Button>
                                             <Button variant="destructive" onClick={async () => {
                                                 const result = await deleteItem(item.id);
                                                 if (result.success) {
