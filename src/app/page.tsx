@@ -17,10 +17,11 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
-import { addItem, getItems, updateItem, deleteItem, saveBill, addSupplier, addCustomer } from "./actions";
-import type { Snack, BillInput, BillItem as DbBillItem, SupplierInput, CustomerInput } from "@/lib/db"; 
+import { addItem, getItems, updateItem, deleteItem, saveBill, addSupplier, addCustomer, getCustomers } from "./actions";
+import type { Snack, BillInput, BillItem as DbBillItem, SupplierInput, Customer, CustomerInput } from "@/lib/db"; 
 import Link from "next/link";
 import {
   Dialog,
@@ -29,8 +30,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-  DialogClose,
 } from "@/components/ui/dialog";
 import {
   Form,
@@ -81,14 +80,14 @@ const supplierSchema = z.object({
 
 type SupplierFormData = z.infer<typeof supplierSchema>;
 
-const customerSchema = z.object({
+const customerFormSchema = z.object({ // Renamed to avoid conflict
   name: z.string().min(1, { message: "Customer name cannot be empty." }),
   phoneNumber: z.string().optional(),
   email: z.string().email({ message: "Invalid email address." }).optional().or(z.literal('')),
   address: z.string().optional(),
 });
 
-type CustomerFormData = z.infer<typeof customerSchema>;
+type CustomerFormDataType = z.infer<typeof customerFormSchema>; // Renamed
 
 
 const generateOrderNumber = () => {
@@ -111,8 +110,15 @@ function HomeContent() {
   const [serviceCharge, setServiceCharge] = useState<number>(0);
   const [serviceChargeInput, setServiceChargeInput] = useState<string>("0");
   const [orderNumber, setOrderNumber] = useState<string>('');
+  
   const [customerName, setCustomerName] = useState<string>("");
   const [customerPhoneNumber, setCustomerPhoneNumber] = useState<string>("");
+  const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
+  const [customerSearchResults, setCustomerSearchResults] = useState<Customer[]>([]);
+  const [showCustomerSearchPopover, setShowCustomerSearchPopover] = useState(false);
+  const [selectedBillCustomerId, setSelectedBillCustomerId] = useState<string | null>(null);
+  const customerNameInputRef = useRef<HTMLDivElement>(null);
+
   const [tableNumber, setTableNumber] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const { toast } = useToast();
@@ -142,12 +148,10 @@ function HomeContent() {
 
   const [adminActiveView, setAdminActiveView] = useState<AdminActiveView>(null);
 
-  // State for supplier dialog on main page
   const [showSupplierDialog, setShowSupplierDialog] = useState(false);
   const [supplierDialogMode, setSupplierDialogMode] = useState<'add' | 'edit' | null>(null);
   const [isSubmittingSupplier, setIsSubmittingSupplier] = useState(false);
   
-  // State for customer dialog on main page
   const [showCustomerDialog, setShowCustomerDialog] = useState(false);
   const [isSubmittingCustomer, setIsSubmittingCustomer] = useState(false);
 
@@ -182,8 +186,8 @@ function HomeContent() {
     },
   });
 
-  const customerForm = useForm<CustomerFormData>({
-    resolver: zodResolver(customerSchema),
+  const customerForm = useForm<CustomerFormDataType>({ // Using renamed type
+    resolver: zodResolver(customerFormSchema), // Using renamed schema
     defaultValues: {
       name: "",
       phoneNumber: "",
@@ -192,18 +196,23 @@ function HomeContent() {
     },
   });
 
-  const loadItems = useCallback(async () => {
+  const loadData = useCallback(async () => {
     setIsLoadingItems(true);
     try {
-      const itemsFromDb = await getItems();
+      const [customersData, itemsFromDb] = await Promise.all([
+        getCustomers(),
+        getItems()
+      ]);
+      setAllCustomers(customersData || []);
       setItems(itemsFromDb || []);
     } catch (error: any) {
-      console.error("Failed to load items:", error);
+      console.error("Failed to load initial data:", error);
       toast({
         variant: "destructive",
-        title: "Failed to load items.",
+        title: "Failed to load data.",
         description: error.message || "Please check your connection and configuration.",
       });
+      setAllCustomers([]);
       setItems([]);
     } finally {
         setIsLoadingItems(false);
@@ -227,7 +236,7 @@ function HomeContent() {
   }, []);
 
   useEffect(() => {
-    loadItems();
+    loadData();
 
     const editOrderNum = searchParams.get('editOrder');
     const editFsBillId = searchParams.get('editBillId');
@@ -244,7 +253,7 @@ function HomeContent() {
       setItemsVisible(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadItems, searchParams]);
+  }, [loadData, searchParams]);
 
 
   useEffect(() => {
@@ -429,7 +438,7 @@ function HomeContent() {
         toast({
           title: result.message,
         });
-        await loadItems();
+        await loadData();
         reset({ name: "", price: "", category: "", cost: "", itemCode: "", stockQuantity: "0" });
       } else {
         toast({
@@ -465,7 +474,7 @@ function HomeContent() {
         toast({ title: "Success", description: result.message || "Supplier added successfully!" });
         setShowSupplierDialog(false);
         supplierForm.reset();
-        await loadItems(); 
+        await loadData(); 
       } else {
         toast({ variant: "destructive", title: "Error", description: result.message });
       }
@@ -489,7 +498,7 @@ function HomeContent() {
     setShowSupplierDialog(true);
   };
 
-  const handleCustomerFormSubmit = async (data: CustomerFormData) => {
+  const handleCustomerFormSubmit = async (data: CustomerFormDataType) => {
     setIsSubmittingCustomer(true);
     const formData = new FormData();
     formData.append('name', data.name);
@@ -503,7 +512,7 @@ function HomeContent() {
         toast({ title: "Success", description: result.message || "Customer added successfully!" });
         setShowCustomerDialog(false);
         customerForm.reset();
-        // Potentially revalidate paths or fetch customer list if needed elsewhere on this page
+        await loadData(); // Refresh customer list
       } else {
         toast({ variant: "destructive", title: "Error", description: result.message });
       }
@@ -544,6 +553,7 @@ function HomeContent() {
           orderNumber: orderNumber,
           customerName: customerName,
           customerPhoneNumber: customerPhoneNumber,
+          customerId: selectedBillCustomerId || undefined,
           tableNumber: tableNumber,
           notes: notes,
           items: selectedItems.map(s => ({
@@ -560,12 +570,13 @@ function HomeContent() {
       try {
           const result = await saveBill(billData, editingBillId || undefined);
           if (result.success) {
-              await loadItems(); 
+              await loadData(); 
               if (resetFormAfterSave) {
                 setSelectedItems([]);
                 setServiceCharge(0);
                 setCustomerName("");
                 setCustomerPhoneNumber("");
+                setSelectedBillCustomerId(null);
                 setTableNumber("");
                 setNotes("");
                 setOrderNumber(generateOrderNumber());
@@ -828,8 +839,33 @@ function HomeContent() {
   ]);
 
   const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const name = e.target.value;
+    setCustomerName(name);
     setIsLocalDirty(true);
-    setCustomerName(e.target.value);
+  
+    if (name.trim() === "") {
+      setCustomerSearchResults([]);
+      setShowCustomerSearchPopover(false);
+      setSelectedBillCustomerId(null); 
+    } else {
+      const results = allCustomers.filter(cust =>
+        cust.name.toLowerCase().includes(name.toLowerCase())
+      );
+      setCustomerSearchResults(results);
+      setShowCustomerSearchPopover(results.length > 0);
+      const currentSelectedCustomer = allCustomers.find(c => c.id === selectedBillCustomerId);
+      if (currentSelectedCustomer && currentSelectedCustomer.name !== name) {
+          setSelectedBillCustomerId(null);
+      }
+    }
+  };
+
+  const handleCustomerSelect = (customer: Customer) => {
+    setCustomerName(customer.name);
+    setCustomerPhoneNumber(customer.phoneNumber || "");
+    setSelectedBillCustomerId(customer.id);
+    setShowCustomerSearchPopover(false);
+    setIsLocalDirty(true);
   };
 
   const handleCustomerPhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1077,18 +1113,49 @@ function HomeContent() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="grid gap-1.5">
                 <Label htmlFor="customer-name" className="text-sm">Customer Name</Label>
-                <div className="relative">
-                  <UserIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="customer-name"
-                    type="text"
-                    placeholder="Optional"
-                    value={customerName}
-                    onChange={handleCustomerNameChange}
-                    className="pl-8 h-9 text-sm"
-                    aria-label="Customer Name"
-                  />
-                </div>
+                 <Popover open={showCustomerSearchPopover} onOpenChange={setShowCustomerSearchPopover}>
+                  <PopoverTrigger asChild>
+                    <div className="relative" ref={customerNameInputRef}>
+                      <UserIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="customer-name"
+                        type="text"
+                        placeholder="Search or type customer name"
+                        value={customerName}
+                        onChange={handleCustomerNameChange}
+                        onFocus={() => {
+                            if (customerName.trim() !== "" && customerSearchResults.length > 0) {
+                                setShowCustomerSearchPopover(true);
+                            }
+                        }}
+                        className="pl-8 h-9 text-sm"
+                        aria-label="Customer Name"
+                        autoComplete="off"
+                      />
+                    </div>
+                  </PopoverTrigger>
+                  <PopoverContent 
+                    className="w-[var(--radix-popover-trigger-width)] p-0" 
+                    align="start"
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
+                    {customerSearchResults.length > 0 && (
+                      <ul className="py-1 max-h-40 overflow-y-auto">
+                        {customerSearchResults.map(customer => (
+                          <li
+                            key={customer.id}
+                            className="px-3 py-2 text-sm hover:bg-accent cursor-pointer"
+                            onClick={() => handleCustomerSelect(customer)}
+                            onMouseDown={(e) => e.preventDefault()} 
+                          >
+                            {customer.name} {customer.phoneNumber && `(${customer.phoneNumber})`}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="customer-phone" className="text-sm">Customer Phone</Label>
@@ -1339,7 +1406,7 @@ function HomeContent() {
                                                 const result = await deleteItem(item.id);
                                                 if (result.success) {
                                                 toast({ title: result.message });
-                                                loadItems();
+                                                loadData();
                                                 } else {
                                                 toast({ variant: "destructive", title: "Error", description: result.message });
                                                 }
