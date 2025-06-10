@@ -48,7 +48,7 @@ const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
       const d = new Date(timestamp);
       if (isValid(d)) return d;
     }
-    console.warn('Invalid or unsupported timestamp format for conversion:', typeof timestamp, timestamp);
+    console.warn('Invalid or unsupported timestamp format for conversion:', typeof timestamp, typeof timestamp, timestamp);
     return null;
   } catch (e) {
     console.error("Error converting timestamp to Date:", e, "Timestamp value:", timestamp);
@@ -584,14 +584,14 @@ export default function BillsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-center">Actions</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead className="min-w-[200px] sm:min-w-[250px] md:min-w-[300px]">Items</TableHead>
+                  <TableHead>Notes</TableHead>
+                  <TableHead>Table #</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Service Ch.</TableHead>
                   <TableHead>Order #</TableHead>
                   <TableHead>Date</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Table #</TableHead>
-                  <TableHead className="min-w-[200px] sm:min-w-[250px] md:min-w-[300px]">Items</TableHead>
-                  <TableHead className="text-right">Service Ch.</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead>Notes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -605,13 +605,10 @@ export default function BillsPage() {
                         <Printer className="h-3 w-3 mr-1" /> Print
                       </Button>
                     </TableCell>
-                    <TableCell className="font-medium">{bill.orderNumber}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{formatFirestoreTimestampForDisplay(bill.createdAt)}</TableCell>
                     <TableCell>
                         {bill.customerName || '-'} <br />
                         <span className="text-xs text-muted-foreground">{bill.customerPhoneNumber || '-'}</span>
                     </TableCell>
-                    <TableCell>{bill.tableNumber || '-'}</TableCell>
                     <TableCell className="min-w-[200px] sm:min-w-[250px] md:min-w-[300px]">
                       <ul className="list-disc list-inside text-sm">
                         {(bill.items || []).map((item, index) => (
@@ -621,9 +618,12 @@ export default function BillsPage() {
                         ))}
                       </ul>
                     </TableCell>
-                    <TableCell className="text-right">{currencySymbol}{bill.serviceCharge.toFixed(2)}</TableCell>
-                    <TableCell className="text-right font-semibold">{currencySymbol}{bill.totalAmount.toFixed(2)}</TableCell>
                     <TableCell className="text-xs whitespace-pre-wrap max-w-xs">{bill.notes || '-'}</TableCell>
+                    <TableCell>{bill.tableNumber || '-'}</TableCell>
+                    <TableCell className="text-right font-semibold">{currencySymbol}{bill.totalAmount.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{currencySymbol}{bill.serviceCharge.toFixed(2)}</TableCell>
+                    <TableCell className="font-medium">{bill.orderNumber}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{formatFirestoreTimestampForDisplay(bill.createdAt)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -645,3 +645,5 @@ export default function BillsPage() {
   );
 }
 
+
+    
