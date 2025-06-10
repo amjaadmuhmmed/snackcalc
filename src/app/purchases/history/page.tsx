@@ -26,18 +26,24 @@ const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
 const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
   if (!timestamp) return null;
   try {
-    if (timestamp.toDate && typeof timestamp.toDate === 'function') {
-      return timestamp.toDate();
-    } else if (timestamp instanceof Timestamp) {
-        return timestamp.toDate();
-    } else if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') {
-      return new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
-    } else if (typeof timestamp === 'number') {
+    if (timestamp instanceof Date) { // Check if it's already a JS Date
+      return isValid(timestamp) ? timestamp : null;
+    }
+    if (timestamp.toDate && typeof timestamp.toDate === 'function') { // General toDate (covers Firestore Timestamp)
+      const d = timestamp.toDate();
+      return isValid(d) ? d : null;
+    }
+    if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') { // For serialized timestamps (e.g. from JSON)
+      const d = new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
+      return isValid(d) ? d : null;
+    }
+    if (typeof timestamp === 'number') { // For Unix ms timestamps
       const d = new Date(timestamp);
-      if (isValid(d)) return d;
-    } else if (typeof timestamp === 'string') {
+      return isValid(d) ? d : null;
+    }
+    if (typeof timestamp === 'string') { // For ISO strings or other parseable date strings
       const d = new Date(timestamp);
-      if (isValid(d)) return d;
+      return isValid(d) ? d : null;
     }
     console.warn('Invalid or unsupported timestamp format for conversion:', typeof timestamp, timestamp);
     return null;
