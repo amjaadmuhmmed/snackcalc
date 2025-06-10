@@ -1,3 +1,4 @@
+
 // src/app/purchases/history/page.tsx
 "use client";
 
@@ -62,10 +63,7 @@ export default function PurchaseHistoryPage() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter(); // Initialized useRouter
 
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: startOfDay(new Date()),
-    to: endOfDay(new Date()),
-  });
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [searchTerm, setSearchTerm] = useState<string>("");
 
   useEffect(() => {
@@ -86,6 +84,17 @@ export default function PurchaseHistoryPage() {
 
     fetchPurchases();
   }, []);
+  
+  // Effect to set default dateRange on client-side
+  useEffect(() => {
+    if (!dateRange && !loading) { // Only set if dateRange is not already set and data is loaded
+      setDateRange({
+        from: startOfDay(new Date()),
+        to: endOfDay(new Date()),
+      });
+    }
+  }, [loading, dateRange]);
+
 
   useEffect(() => {
     if (loading) return;
@@ -95,9 +104,9 @@ export default function PurchaseHistoryPage() {
     // Date Range Filter
     if (dateRange?.from) {
       const fromDate = startOfDay(dateRange.from);
-      const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from); // Use purchaseDate for filtering
+      const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from); 
       tempFiltered = tempFiltered.filter((purchase) => {
-        const purchaseCreationDate = convertFirestoreTimestampToDate(purchase.purchaseDate);
+        const purchaseCreationDate = convertFirestoreTimestampToDate(purchase.createdAt); // Use createdAt for filtering
         if (!purchaseCreationDate || !isValid(purchaseCreationDate)) {
           return false;
         }
@@ -151,9 +160,9 @@ export default function PurchaseHistoryPage() {
             <div>
               <CardTitle>Recorded Purchases</CardTitle>
               <CardDescription>
-                {dateRange?.from && !dateRange.to ? "Showing purchases for " + format(dateRange.from, "LLL dd, yyyy") :
-                  dateRange?.from && dateRange?.to && format(dateRange.from, "yyyy-MM-dd") === format(dateRange.to, "yyyy-MM-dd") ? "Showing purchases for " + format(dateRange.from, "LLL dd, yyyy") :
-                  dateRange?.from && dateRange?.to ? "Showing purchases from " + format(dateRange.from, "LLL dd, yyyy") + " to " + format(dateRange.to, "LLL dd, yyyy") :
+                {dateRange?.from && !dateRange.to ? "Showing purchases created on " + format(dateRange.from, "LLL dd, yyyy") :
+                  dateRange?.from && dateRange?.to && format(dateRange.from, "yyyy-MM-dd") === format(dateRange.to, "yyyy-MM-dd") ? "Showing purchases created on " + format(dateRange.from, "LLL dd, yyyy") :
+                  dateRange?.from && dateRange?.to ? "Showing purchases created from " + format(dateRange.from, "LLL dd, yyyy") + " to " + format(dateRange.to, "LLL dd, yyyy") :
                   "Showing all purchases."}
               </CardDescription>
             </div>

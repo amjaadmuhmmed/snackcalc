@@ -338,9 +338,9 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
     try {
       let purchasesQuery;
       if (supplierId) {
-        purchasesQuery = query(purchasesCollection, where("supplierId", "==", supplierId), orderBy('purchaseDate', 'desc'));
+        purchasesQuery = query(purchasesCollection, where("supplierId", "==", supplierId), orderBy('createdAt', 'desc'));
       } else {
-        purchasesQuery = query(purchasesCollection, orderBy('purchaseDate', 'desc'));
+        purchasesQuery = query(purchasesCollection, orderBy('createdAt', 'desc'));
       }
       const purchaseSnapshot = await getDocs(purchasesQuery);
       
@@ -621,3 +621,4 @@ export async function getCustomersFromDb(): Promise<Customer[]> {
 
 
 export { firestoreGetDoc as getDoc };
+
