@@ -1,3 +1,4 @@
+
 'use server';
 
 import {
@@ -12,14 +13,15 @@ import {
     SnackInput,
     BillItem as DbBillItem,
     Bill,
-    updateStockQuantitiesForBill,
+    // updateStockQuantitiesForBill, // To be replaced by generic updateStockQuantities
+    updateStockQuantities, // New generic stock update function
     PurchaseInput,
     addPurchaseToDb,
-    updatePurchaseInDb, // Added
-    updateStockAfterPurchase,
+    updatePurchaseInDb,
+    updateStockAfterPurchase, // This will use updateStockQuantities internally
     PurchaseItem,
     getPurchasesFromDb,
-    getPurchaseByIdFromDb, // Added
+    getPurchaseByIdFromDb,
     SupplierInput,
     addSupplierToDb,
     getSuppliersFromDb,
@@ -209,22 +211,23 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
             }
         }
 
-        const stockAdjustments: Array<{ itemId: string; quantityChange: number }> = [];
-        const currentBillItemsMap = new Map(itemsInCurrentBill.map(item => [item.itemId, item.quantity]));
-        const oldBillItemsMap = new Map(oldBillItems.map(item => [item.itemId, item.quantity]));
-        const allInvolvedItemIds = new Set([...currentBillItemsMap.keys(), ...oldBillItemsMap.keys()]);
+        const stockAdjustmentsMap = new Map<string, number>();
 
-        allInvolvedItemIds.forEach(itemId => {
-            if (!itemId) return;
-            const newQty = currentBillItemsMap.get(itemId) || 0;
-            const oldQty = oldBillItemsMap.get(itemId) || 0;
-            const quantityDelta = newQty - oldQty; 
-
-            if (quantityDelta !== 0) {
-                stockAdjustments.push({ itemId, quantityChange: quantityDelta });
-            }
+        oldBillItems.forEach(item => {
+            if (!item.itemId) return;
+            stockAdjustmentsMap.set(item.itemId, (stockAdjustmentsMap.get(item.itemId) || 0) + item.quantity); // Add back old quantities
         });
         
+        itemsInCurrentBill.forEach(item => {
+            if (!item.itemId) return;
+            stockAdjustmentsMap.set(item.itemId, (stockAdjustmentsMap.get(item.itemId) || 0) - item.quantity); // Subtract new quantities
+        });
+        
+        const finalStockAdjustments = Array.from(stockAdjustmentsMap.entries())
+            .map(([itemId, quantityChange]) => ({ itemId, quantityChange }))
+            .filter(adj => adj.quantityChange !== 0);
+
+
         if (billIdToUpdate) {
             billActionResult = await updateBillInDb(billIdToUpdate, billData);
         } else {
@@ -236,8 +239,8 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
         }
 
         if (billActionResult.success) {
-            if (stockAdjustments.length > 0) {
-                const stockUpdateResult = await updateStockQuantitiesForBill(stockAdjustments);
+            if (finalStockAdjustments.length > 0) {
+                const stockUpdateResult = await updateStockQuantities(finalStockAdjustments); // Use generic updateStockQuantities
                 if (!stockUpdateResult.success) {
                     stockUpdateResultMessage = stockUpdateResult.message || "Stock update failed.";
                     console.warn(`Bill ${billIdToUpdate || newBillId} action successful, but stock update failed: ${stockUpdateResultMessage}`);
@@ -248,11 +251,15 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
             revalidatePath('/'); 
             revalidatePath('/suppliers');
             revalidatePath('/customers');
+            revalidatePath('/purchases/history'); // Item stock affects purchase decisions
             
             let finalMessage = billIdToUpdate ? 'Bill updated successfully!' : 'Bill saved successfully!';
             if (stockUpdateResultMessage) {
                 finalMessage += ` (Warning: ${stockUpdateResultMessage})`;
+            } else if (finalStockAdjustments.length > 0) {
+                finalMessage += ' Stock levels adjusted.';
             }
+
 
             return {
                 success: true,
@@ -279,19 +286,58 @@ export async function getBills() {
 export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpdate?: string) {
     try {
         if (purchaseIdToUpdate) {
-            // This is an update. For now, we directly update the purchase order.
-            // Stock adjustment logic for updates will be handled later.
-            const updateResult = await updatePurchaseInDb(purchaseIdToUpdate, purchaseData);
-            if (!updateResult.success) {
-                return { success: false, message: updateResult.message || 'Failed to update purchase order.' };
+            const oldPurchase = await getPurchaseByIdFromDb(purchaseIdToUpdate);
+            if (!oldPurchase) {
+                return { success: false, message: 'Original purchase order not found for update.' };
             }
-            // TODO: Implement stock adjustment for updates. For now, revalidating paths.
+            const oldItems = oldPurchase.items;
+            const newItems = purchaseData.items;
+
+            const stockAdjustmentsMap = new Map<string, number>();
+
+            // Decrease stock by old quantities (as if returning them)
+            oldItems.forEach(item => {
+                if (!item.itemId) return;
+                stockAdjustmentsMap.set(item.itemId, (stockAdjustmentsMap.get(item.itemId) || 0) - item.quantity);
+            });
+
+            // Increase stock by new quantities
+            newItems.forEach(item => {
+                if (!item.itemId) return;
+                stockAdjustmentsMap.set(item.itemId, (stockAdjustmentsMap.get(item.itemId) || 0) + item.quantity);
+            });
+
+            const finalStockAdjustments = Array.from(stockAdjustmentsMap.entries())
+                .map(([itemId, quantityChange]) => ({ itemId, quantityChange }))
+                .filter(adj => adj.quantityChange !== 0);
+
+            let stockUpdateResultMsgPart = "";
+            if (finalStockAdjustments.length > 0) {
+                const stockUpdateResult = await updateStockQuantities(finalStockAdjustments);
+                if (!stockUpdateResult.success) {
+                    stockUpdateResultMsgPart = ` However, stock adjustment failed: ${stockUpdateResult.message}. Please verify stock levels manually.`;
+                    console.warn(`Purchase ${purchaseIdToUpdate} updated, but stock adjustment failed: ${stockUpdateResult.message}`);
+                } else {
+                     stockUpdateResultMsgPart = ' Stock levels adjusted accordingly.';
+                }
+            } else {
+                stockUpdateResultMsgPart = " No changes in item quantities, stock levels unaffected by this update.";
+            }
+            
+            const purchaseUpdateResult = await updatePurchaseInDb(purchaseIdToUpdate, purchaseData);
+            if (!purchaseUpdateResult.success) {
+                return { success: false, message: purchaseUpdateResult.message || 'Failed to update purchase order document.' };
+            }
+            
             revalidatePath('/purchases/create');
             revalidatePath('/purchases/history');
-            revalidatePath('/');
+            revalidatePath('/'); // Items list for stock quantities
+            revalidatePath('/suppliers');
+            revalidatePath('/customers');
+
             return {
                 success: true,
-                message: 'Purchase order updated successfully! (Stock not yet adjusted for updates)',
+                message: `Purchase order updated successfully!${stockUpdateResultMsgPart}`,
                 purchaseId: purchaseIdToUpdate
             };
 
@@ -302,7 +348,7 @@ export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpda
                 return { success: false, message: purchaseResult.message || 'Failed to save purchase order.' };
             }
 
-            const stockUpdateResult = await updateStockAfterPurchase(purchaseData.items);
+            const stockUpdateResult = await updateStockAfterPurchase(purchaseData.items); // This now uses updateStockQuantities internally
             if (!stockUpdateResult.success) {
                 console.warn(`Purchase ${purchaseResult.id} saved, but stock update failed: ${stockUpdateResult.message}`);
                 return {
@@ -362,6 +408,7 @@ export async function addSupplier(data: FormData): Promise<{ success: boolean; i
             revalidatePath('/purchases/create');
             revalidatePath('/suppliers');
             revalidatePath('/customers');
+            revalidatePath('/'); // Main page might use supplier data in future or for lists
             return { success: true, message: 'Supplier added successfully!', id: result.id, supplier: result.supplier};
         } else {
             return { success: false, message: result.message || 'Failed to add supplier.' };
@@ -394,6 +441,7 @@ export async function updateSupplier(id: string, data: FormData): Promise<{ succ
             revalidatePath('/suppliers');
             revalidatePath('/purchases/create'); 
             revalidatePath('/customers');
+            revalidatePath('/');
             return { success: true, message: 'Supplier updated successfully!' };
         } else {
             return { success: false, message: result.message || 'Failed to update supplier.' };
@@ -426,8 +474,8 @@ export async function addCustomer(data: FormData): Promise<{ success: boolean; i
         const result = await addCustomerToDb(newCustomer);
 
         if (result.success && result.id && result.customer) {
-            revalidatePath('/customers'); // For the new customer list page
-            revalidatePath('/'); // Revalidate main page if customer info is used there
+            revalidatePath('/customers'); 
+            revalidatePath('/'); 
             return { success: true, message: 'Customer added successfully!', id: result.id, customer: result.customer};
         } else {
             return { success: false, message: result.message || 'Failed to add customer.' };

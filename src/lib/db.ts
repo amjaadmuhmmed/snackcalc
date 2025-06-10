@@ -1,3 +1,4 @@
+
 'use server';
 
 import {db} from './firebase';
@@ -107,6 +108,42 @@ export async function getItemsFromDb(): Promise<Snack[]> {
   }
 }
 
+// --- Stock Management ---
+export async function updateStockQuantities(
+    itemsToUpdate: Array<{ itemId: string; quantityChange: number }>
+): Promise<{ success: boolean; message?: string }> {
+    if (itemsToUpdate.length === 0) {
+        return { success: true, message: "No stock changes to apply." };
+    }
+    const batch = writeBatch(db);
+    try {
+        for (const { itemId, quantityChange } of itemsToUpdate) {
+            if (!itemId) {
+                console.warn("Skipping stock update for an item without an ID.");
+                continue;
+            }
+            if (quantityChange === 0) { 
+                continue;
+            }
+            const itemDocRef = doc(db, 'snack', itemId);
+            const itemDocSnap = await firestoreGetDoc(itemDocRef);
+
+            if (!itemDocSnap.exists()) {
+                console.error(`Item with ID ${itemId} not found for stock update. Cannot apply change of ${quantityChange}.`);
+                throw new Error(`Item with ID ${itemId} not found. Stock update failed.`);
+            }
+            const currentStock = Number(itemDocSnap.data().stockQuantity) || 0;
+            const newStock = currentStock + quantityChange; 
+            batch.update(itemDocRef, { stockQuantity: newStock });
+        }
+        await batch.commit();
+        return { success: true };
+    } catch (error: any) {
+        console.error('Stock quantity update failed: ', error);
+        return { success: false, message: error.message || 'Stock quantity update failed.' };
+    }
+}
+
 
 // --- Bills ---
 
@@ -121,9 +158,9 @@ export interface BillItem {
 export interface Bill {
     id: string;
     orderNumber: string;
-    customerName?: string; // This remains free text for now
-    customerPhoneNumber?: string; // This remains free text for now
-    customerId?: string; // Optional: To link to a customer record
+    customerName?: string; 
+    customerPhoneNumber?: string; 
+    customerId?: string; 
     tableNumber?: string;
     notes?: string;
     items: BillItem[];
@@ -209,38 +246,6 @@ export async function getBillsFromDb(): Promise<Bill[]> {
     }
 }
 
-export async function updateStockQuantitiesForBill(
-    dbItemsToUpdate: Array<{ itemId: string; quantityChange: number }>
-): Promise<{ success: boolean; message?: string }> {
-    if (dbItemsToUpdate.length === 0) {
-        return { success: true };
-    }
-    try {
-        await runTransaction(db, async (transaction) => {
-            for (const { itemId, quantityChange } of dbItemsToUpdate) {
-                if (!itemId) {
-                    console.warn("Skipping stock update for an item without an ID.");
-                    continue;
-                }
-                const itemDocRef = doc(db, 'snack', itemId);
-                const itemDocSnap = await transaction.get(itemDocRef);
-
-                if (!itemDocSnap.exists()) {
-                    console.error(`Item with ID ${itemId} not found for stock update.`);
-                    throw new Error(`Item with ID ${itemId} not found during stock update.`);
-                }
-
-                const currentStock = Number(itemDocSnap.data().stockQuantity) || 0;
-                const newStock = currentStock - quantityChange; // Subtract for sales
-                transaction.update(itemDocRef, { stockQuantity: newStock });
-            }
-        });
-        return { success: true };
-    } catch (error: any) {
-        console.error('Stock update transaction failed: ', error);
-        return { success: false, message: error.message || 'Stock update transaction failed.' };
-    }
-}
 
 // --- Purchases ---
 export interface PurchaseItem {
@@ -296,11 +301,11 @@ export async function updatePurchaseInDb(id: string, purchaseData: PurchaseInput
     try {
         const purchaseDocRef = doc(db, 'purchases', id);
         const dataToUpdate: any = {
-            ...purchaseData,
+            ...purchaseData, // Spread first to include all fields from input
             purchaseOrderNumber: purchaseData.purchaseOrderNumber,
             supplierName: purchaseData.supplierName || '',
-            supplierId: purchaseData.supplierId || '',
-            purchaseDate: purchaseData.purchaseDate, // Assuming this is already a Timestamp or valid Date
+            supplierId: purchaseData.supplierId || '', // Ensure supplierId is handled
+            purchaseDate: purchaseData.purchaseDate, 
             items: purchaseData.items,
             totalAmount: purchaseData.totalAmount,
             notes: purchaseData.notes || '',
@@ -322,30 +327,11 @@ export async function updateStockAfterPurchase(
     if (purchaseItems.length === 0) {
         return { success: true, message: "No items to update stock for." };
     }
-    const batch = writeBatch(db);
-    try {
-        for (const pItem of purchaseItems) {
-            if (!pItem.itemId) {
-                console.warn("Skipping stock update for a purchase item without an ID:", pItem.name);
-                continue;
-            }
-            const itemDocRef = doc(db, 'snack', pItem.itemId);
-            const itemDocSnap = await firestoreGetDoc(itemDocRef);
-
-            if (!itemDocSnap.exists()) {
-                console.error(`Item with ID ${pItem.itemId} (${pItem.name}) not found for stock update.`);
-                continue;
-            }
-            const currentStock = Number(itemDocSnap.data().stockQuantity) || 0;
-            const newStock = currentStock + pItem.quantity; // Add for purchases
-            batch.update(itemDocRef, { stockQuantity: newStock });
-        }
-        await batch.commit();
-        return { success: true };
-    } catch (error: any) {
-        console.error('Stock update after purchase failed: ', error);
-        return { success: false, message: error.message || 'Stock update after purchase failed.' };
-    }
+    const stockAdjustments = purchaseItems.map(pItem => ({
+        itemId: pItem.itemId,
+        quantityChange: pItem.quantity // For new purchases, quantityChange is positive
+    }));
+    return updateStockQuantities(stockAdjustments);
 }
 
 export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[]> {
