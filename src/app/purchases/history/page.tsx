@@ -84,7 +84,7 @@ export default function PurchaseHistoryPage() {
 
     fetchPurchases();
   }, []);
-  
+
   // Effect to set default dateRange on client-side
   useEffect(() => {
     if (!dateRange && !loading) { // Only set if dateRange is not already set and data is loaded
@@ -104,15 +104,15 @@ export default function PurchaseHistoryPage() {
     // Date Range Filter
     if (dateRange?.from) {
       const fromDate = startOfDay(dateRange.from);
-      const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from); 
+      const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
       tempFiltered = tempFiltered.filter((purchase) => {
-        const purchaseCreationDate = convertFirestoreTimestampToDate(purchase.createdAt); // Use createdAt for filtering
-        if (!purchaseCreationDate || !isValid(purchaseCreationDate)) {
+        const purchaseDateToFilter = convertFirestoreTimestampToDate(purchase.purchaseDate); // Filter by user-entered purchaseDate
+        if (!purchaseDateToFilter || !isValid(purchaseDateToFilter)) {
           return false;
         }
-        return isWithinInterval(purchaseCreationDate, { 
-            start: fromDate <= toDate ? fromDate : toDate, 
-            end: fromDate <= toDate ? toDate : fromDate 
+        return isWithinInterval(purchaseDateToFilter, {
+            start: fromDate <= toDate ? fromDate : toDate,
+            end: fromDate <= toDate ? toDate : fromDate
         });
       });
     }
@@ -141,6 +141,24 @@ export default function PurchaseHistoryPage() {
     router.push(`/purchases/create?editPurchaseId=${purchase.id}&editOrderNumber=${purchase.purchaseOrderNumber}`);
   };
 
+  const getCardDescription = () => {
+    let description = "";
+    if (dateRange?.from && !dateRange.to) {
+      description = `Showing purchases with 'Purchase Date' on ${format(dateRange.from, "LLL dd, yyyy")}`;
+    } else if (dateRange?.from && dateRange?.to && format(dateRange.from, "yyyy-MM-dd") === format(dateRange.to, "yyyy-MM-dd")) {
+      description = `Showing purchases with 'Purchase Date' on ${format(dateRange.from, "LLL dd, yyyy")}`;
+    } else if (dateRange?.from && dateRange?.to) {
+      description = `Showing purchases with 'Purchase Date' from ${format(dateRange.from, "LLL dd, yyyy")} to ${format(dateRange.to, "LLL dd, yyyy")}`;
+    } else {
+      description = "Showing all purchases";
+    }
+    if (searchTerm) {
+      description += ` matching "${searchTerm}"`;
+    }
+    description += ". Sorted by Purchase Date (desc).";
+    return description;
+  };
+
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-4 md:p-8">
@@ -160,10 +178,7 @@ export default function PurchaseHistoryPage() {
             <div>
               <CardTitle>Recorded Purchases</CardTitle>
               <CardDescription>
-                {dateRange?.from && !dateRange.to ? "Showing purchases created on " + format(dateRange.from, "LLL dd, yyyy") :
-                  dateRange?.from && dateRange?.to && format(dateRange.from, "yyyy-MM-dd") === format(dateRange.to, "yyyy-MM-dd") ? "Showing purchases created on " + format(dateRange.from, "LLL dd, yyyy") :
-                  dateRange?.from && dateRange?.to ? "Showing purchases created from " + format(dateRange.from, "LLL dd, yyyy") + " to " + format(dateRange.to, "LLL dd, yyyy") :
-                  "Showing all purchases."}
+                {getCardDescription()}
               </CardDescription>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto items-center">
@@ -297,3 +312,4 @@ export default function PurchaseHistoryPage() {
     </div>
   );
 }
+

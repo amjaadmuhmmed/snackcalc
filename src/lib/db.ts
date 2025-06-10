@@ -122,7 +122,7 @@ export async function updateStockQuantities(
                 console.warn("Skipping stock update for an item without an ID.");
                 continue;
             }
-            if (quantityChange === 0) { 
+            if (quantityChange === 0) {
                 continue;
             }
             const itemDocRef = doc(db, 'snack', itemId);
@@ -133,7 +133,7 @@ export async function updateStockQuantities(
                 throw new Error(`Item with ID ${itemId} not found. Stock update failed.`);
             }
             const currentStock = Number(itemDocSnap.data().stockQuantity) || 0;
-            const newStock = currentStock + quantityChange; 
+            const newStock = currentStock + quantityChange;
             batch.update(itemDocRef, { stockQuantity: newStock });
         }
         await batch.commit();
@@ -158,9 +158,9 @@ export interface BillItem {
 export interface Bill {
     id: string;
     orderNumber: string;
-    customerName?: string; 
-    customerPhoneNumber?: string; 
-    customerId?: string; 
+    customerName?: string;
+    customerPhoneNumber?: string;
+    customerId?: string;
     tableNumber?: string;
     notes?: string;
     items: BillItem[];
@@ -278,17 +278,17 @@ export async function addPurchaseToDb(purchase: PurchaseInput): Promise<{ succes
         const dataToSave: { [key: string]: any } = {
             purchaseOrderNumber: purchase.purchaseOrderNumber,
             supplierName: purchase.supplierName || '',
-            purchaseDate: purchase.purchaseDate,
+            purchaseDate: purchase.purchaseDate, // User-entered date
             items: purchase.items,
             totalAmount: purchase.totalAmount,
             notes: purchase.notes || '',
-            createdAt: serverTimestamp(),
+            createdAt: serverTimestamp(), // System-generated creation timestamp
         };
 
         if (purchase.supplierId && typeof purchase.supplierId === 'string' && purchase.supplierId.trim() !== '') {
             dataToSave.supplierId = purchase.supplierId.trim();
         }
-        
+
         const docRef = await addDoc(purchasesCollection, dataToSave);
         return { success: true, id: docRef.id };
     } catch (e: any) {
@@ -301,17 +301,17 @@ export async function updatePurchaseInDb(id: string, purchaseData: PurchaseInput
     try {
         const purchaseDocRef = doc(db, 'purchases', id);
         const dataToUpdate: any = {
-            ...purchaseData, // Spread first to include all fields from input
+            ...purchaseData,
             purchaseOrderNumber: purchaseData.purchaseOrderNumber,
             supplierName: purchaseData.supplierName || '',
-            supplierId: purchaseData.supplierId || '', // Ensure supplierId is handled
-            purchaseDate: purchaseData.purchaseDate, 
+            supplierId: purchaseData.supplierId || '',
+            purchaseDate: purchaseData.purchaseDate, // User-entered date
             items: purchaseData.items,
             totalAmount: purchaseData.totalAmount,
             notes: purchaseData.notes || '',
             lastUpdatedAt: serverTimestamp(),
         };
-        
+
         await updateDoc(purchaseDocRef, dataToUpdate);
         return { success: true, message: "Purchase order updated successfully." };
     } catch (e: any) {
@@ -329,7 +329,7 @@ export async function updateStockAfterPurchase(
     }
     const stockAdjustments = purchaseItems.map(pItem => ({
         itemId: pItem.itemId,
-        quantityChange: pItem.quantity // For new purchases, quantityChange is positive
+        quantityChange: pItem.quantity
     }));
     return updateStockQuantities(stockAdjustments);
 }
@@ -338,12 +338,12 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
     try {
       let purchasesQuery;
       if (supplierId) {
-        purchasesQuery = query(purchasesCollection, where("supplierId", "==", supplierId), orderBy('createdAt', 'desc'));
+        purchasesQuery = query(purchasesCollection, where("supplierId", "==", supplierId), orderBy('purchaseDate', 'desc'));
       } else {
-        purchasesQuery = query(purchasesCollection, orderBy('createdAt', 'desc'));
+        purchasesQuery = query(purchasesCollection, orderBy('purchaseDate', 'desc'));
       }
       const purchaseSnapshot = await getDocs(purchasesQuery);
-      
+
       if (supplierId && purchaseSnapshot.empty) {
         console.warn(`[DB getPurchasesFromDb] No purchases found for supplierId "${supplierId}".`);
       }
@@ -363,11 +363,11 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
           purchaseOrderNumber: data.purchaseOrderNumber,
           supplierName: data.supplierName || '',
           supplierId: data.supplierId || '',
-          purchaseDate: data.purchaseDate,
+          purchaseDate: data.purchaseDate, // User-entered date
           items: items,
           totalAmount: data.totalAmount,
           notes: data.notes || '',
-          createdAt: data.createdAt,
+          createdAt: data.createdAt, // System-generated creation timestamp
           lastUpdatedAt: data.lastUpdatedAt,
         } as Purchase;
       });
@@ -453,7 +453,7 @@ export async function addSupplierToDb(supplier: SupplierInput): Promise<{ succes
         };
 
         const docRef = await addDoc(suppliersCollection, dataToSave);
-        const createdSupplierDoc = await firestoreGetDoc(docRef); 
+        const createdSupplierDoc = await firestoreGetDoc(docRef);
         const createdSupplierData = createdSupplierDoc.data();
 
         const createdSupplier: Supplier = {
@@ -464,7 +464,7 @@ export async function addSupplierToDb(supplier: SupplierInput): Promise<{ succes
              email: createdSupplierData?.email,
              address: createdSupplierData?.address,
              gstNumber: createdSupplierData?.gstNumber,
-             createdAt: createdSupplierData?.createdAt ? (createdSupplierData.createdAt as Timestamp).toDate() : new Date() 
+             createdAt: createdSupplierData?.createdAt ? (createdSupplierData.createdAt as Timestamp).toDate() : new Date()
         };
         return { success: true, id: docRef.id, supplier: createdSupplier };
     } catch (e: any) {
@@ -586,7 +586,7 @@ export async function updateCustomerInDb(id: string, customerData: Partial<Custo
         if (customerData.phoneNumber !== undefined) dataToUpdate.phoneNumber = customerData.phoneNumber || '';
         if (customerData.email !== undefined) dataToUpdate.email = customerData.email || '';
         if (customerData.address !== undefined) dataToUpdate.address = customerData.address || '';
-        
+
         dataToUpdate.updatedAt = serverTimestamp();
 
         await updateDoc(customerDocRef, dataToUpdate);
