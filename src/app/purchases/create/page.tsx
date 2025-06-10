@@ -1,3 +1,4 @@
+
 // src/app/purchases/create/page.tsx
 "use client";
 
@@ -147,9 +148,18 @@ function CreatePurchasePageContent() {
 
     } else {
       setPurchaseOrderNumber(generatePurchaseOrderNumber());
+      // Initialize purchaseDate with current date for new purchases, but defer to useEffect for client-side consistency
+      // setPurchaseDate(new Date()); // This can cause hydration issues
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, router, toast, allItems, allSuppliers]); // Added allItems, allSuppliers
+
+  // Set default purchaseDate on client-side to avoid hydration mismatch
+  useEffect(() => {
+    if (!editingPurchaseId && !purchaseDate) { // Only set for new purchases if not already set
       setPurchaseDate(new Date());
     }
-  }, [searchParams, router, toast, allItems, allSuppliers]);
+  }, [editingPurchaseId, purchaseDate]);
 
 
   useEffect(() => {
@@ -260,12 +270,16 @@ function CreatePurchasePageContent() {
     setEditingPurchaseId(null);
     setEditingPurchaseOrderNumber(null);
     setPurchaseOrderNumber(generatePurchaseOrderNumber());
-    setPurchaseDate(new Date());
+    setPurchaseDate(new Date()); // Reset to current date for new
     setSupplierNameInput("");
     setSelectedSupplier(null);
     setNotes("");
     setSelectedItems([]);
     setSearchTerm("");
+    // Ensure router query params are cleared if navigating "internally" to new
+    if (searchParams.get("editPurchaseId")) {
+        router.push("/purchases/create", { scroll: false });
+    }
   };
 
   const proceedToSavePurchase = async (finalSupplierName: string, finalSupplierId?: string) => {
@@ -333,7 +347,7 @@ function CreatePurchasePageContent() {
         setShowNewSupplierDialog(true);
     } else if (trimmedSupplierName && editingPurchaseId) { // For edits, if supplier name is changed but ID isn't found, save with new name but no ID.
         proceedToSavePurchase(trimmedSupplierName, undefined);
-    } else {
+    } else { // No supplier name entered, and not editing (or editing but cleared supplier)
         proceedToSavePurchase("", undefined);
     }
   };
@@ -639,13 +653,9 @@ function CreatePurchasePageContent() {
 
 export default function CreatePurchasePage() {
   return (
-    <Suspense fallback={
-      <div className="flex flex-col items-center justify-center min-h-screen bg-secondary p-4 md:p-8">
-        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-        <p className="text-lg text-muted-foreground">Loading page...</p>
-      </div>
-    }>
+    <Suspense fallback={<p>Loading...</p>}>
       <CreatePurchasePageContent />
     </Suspense>
   );
 }
+
