@@ -1,9 +1,8 @@
-
 // src/app/purchases/create/page.tsx
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams, Suspense } from "next/navigation"; // Added useSearchParams & Suspense
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,9 +14,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, Calendar as CalendarIconLucide, AlertCircle, Info, Loader2 } from "lucide-react";
-import { getItems, savePurchase, getSuppliers, addSupplier } from "@/app/actions";
-import type { Snack, PurchaseInput, PurchaseItem as DbPurchaseItem, Supplier } from "@/lib/db";
+import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, Calendar as CalendarIconLucide, AlertCircle, Info, Loader2, Edit } from "lucide-react"; // Added Edit
+import { getItems, savePurchase, getSuppliers, addSupplier, getPurchaseById } from "@/app/actions"; // Added getPurchaseById
+import type { Snack, PurchaseInput, PurchaseItem as DbPurchaseItem, Supplier, Purchase } from "@/lib/db"; // Added Purchase
 import { Timestamp } from "firebase/firestore";
 import {
   Dialog,
@@ -41,8 +40,9 @@ const generatePurchaseOrderNumber = () => {
 
 const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
 
-export default function CreatePurchasePage() {
+function CreatePurchasePageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
 
   const [allItems, setAllItems] = useState<Snack[]>([]);
@@ -58,22 +58,101 @@ export default function CreatePurchasePage() {
   const [isSavingPurchase, setIsSavingPurchase] = useState(false);
   const [isLoadingItems, setIsLoadingItems] = useState(true);
   const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(true);
+  const [isLoadingPurchaseForEdit, setIsLoadingPurchaseForEdit] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
   const [showNewSupplierDialog, setShowNewSupplierDialog] = useState(false);
   const [newSupplierNameToCreate, setNewSupplierNameToCreate] = useState("");
+
+  const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
+  const [editingPurchaseOrderNumber, setEditingPurchaseOrderNumber] = useState<string | null>(null);
 
 
   const listRefs = useRef<Record<string, HTMLLIElement | null>>({});
   const lastInteractedItemIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setPurchaseDate(new Date());
-  }, []);
+    const editId = searchParams.get("editPurchaseId");
+    const editPONumber = searchParams.get("editOrderNumber");
+
+    if (editId) {
+      setEditingPurchaseId(editId);
+      if (editPONumber) setEditingPurchaseOrderNumber(editPONumber);
+      setIsLoadingPurchaseForEdit(true);
+      const fetchPurchaseForEdit = async () => {
+        try {
+          const purchaseToEdit = await getPurchaseById(editId);
+          if (purchaseToEdit) {
+            setPurchaseOrderNumber(purchaseToEdit.purchaseOrderNumber);
+            if (purchaseToEdit.purchaseDate instanceof Timestamp) {
+              setPurchaseDate(purchaseToEdit.purchaseDate.toDate());
+            } else if (purchaseToEdit.purchaseDate instanceof Date) {
+              setPurchaseDate(purchaseToEdit.purchaseDate);
+            }
+
+            if (purchaseToEdit.supplierId && purchaseToEdit.supplierName) {
+               const foundSupplier = allSuppliers.find(s => s.id === purchaseToEdit.supplierId) || 
+                                    allSuppliers.find(s => s.name === purchaseToEdit.supplierName); // Fallback by name
+                if (foundSupplier) {
+                    setSelectedSupplier(foundSupplier);
+                    setSupplierNameInput(foundSupplier.name);
+                } else {
+                     // If supplier not found in current list, still populate name for display
+                    setSupplierNameInput(purchaseToEdit.supplierName || "");
+                    setSelectedSupplier({ // Create a temporary supplier object for the form state
+                        id: purchaseToEdit.supplierId || '', // Use ID if available
+                        name: purchaseToEdit.supplierName || 'Unknown Supplier (from edit)'
+                    });
+                }
+            } else if (purchaseToEdit.supplierName) {
+                 setSupplierNameInput(purchaseToEdit.supplierName);
+            }
+
+            setNotes(purchaseToEdit.notes || "");
+            
+            const itemsToEdit: SelectedItemForPurchase[] = purchaseToEdit.items.map(pItem => {
+              const baseItem = allItems.find(i => i.id === pItem.itemId || i.name === pItem.name); // Match by ID or name
+              return {
+                id: baseItem?.id || pItem.itemId, // Prefer baseItem.id if found
+                name: pItem.name,
+                price: baseItem?.price || 0, // Default to 0 if base item not found
+                category: baseItem?.category || "Unknown",
+                cost: baseItem?.cost,
+                itemCode: pItem.itemCode || baseItem?.itemCode || '',
+                stockQuantity: baseItem?.stockQuantity || 0,
+                quantity: pItem.quantity,
+                purchaseCost: pItem.purchaseCost,
+              };
+            });
+            setSelectedItems(itemsToEdit);
+            
+          } else {
+            toast({ variant: "destructive", title: "Error", description: "Could not load purchase order for editing." });
+            router.push("/purchases/history"); // Redirect if not found
+          }
+        } catch (error: any) {
+          toast({ variant: "destructive", title: "Error loading purchase for edit.", description: error.message });
+        } finally {
+          setIsLoadingPurchaseForEdit(false);
+        }
+      };
+      
+      if(allItems.length > 0 || allSuppliers.length > 0) { // Ensure master data is loaded
+          fetchPurchaseForEdit();
+      } else {
+          // If master data isn't loaded yet, this will be re-triggered by the allItems/allSuppliers useEffect.
+          // This ensures we have items to map against.
+          console.log("Waiting for allItems/allSuppliers to load before fetching purchase for edit.");
+      }
+
+    } else {
+      setPurchaseOrderNumber(generatePurchaseOrderNumber());
+      setPurchaseDate(new Date());
+    }
+  }, [searchParams, router, toast, allItems, allSuppliers]);
 
 
   useEffect(() => {
-    setPurchaseOrderNumber(generatePurchaseOrderNumber());
     const loadInitialData = async () => {
       setIsLoadingItems(true);
       setIsLoadingSuppliers(true);
@@ -177,6 +256,18 @@ export default function CreatePurchasePage() {
     return selected ? selected.quantity : 0;
   };
 
+  const resetFormForNewPurchase = () => {
+    setEditingPurchaseId(null);
+    setEditingPurchaseOrderNumber(null);
+    setPurchaseOrderNumber(generatePurchaseOrderNumber());
+    setPurchaseDate(new Date());
+    setSupplierNameInput("");
+    setSelectedSupplier(null);
+    setNotes("");
+    setSelectedItems([]);
+    setSearchTerm("");
+  };
+
   const proceedToSavePurchase = async (finalSupplierName: string, finalSupplierId?: string) => {
     setIsSavingPurchase(true);
 
@@ -197,23 +288,22 @@ export default function CreatePurchasePage() {
     };
 
     try {
-      const result = await savePurchase(purchaseData);
+      const result = await savePurchase(purchaseData, editingPurchaseId || undefined);
       if (result.success) {
         toast({ title: result.message });
-        setSelectedItems([]);
-        setSupplierNameInput("");
-        setSelectedSupplier(null);
-        setNotes("");
-        setPurchaseOrderNumber(generatePurchaseOrderNumber());
-        setPurchaseDate(new Date());
+        if (editingPurchaseId) {
+          router.push("/purchases/history"); // Navigate back to history after update
+        } else {
+           resetFormForNewPurchase(); // Reset form for new entry
+        }
         
         const updatedSuppliers = await getSuppliers(); 
         setAllSuppliers(updatedSuppliers);
       } else {
-        toast({ variant: "destructive", title: "Failed to save purchase.", description: result.message });
+        toast({ variant: "destructive", title: editingPurchaseId ? "Failed to update purchase." : "Failed to save purchase.", description: result.message });
       }
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Error saving purchase.", description: error.message });
+      toast({ variant: "destructive", title: editingPurchaseId ? "Error updating purchase." : "Error saving purchase.", description: error.message });
     } finally {
       setIsSavingPurchase(false);
     }
@@ -238,9 +328,11 @@ export default function CreatePurchasePage() {
 
     if (selectedSupplier && selectedSupplier.id) {
         proceedToSavePurchase(selectedSupplier.name, selectedSupplier.id);
-    } else if (trimmedSupplierName) {
+    } else if (trimmedSupplierName && !editingPurchaseId) { // Only show new supplier dialog for new purchases
         setNewSupplierNameToCreate(trimmedSupplierName);
         setShowNewSupplierDialog(true);
+    } else if (trimmedSupplierName && editingPurchaseId) { // For edits, if supplier name is changed but ID isn't found, save with new name but no ID.
+        proceedToSavePurchase(trimmedSupplierName, undefined);
     } else {
         proceedToSavePurchase("", undefined);
     }
@@ -295,23 +387,39 @@ export default function CreatePurchasePage() {
       }
     }
   };
+  
+  if (isLoadingPurchaseForEdit || (editingPurchaseId && (isLoadingItems || isLoadingSuppliers))) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-secondary p-4 md:p-8">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+          <p className="text-lg text-muted-foreground">Loading purchase order for editing...</p>
+      </div>
+    );
+  }
+
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-4 md:p-8">
       <div className="w-full max-w-2xl mb-4 flex justify-between items-center">
         <Button variant="outline" size="icon" asChild>
-          <Link href="/" aria-label="Back to Main Page">
+          <Link href={editingPurchaseId ? "/purchases/history" : "/"} aria-label={editingPurchaseId ? "Back to Purchase History" : "Back to Main Page"}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <h1 className="text-2xl font-semibold">Create Purchase Order</h1>
+        <h1 className="text-2xl font-semibold">
+            {editingPurchaseId ? `Edit Purchase Order: ${editingPurchaseOrderNumber || purchaseOrderNumber}` : "Create Purchase Order"}
+        </h1>
         <div style={{ width: '36px' }}></div> {/* Spacer */}
       </div>
 
       <Card className="w-full max-w-2xl">
         <CardHeader>
-          <CardTitle>New Purchase Entry</CardTitle>
-          <CardDescription>Add items received from suppliers to update stock levels.</CardDescription>
+          <CardTitle>{editingPurchaseId ? "Update Purchase Entry" : "New Purchase Entry"}</CardTitle>
+          <CardDescription>
+            {editingPurchaseId 
+                ? "Modify the details of this purchase order." 
+                : "Add items received from suppliers to update stock levels."}
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -424,6 +532,14 @@ export default function CreatePurchasePage() {
                         type="number"
                         value={item.purchaseCost === undefined ? '' : item.purchaseCost}
                         onChange={(e) => handlePurchaseCostChange(item.id, e.target.value)}
+                        onBlur={(e) => {
+                           const newCost = parseFloat(e.target.value);
+                           if (!isNaN(newCost) && newCost >= 0) {
+                              handlePurchaseCostChange(item.id, newCost.toFixed(2));
+                           } else {
+                              handlePurchaseCostChange(item.id, "0.00");
+                           }
+                        }}
                         className="h-8 w-20 text-xs"
                         placeholder="Cost"
                         min="0"
@@ -472,15 +588,22 @@ export default function CreatePurchasePage() {
                 {currencySymbol}{calculateTotal.toFixed(2)}
               </Badge>
             </div>
-            <Button
-                onClick={handleSavePurchaseAttempt}
-                disabled={isSavingPurchase || selectedItems.length === 0}
-                className="w-full sm:w-auto"
-            >
-              {isSavingPurchase && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              <ShoppingBag className="mr-2 h-4 w-4" />
-              {isSavingPurchase ? "Saving..." : "Save Purchase & Update Stock"}
-            </Button>
+             <div className="flex w-full sm:w-auto gap-2">
+                {editingPurchaseId && (
+                    <Button variant="outline" onClick={resetFormForNewPurchase} className="flex-1 sm:flex-none">
+                        New Purchase
+                    </Button>
+                )}
+                <Button
+                    onClick={handleSavePurchaseAttempt}
+                    disabled={isSavingPurchase || selectedItems.length === 0}
+                    className="flex-1 sm:flex-auto"
+                >
+                {isSavingPurchase && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {editingPurchaseId ? <Edit className="mr-2 h-4 w-4" /> : <ShoppingBag className="mr-2 h-4 w-4" />}
+                {isSavingPurchase ? (editingPurchaseId ? "Updating..." : "Saving...") : (editingPurchaseId ? "Update Purchase Order" : "Save Purchase & Update Stock")}
+                </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -511,5 +634,18 @@ export default function CreatePurchasePage() {
 
       <Toaster />
     </div>
+  );
+}
+
+export default function CreatePurchasePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col items-center justify-center min-h-screen bg-secondary p-4 md:p-8">
+        <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">Loading page...</p>
+      </div>
+    }>
+      <CreatePurchasePageContent />
+    </Suspense>
   );
 }

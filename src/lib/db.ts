@@ -1,4 +1,3 @@
-
 'use server';
 
 import {db} from './firebase';
@@ -144,6 +143,7 @@ export async function addBillToDb(bill: BillInput) {
         ...bill,
         customerName: bill.customerName || '',
         customerPhoneNumber: bill.customerPhoneNumber || '',
+        customerId: bill.customerId || '',
         tableNumber: bill.tableNumber || '',
         notes: bill.notes || '',
         createdAt: serverTimestamp()
@@ -162,6 +162,7 @@ export async function updateBillInDb(id: string, bill: BillInput) {
             ...bill,
             customerName: bill.customerName || '',
             customerPhoneNumber: bill.customerPhoneNumber || '',
+            customerId: bill.customerId || '',
             tableNumber: bill.tableNumber || '',
             notes: bill.notes || '',
             lastUpdatedAt: serverTimestamp()
@@ -260,9 +261,10 @@ export interface Purchase {
     totalAmount: number;
     notes?: string;
     createdAt: Timestamp | Date;
+    lastUpdatedAt?: Timestamp | Date;
 }
 
-export interface PurchaseInput extends Omit<Purchase, 'id' | 'createdAt'> {}
+export interface PurchaseInput extends Omit<Purchase, 'id' | 'createdAt' | 'lastUpdatedAt'> {}
 
 const purchasesCollection = collection(db, 'purchases');
 
@@ -289,6 +291,30 @@ export async function addPurchaseToDb(purchase: PurchaseInput): Promise<{ succes
         return { success: false, message: e.message };
     }
 }
+
+export async function updatePurchaseInDb(id: string, purchaseData: PurchaseInput): Promise<{ success: boolean; message?: string }> {
+    try {
+        const purchaseDocRef = doc(db, 'purchases', id);
+        const dataToUpdate: any = {
+            ...purchaseData,
+            purchaseOrderNumber: purchaseData.purchaseOrderNumber,
+            supplierName: purchaseData.supplierName || '',
+            supplierId: purchaseData.supplierId || '',
+            purchaseDate: purchaseData.purchaseDate, // Assuming this is already a Timestamp or valid Date
+            items: purchaseData.items,
+            totalAmount: purchaseData.totalAmount,
+            notes: purchaseData.notes || '',
+            lastUpdatedAt: serverTimestamp(),
+        };
+        
+        await updateDoc(purchaseDocRef, dataToUpdate);
+        return { success: true, message: "Purchase order updated successfully." };
+    } catch (e: any) {
+        console.error(`Error updating purchase document ${id}: `, e);
+        return { success: false, message: e.message };
+    }
+}
+
 
 export async function updateStockAfterPurchase(
     purchaseItems: PurchaseItem[]
@@ -333,13 +359,7 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
       const purchaseSnapshot = await getDocs(purchasesQuery);
       
       if (supplierId && purchaseSnapshot.empty) {
-        console.warn(`[DB getPurchasesFromDb] No purchases found for supplierId "${supplierId}". Fetching ALL purchases for diagnostic purposes...`);
-        const allPurchasesSnapshot = await getDocs(query(purchasesCollection, orderBy('purchaseDate', 'desc')));
-        console.log(`[DB getPurchasesFromDb] Diagnostic - All Purchases (${allPurchasesSnapshot.docs.length} total):`);
-        allPurchasesSnapshot.docs.forEach(docSnap => {
-          const data = docSnap.data();
-          console.log(`  - Purchase ID: ${docSnap.id}, PO: ${data.purchaseOrderNumber}, Stored SupplierID: ${data.supplierId} (Type: ${typeof data.supplierId}), SupplierName: ${data.supplierName}`);
-        });
+        console.warn(`[DB getPurchasesFromDb] No purchases found for supplierId "${supplierId}".`);
       }
 
       return purchaseSnapshot.docs.map(docSnap => {
@@ -362,6 +382,7 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
           totalAmount: data.totalAmount,
           notes: data.notes || '',
           createdAt: data.createdAt,
+          lastUpdatedAt: data.lastUpdatedAt,
         } as Purchase;
       });
     } catch (e: any) {
@@ -369,6 +390,45 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
       return [];
     }
 }
+
+export async function getPurchaseByIdFromDb(id: string): Promise<Purchase | null> {
+    try {
+        const purchaseDocRef = doc(db, 'purchases', id);
+        const docSnap = await firestoreGetDoc(purchaseDocRef);
+
+        if (!docSnap.exists()) {
+            console.warn(`[DB getPurchaseByIdFromDb] No purchase found for ID "${id}".`);
+            return null;
+        }
+
+        const data = docSnap.data();
+        const items = (data.items || []).map((item: any) => ({
+            itemId: item.itemId || '',
+            name: item.name || 'Unknown Item',
+            quantity: Number(item.quantity) || 0,
+            purchaseCost: Number(item.purchaseCost) || 0,
+            itemCode: item.itemCode || '',
+        }));
+
+        return {
+            id: docSnap.id,
+            purchaseOrderNumber: data.purchaseOrderNumber,
+            supplierName: data.supplierName || '',
+            supplierId: data.supplierId || '',
+            purchaseDate: data.purchaseDate,
+            items: items,
+            totalAmount: data.totalAmount,
+            notes: data.notes || '',
+            createdAt: data.createdAt,
+            lastUpdatedAt: data.lastUpdatedAt,
+        } as Purchase;
+
+    } catch (e: any) {
+        console.error(`[DB getPurchaseByIdFromDb] Error getting purchase document for ID ${id}: `, e);
+        return null;
+    }
+}
+
 
 // --- Suppliers ---
 export interface Supplier {
@@ -494,12 +554,11 @@ const customersCollection = collection(db, 'customers');
 export async function addCustomerToDb(customer: CustomerInput): Promise<{ success: boolean; id?: string; message?: string; customer?: Customer }> {
     try {
         const q = query(customersCollection, where("name_lowercase", "==", customer.name.trim().toLowerCase()));
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-            // Optional: decide if duplicate names are allowed or if phone number should also be unique.
-            // For now, we'll allow duplicate names but you might want to adjust this.
-            // return { success: false, message: `Customer with name '${customer.name}' already exists.` };
-        }
+        // For now, allow duplicate names, but one might want to add more checks (e.g., name + phone).
+        // const querySnapshot = await getDocs(q);
+        // if (!querySnapshot.empty) {
+        //     return { success: false, message: `Customer with name '${customer.name}' already exists.` };
+        // }
 
         const dataToSave: any = {
             name: customer.name.trim(),
@@ -576,4 +635,3 @@ export async function getCustomersFromDb(): Promise<Customer[]> {
 
 
 export { firestoreGetDoc as getDoc };
-

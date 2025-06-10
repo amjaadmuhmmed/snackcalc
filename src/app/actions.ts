@@ -1,4 +1,3 @@
-
 'use server';
 
 import {
@@ -16,9 +15,11 @@ import {
     updateStockQuantitiesForBill,
     PurchaseInput,
     addPurchaseToDb,
+    updatePurchaseInDb, // Added
     updateStockAfterPurchase,
     PurchaseItem,
     getPurchasesFromDb,
+    getPurchaseByIdFromDb, // Added
     SupplierInput,
     addSupplierToDb,
     getSuppliersFromDb,
@@ -275,34 +276,54 @@ export async function getBills() {
 
 
 // --- Purchase Actions ---
-export async function savePurchase(purchaseData: PurchaseInput) {
+export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpdate?: string) {
     try {
-        const purchaseResult = await addPurchaseToDb(purchaseData);
-        if (!purchaseResult.success || !purchaseResult.id) {
-            return { success: false, message: purchaseResult.message || 'Failed to save purchase order.' };
-        }
-
-        const stockUpdateResult = await updateStockAfterPurchase(purchaseData.items);
-        if (!stockUpdateResult.success) {
-            console.warn(`Purchase ${purchaseResult.id} saved, but stock update failed: ${stockUpdateResult.message}`);
+        if (purchaseIdToUpdate) {
+            // This is an update. For now, we directly update the purchase order.
+            // Stock adjustment logic for updates will be handled later.
+            const updateResult = await updatePurchaseInDb(purchaseIdToUpdate, purchaseData);
+            if (!updateResult.success) {
+                return { success: false, message: updateResult.message || 'Failed to update purchase order.' };
+            }
+            // TODO: Implement stock adjustment for updates. For now, revalidating paths.
+            revalidatePath('/purchases/create');
+            revalidatePath('/purchases/history');
+            revalidatePath('/');
             return {
-                success: true, 
-                message: `Purchase saved successfully, but failed to update stock levels. Please verify stock manually. Error: ${stockUpdateResult.message}`,
+                success: true,
+                message: 'Purchase order updated successfully! (Stock not yet adjusted for updates)',
+                purchaseId: purchaseIdToUpdate
+            };
+
+        } else {
+            // This is a new purchase.
+            const purchaseResult = await addPurchaseToDb(purchaseData);
+            if (!purchaseResult.success || !purchaseResult.id) {
+                return { success: false, message: purchaseResult.message || 'Failed to save purchase order.' };
+            }
+
+            const stockUpdateResult = await updateStockAfterPurchase(purchaseData.items);
+            if (!stockUpdateResult.success) {
+                console.warn(`Purchase ${purchaseResult.id} saved, but stock update failed: ${stockUpdateResult.message}`);
+                return {
+                    success: true, 
+                    message: `Purchase saved successfully, but failed to update stock levels. Please verify stock manually. Error: ${stockUpdateResult.message}`,
+                    purchaseId: purchaseResult.id
+                };
+            }
+
+            revalidatePath('/'); 
+            revalidatePath('/purchases/create');
+            revalidatePath('/purchases/history');
+            revalidatePath('/suppliers');
+            revalidatePath('/customers');
+
+            return {
+                success: true,
+                message: 'Purchase saved and stock updated successfully!',
                 purchaseId: purchaseResult.id
             };
         }
-
-        revalidatePath('/'); 
-        revalidatePath('/purchases/create');
-        revalidatePath('/purchases/history');
-        revalidatePath('/suppliers');
-        revalidatePath('/customers');
-
-        return {
-            success: true,
-            message: 'Purchase saved and stock updated successfully!',
-            purchaseId: purchaseResult.id
-        };
 
     } catch (error: any) {
         console.error('Error in savePurchase action:', error);
@@ -312,6 +333,10 @@ export async function savePurchase(purchaseData: PurchaseInput) {
 
 export async function getPurchases(supplierId?: string): Promise<Purchase[]> {
     return getPurchasesFromDb(supplierId);
+}
+
+export async function getPurchaseById(id: string): Promise<Purchase | null> {
+    return getPurchaseByIdFromDb(id);
 }
 
 
@@ -445,5 +470,3 @@ export async function updateCustomer(id: string, data: FormData): Promise<{ succ
 export async function getCustomers(): Promise<Customer[]> {
     return getCustomersFromDb();
 }
-    
-

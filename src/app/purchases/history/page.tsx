@@ -1,14 +1,14 @@
-
 // src/app/purchases/history/page.tsx
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation"; // Added useRouter
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Calendar as CalendarIcon, Search as SearchIcon, XCircle } from "lucide-react"; // Added SearchIcon and XCircle
+import { ArrowLeft, Calendar as CalendarIcon, Search as SearchIcon, XCircle, Edit } from "lucide-react"; // Added Edit
 import { getPurchases } from "@/app/actions";
 import type { Purchase } from "@/lib/db";
 import { format, isValid, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
@@ -60,6 +60,7 @@ export default function PurchaseHistoryPage() {
   const [filteredPurchases, setFilteredPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter(); // Initialized useRouter
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: startOfDay(new Date()),
@@ -126,6 +127,10 @@ export default function PurchaseHistoryPage() {
   const totalForFilteredPurchases = useMemo(() => {
     return filteredPurchases.reduce((sum, purchase) => sum + purchase.totalAmount, 0);
   }, [filteredPurchases]);
+
+  const handleEditPurchase = (purchase: Purchase) => {
+    router.push(`/purchases/create?editPurchaseId=${purchase.id}&editOrderNumber=${purchase.purchaseOrderNumber}`);
+  };
 
 
   return (
@@ -228,6 +233,7 @@ export default function PurchaseHistoryPage() {
               <TableCaption>Details of past purchase orders.</TableCaption>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[100px]">Actions</TableHead>
                   <TableHead>PO #</TableHead>
                   <TableHead>Purchase Date</TableHead>
                   <TableHead>Supplier</TableHead>
@@ -240,6 +246,11 @@ export default function PurchaseHistoryPage() {
               <TableBody>
                 {filteredPurchases.map((purchase) => (
                   <TableRow key={purchase.id}>
+                    <TableCell>
+                      <Button variant="outline" size="sm" onClick={() => handleEditPurchase(purchase)} aria-label="Edit Purchase Order">
+                        <Edit className="h-3 w-3 mr-1" /> Edit
+                      </Button>
+                    </TableCell>
                     <TableCell className="font-medium">{purchase.purchaseOrderNumber}</TableCell>
                     <TableCell>{formatDisplayDate(purchase.purchaseDate)}</TableCell>
                     <TableCell>{purchase.supplierName || '-'}</TableCell>
@@ -277,4 +288,3 @@ export default function PurchaseHistoryPage() {
     </div>
   );
 }
-
