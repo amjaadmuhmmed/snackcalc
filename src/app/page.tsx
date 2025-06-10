@@ -30,7 +30,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger, // Added DialogTrigger here
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Form,
@@ -1302,52 +1302,8 @@ function HomeContent() {
             <CardContent>
                 {adminActiveView === 'items' && (
                     <>
-                        <div className="mb-6">
-                            <h3 className="text-md font-semibold mb-2">{editingItemId ? "Update Item" : "Add an Item"}</h3>
-                            <form onSubmit={handleSubmit(handleItemFormSubmit)} className="grid gap-4">
-                                <div className="grid gap-2">
-                                <Label htmlFor="name">Name</Label>
-                                <Input id="name" type="text" placeholder="Item Name" {...register("name")} required/>
-                                {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
-                                </div>
-                                <div className="grid gap-2">
-                                <Label htmlFor="price">Selling Price ({currencySymbol})</Label>
-                                <Input id="price" type="text" placeholder="Item Selling Price" {...register("price")} required inputMode="decimal"/>
-                                {errors.price && <p className="text-sm text-destructive">{errors.price.message}</p>}
-                                </div>
-                                <div className="grid gap-2">
-                                <Label htmlFor="cost">Cost Price ({currencySymbol})</Label>
-                                <Input id="cost" type="text" placeholder="Item Cost Price (Optional)" {...register("cost")} inputMode="decimal"/>
-                                {errors.cost && <p className="text-sm text-destructive">{errors.cost.message}</p>}
-                                </div>
-                                <div className="grid gap-2">
-                                <Label htmlFor="itemCode">Item Code</Label>
-                                <Input id="itemCode" type="text" placeholder="Item Code (Optional)" {...register("itemCode")} />
-                                {errors.itemCode && <p className="text-sm text-destructive">{errors.itemCode.message}</p>}
-                                </div>
-                                <div className="grid gap-2">
-                                <Label htmlFor="stockQuantity">Stock Quantity</Label>
-                                <Input id="stockQuantity" type="number" placeholder="Initial Stock (e.g., 0)" {...register("stockQuantity")} />
-                                {errors.stockQuantity && <p className="text-sm text-destructive">{errors.stockQuantity.message}</p>}
-                                </div>
-                                <div className="grid gap-2">
-                                <Label htmlFor="category">Category</Label>
-                                <Input id="category" type="text" placeholder="Item Category" {...register("category")} required/>
-                                {errors.category && <p className="text-sm text-destructive">{errors.category.message}</p>}
-                                </div>
-                                <Button type="submit" disabled={isSavingBill}>
-                                    {editingItemId ? "Update Item" : "Add Item"}
-                                </Button>
-                                {editingItemId && (
-                                <Button variant="ghost" type="button" onClick={() => { setEditingItemId(null); reset({ name: "", price: "", category: "", cost: "", itemCode: "", stockQuantity: "0" }); }}>
-                                    Cancel Edit
-                                </Button>
-                                )}
-                            </form>
-                        </div>
-                        <Separator className="my-6" />
                         <div>
-                            <h3 className="text-md font-semibold mb-2">Manage Existing Items</h3>
+                            <h3 className="text-md font-semibold mb-2">Manage Items</h3>
                             <div className="relative mt-2">
                                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                 <Input
@@ -1424,6 +1380,50 @@ function HomeContent() {
                                 })}
                             </ul>
                             )}
+                        </div>
+                        <Separator className="my-6" />
+                        <div className="mt-6">
+                            <h3 className="text-md font-semibold mb-2">{editingItemId ? "Update Item" : "Add an Item"}</h3>
+                            <form onSubmit={handleSubmit(handleItemFormSubmit)} className="grid gap-4">
+                                <div className="grid gap-2">
+                                <Label htmlFor="name">Name</Label>
+                                <Input id="name" type="text" placeholder="Item Name" {...register("name")} required/>
+                                {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+                                </div>
+                                <div className="grid gap-2">
+                                <Label htmlFor="price">Selling Price ({currencySymbol})</Label>
+                                <Input id="price" type="text" placeholder="Item Selling Price" {...register("price")} required inputMode="decimal"/>
+                                {errors.price && <p className="text-sm text-destructive">{errors.price.message}</p>}
+                                </div>
+                                <div className="grid gap-2">
+                                <Label htmlFor="cost">Cost Price ({currencySymbol})</Label>
+                                <Input id="cost" type="text" placeholder="Item Cost Price (Optional)" {...register("cost")} inputMode="decimal"/>
+                                {errors.cost && <p className="text-sm text-destructive">{errors.cost.message}</p>}
+                                </div>
+                                <div className="grid gap-2">
+                                <Label htmlFor="itemCode">Item Code</Label>
+                                <Input id="itemCode" type="text" placeholder="Item Code (Optional)" {...register("itemCode")} />
+                                {errors.itemCode && <p className="text-sm text-destructive">{errors.itemCode.message}</p>}
+                                </div>
+                                <div className="grid gap-2">
+                                <Label htmlFor="stockQuantity">Stock Quantity</Label>
+                                <Input id="stockQuantity" type="number" placeholder="Initial Stock (e.g., 0)" {...register("stockQuantity")} />
+                                {errors.stockQuantity && <p className="text-sm text-destructive">{errors.stockQuantity.message}</p>}
+                                </div>
+                                <div className="grid gap-2">
+                                <Label htmlFor="category">Category</Label>
+                                <Input id="category" type="text" placeholder="Item Category" {...register("category")} required/>
+                                {errors.category && <p className="text-sm text-destructive">{errors.category.message}</p>}
+                                </div>
+                                <Button type="submit" disabled={isSavingBill}>
+                                    {editingItemId ? "Update Item" : "Add Item"}
+                                </Button>
+                                {editingItemId && (
+                                <Button variant="ghost" type="button" onClick={() => { setEditingItemId(null); reset({ name: "", price: "", category: "", cost: "", itemCode: "", stockQuantity: "0" }); }}>
+                                    Cancel Edit
+                                </Button>
+                                )}
+                            </form>
                         </div>
                     </>
                 )}
