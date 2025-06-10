@@ -2,8 +2,8 @@
 // src/app/purchases/create/page.tsx
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useRouter, useSearchParams, Suspense } from "next/navigation"; // Added useSearchParams & Suspense
+import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense } from "react"; // Added Suspense here
+import { useRouter, useSearchParams } from "next/navigation"; // Removed Suspense from here
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -143,7 +143,6 @@ function CreatePurchasePageContent() {
       } else {
           // If master data isn't loaded yet, this will be re-triggered by the allItems/allSuppliers useEffect.
           // This ensures we have items to map against.
-          console.log("Waiting for allItems/allSuppliers to load before fetching purchase for edit.");
       }
 
     } else {
