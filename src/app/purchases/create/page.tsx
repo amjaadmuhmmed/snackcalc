@@ -2,8 +2,8 @@
 // src/app/purchases/create/page.tsx
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense } from "react"; // Added Suspense here
-import { useRouter, useSearchParams } from "next/navigation"; // Removed Suspense from here
+import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,9 +15,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, Calendar as CalendarIconLucide, AlertCircle, Info, Loader2, Edit } from "lucide-react"; // Added Edit
-import { getItems, savePurchase, getSuppliers, addSupplier, getPurchaseById } from "@/app/actions"; // Added getPurchaseById
-import type { Snack, PurchaseInput, PurchaseItem as DbPurchaseItem, Supplier, Purchase } from "@/lib/db"; // Added Purchase
+import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, Calendar as CalendarIconLucide, AlertCircle, Info, Loader2, Edit } from "lucide-react";
+import { getItems, savePurchase, getSuppliers, addSupplier, getPurchaseById } from "@/app/actions";
+import type { Snack, PurchaseInput, PurchaseItem as DbPurchaseItem, Supplier, Purchase } from "@/lib/db";
 import { Timestamp } from "firebase/firestore";
 import {
   Dialog,
@@ -26,7 +26,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogClose,
 } from "@/components/ui/dialog";
 
 
@@ -54,7 +53,9 @@ function CreatePurchasePageContent() {
   const [supplierNameInput, setSupplierNameInput] = useState<string>("");
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
 
-  const [purchaseDate, setPurchaseDate] = useState<Date | undefined>(undefined);
+  const [purchaseDate, setPurchaseDate] = useState<Date | undefined>(undefined); // This holds user's date choice from DatePicker
+  const [initialLoadedPurchaseDate, setInitialLoadedPurchaseDate] = useState<Timestamp | null>(null); // Stores original TS for edits
+
   const [notes, setNotes] = useState<string>("");
   const [isSavingPurchase, setIsSavingPurchase] = useState(false);
   const [isLoadingItems, setIsLoadingItems] = useState(true);
@@ -85,23 +86,26 @@ function CreatePurchasePageContent() {
           const purchaseToEdit = await getPurchaseById(editId);
           if (purchaseToEdit) {
             setPurchaseOrderNumber(purchaseToEdit.purchaseOrderNumber);
+            
             if (purchaseToEdit.purchaseDate instanceof Timestamp) {
               setPurchaseDate(purchaseToEdit.purchaseDate.toDate());
-            } else if (purchaseToEdit.purchaseDate instanceof Date) {
+              setInitialLoadedPurchaseDate(purchaseToEdit.purchaseDate); // Store original Timestamp
+            } else if (purchaseToEdit.purchaseDate instanceof Date) { // Should ideally be Timestamp
               setPurchaseDate(purchaseToEdit.purchaseDate);
+              setInitialLoadedPurchaseDate(Timestamp.fromDate(purchaseToEdit.purchaseDate));
             }
+
 
             if (purchaseToEdit.supplierId && purchaseToEdit.supplierName) {
                const foundSupplier = allSuppliers.find(s => s.id === purchaseToEdit.supplierId) || 
-                                    allSuppliers.find(s => s.name === purchaseToEdit.supplierName); // Fallback by name
+                                    allSuppliers.find(s => s.name === purchaseToEdit.supplierName);
                 if (foundSupplier) {
                     setSelectedSupplier(foundSupplier);
                     setSupplierNameInput(foundSupplier.name);
                 } else {
-                     // If supplier not found in current list, still populate name for display
                     setSupplierNameInput(purchaseToEdit.supplierName || "");
-                    setSelectedSupplier({ // Create a temporary supplier object for the form state
-                        id: purchaseToEdit.supplierId || '', // Use ID if available
+                    setSelectedSupplier({
+                        id: purchaseToEdit.supplierId || '',
                         name: purchaseToEdit.supplierName || 'Unknown Supplier (from edit)'
                     });
                 }
@@ -112,11 +116,11 @@ function CreatePurchasePageContent() {
             setNotes(purchaseToEdit.notes || "");
             
             const itemsToEdit: SelectedItemForPurchase[] = purchaseToEdit.items.map(pItem => {
-              const baseItem = allItems.find(i => i.id === pItem.itemId || i.name === pItem.name); // Match by ID or name
+              const baseItem = allItems.find(i => i.id === pItem.itemId || i.name === pItem.name);
               return {
-                id: baseItem?.id || pItem.itemId, // Prefer baseItem.id if found
+                id: baseItem?.id || pItem.itemId,
                 name: pItem.name,
-                price: baseItem?.price || 0, // Default to 0 if base item not found
+                price: baseItem?.price || 0,
                 category: baseItem?.category || "Unknown",
                 cost: baseItem?.cost,
                 itemCode: pItem.itemCode || baseItem?.itemCode || '',
@@ -129,7 +133,7 @@ function CreatePurchasePageContent() {
             
           } else {
             toast({ variant: "destructive", title: "Error", description: "Could not load purchase order for editing." });
-            router.push("/purchases/history"); // Redirect if not found
+            router.push("/purchases/history");
           }
         } catch (error: any) {
           toast({ variant: "destructive", title: "Error loading purchase for edit.", description: error.message });
@@ -138,24 +142,19 @@ function CreatePurchasePageContent() {
         }
       };
       
-      if(allItems.length > 0 || allSuppliers.length > 0) { // Ensure master data is loaded
+      if(allItems.length > 0 || allSuppliers.length > 0) {
           fetchPurchaseForEdit();
-      } else {
-          // If master data isn't loaded yet, this will be re-triggered by the allItems/allSuppliers useEffect.
-          // This ensures we have items to map against.
       }
 
     } else {
       setPurchaseOrderNumber(generatePurchaseOrderNumber());
-      // Initialize purchaseDate with current date for new purchases, but defer to useEffect for client-side consistency
-      // setPurchaseDate(new Date()); // This can cause hydration issues
+      setInitialLoadedPurchaseDate(null); // Clear for new PO
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, router, toast, allItems, allSuppliers]); // Added allItems, allSuppliers
+  }, [searchParams, router, toast, allItems, allSuppliers]);
 
-  // Set default purchaseDate on client-side to avoid hydration mismatch
   useEffect(() => {
-    if (!editingPurchaseId && !purchaseDate) { // Only set for new purchases if not already set
+    if (!editingPurchaseId && !purchaseDate) {
       setPurchaseDate(new Date());
     }
   }, [editingPurchaseId, purchaseDate]);
@@ -269,13 +268,13 @@ function CreatePurchasePageContent() {
     setEditingPurchaseId(null);
     setEditingPurchaseOrderNumber(null);
     setPurchaseOrderNumber(generatePurchaseOrderNumber());
-    setPurchaseDate(new Date()); // Reset to current date for new
+    setPurchaseDate(new Date()); 
+    setInitialLoadedPurchaseDate(null); // Clear initial loaded date
     setSupplierNameInput("");
     setSelectedSupplier(null);
     setNotes("");
     setSelectedItems([]);
     setSearchTerm("");
-    // Ensure router query params are cleared if navigating "internally" to new
     if (searchParams.get("editPurchaseId")) {
         router.push("/purchases/create", { scroll: false });
     }
@@ -284,11 +283,57 @@ function CreatePurchasePageContent() {
   const proceedToSavePurchase = async (finalSupplierName: string, finalSupplierId?: string) => {
     setIsSavingPurchase(true);
 
+    let finalPurchaseDateForSave: Timestamp;
+
+    if (editingPurchaseId && initialLoadedPurchaseDate) {
+      // Editing existing PO
+      if (purchaseDate && ( // purchaseDate is the state from DatePicker
+          purchaseDate.getFullYear() !== initialLoadedPurchaseDate.toDate().getFullYear() ||
+          purchaseDate.getMonth() !== initialLoadedPurchaseDate.toDate().getMonth() ||
+          purchaseDate.getDate() !== initialLoadedPurchaseDate.toDate().getDate()
+      )) {
+          // Date part was changed by the user in DatePicker
+          const now = new Date(); // Current time
+          const combinedDateTime = new Date(
+              purchaseDate.getFullYear(), // User selected year
+              purchaseDate.getMonth(),    // User selected month
+              purchaseDate.getDate(),     // User selected day
+              now.getHours(),             // Current hour
+              now.getMinutes(),           // Current minute
+              now.getSeconds(),           // Current second
+              now.getMilliseconds()       // Current millisecond
+          );
+          finalPurchaseDateForSave = Timestamp.fromDate(combinedDateTime);
+      } else {
+          // Date part was NOT changed by the user, or purchaseDate state is not set (shouldn't occur if date is required)
+          // Preserve the original timestamp (including its original time part)
+          finalPurchaseDateForSave = initialLoadedPurchaseDate;
+      }
+    } else { 
+      // New Purchase
+      if (!purchaseDate) { // purchaseDate is the state from DatePicker
+          toast({ variant: "destructive", title: "Purchase Date is required." });
+          setIsSavingPurchase(false);
+          return; // Abort save
+      }
+      const now = new Date(); // Current time
+      const combinedDateTime = new Date(
+          purchaseDate.getFullYear(), // User selected year
+          purchaseDate.getMonth(),    // User selected month
+          purchaseDate.getDate(),     // User selected day
+          now.getHours(),             // Current hour
+          now.getMinutes(),           // Current minute
+          now.getSeconds(),           // Current second
+          now.getMilliseconds()       // Current millisecond
+      );
+      finalPurchaseDateForSave = Timestamp.fromDate(combinedDateTime);
+    }
+
     const purchaseData: PurchaseInput = {
       purchaseOrderNumber: purchaseOrderNumber,
       supplierName: finalSupplierName,
       supplierId: finalSupplierId,
-      purchaseDate: Timestamp.fromDate(purchaseDate!),
+      purchaseDate: finalPurchaseDateForSave, // Use the constructed timestamp
       items: selectedItems.map(s => ({
         itemId: s.id,
         name: s.name,
@@ -305,9 +350,9 @@ function CreatePurchasePageContent() {
       if (result.success) {
         toast({ title: result.message });
         if (editingPurchaseId) {
-          router.push("/purchases/history"); // Navigate back to history after update
+          router.push("/purchases/history"); 
         } else {
-           resetFormForNewPurchase(); // Reset form for new entry
+           resetFormForNewPurchase(); 
         }
         
         const updatedSuppliers = await getSuppliers(); 
@@ -328,7 +373,7 @@ function CreatePurchasePageContent() {
       toast({ variant: "default", title: "Cannot save an empty purchase order." });
       return;
     }
-    if (!purchaseDate) {
+    if (!purchaseDate) { // Check the state from DatePicker
       toast({ variant: "destructive", title: "Purchase Date is required."});
       return;
     }
@@ -341,12 +386,12 @@ function CreatePurchasePageContent() {
 
     if (selectedSupplier && selectedSupplier.id) {
         proceedToSavePurchase(selectedSupplier.name, selectedSupplier.id);
-    } else if (trimmedSupplierName && !editingPurchaseId) { // Only show new supplier dialog for new purchases
+    } else if (trimmedSupplierName && !editingPurchaseId) { 
         setNewSupplierNameToCreate(trimmedSupplierName);
         setShowNewSupplierDialog(true);
-    } else if (trimmedSupplierName && editingPurchaseId) { // For edits, if supplier name is changed but ID isn't found, save with new name but no ID.
+    } else if (trimmedSupplierName && editingPurchaseId) { 
         proceedToSavePurchase(trimmedSupplierName, undefined);
-    } else { // No supplier name entered, and not editing (or editing but cleared supplier)
+    } else { 
         proceedToSavePurchase("", undefined);
     }
   };
@@ -652,7 +697,12 @@ function CreatePurchasePageContent() {
 
 export default function CreatePurchasePage() {
   return (
-    <Suspense fallback={<p>Loading...</p>}>
+    <Suspense fallback={
+        <div className="flex flex-col items-center justify-center min-h-screen bg-secondary p-4 md:p-8">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+          <p className="text-lg text-muted-foreground">Loading Purchase Page...</p>
+      </div>
+    }>
       <CreatePurchasePageContent />
     </Suspense>
   );
