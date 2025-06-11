@@ -341,14 +341,12 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
         purchasesQuery = query(
             purchasesCollection,
             where("supplierId", "==", supplierId),
-            orderBy('purchaseDate', 'desc'),
-            orderBy('createdAt', 'desc') // Secondary sort
+            orderBy('createdAt', 'desc') // Sort by creation date
         );
       } else {
         purchasesQuery = query(
             purchasesCollection,
-            orderBy('purchaseDate', 'desc'),
-            orderBy('createdAt', 'desc') // Secondary sort
+            orderBy('createdAt', 'desc') // Sort by creation date
         );
       }
       const purchaseSnapshot = await getDocs(purchasesQuery);

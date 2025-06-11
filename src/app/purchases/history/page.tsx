@@ -61,6 +61,14 @@ const formatDisplayDate = (timestamp: any): string => {
     return 'Invalid Date';
 };
 
+const formatDisplayDateTime = (timestamp: any): string => {
+    const date = convertFirestoreTimestampToDate(timestamp);
+    if (date && isValid(date)) {
+      return format(date, 'Pp'); // For date and time
+    }
+    return 'Invalid Date/Time';
+};
+
 
 export default function PurchaseHistoryPage() {
   const [allPurchases, setAllPurchases] = useState<Purchase[]>([]);
@@ -112,11 +120,11 @@ export default function PurchaseHistoryPage() {
       const fromDate = startOfDay(dateRange.from);
       const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
       tempFiltered = tempFiltered.filter((purchase) => {
-        const purchaseDateToFilter = convertFirestoreTimestampToDate(purchase.purchaseDate); // Filter by user-entered purchaseDate
-        if (!purchaseDateToFilter || !isValid(purchaseDateToFilter)) {
+        const purchaseCreationDate = convertFirestoreTimestampToDate(purchase.createdAt); // Filter by creation date
+        if (!purchaseCreationDate || !isValid(purchaseCreationDate)) {
           return false;
         }
-        return isWithinInterval(purchaseDateToFilter, {
+        return isWithinInterval(purchaseCreationDate, {
             start: fromDate <= toDate ? fromDate : toDate,
             end: fromDate <= toDate ? toDate : fromDate
         });
@@ -150,18 +158,18 @@ export default function PurchaseHistoryPage() {
   const getCardDescription = () => {
     let description = "";
     if (dateRange?.from && !dateRange.to) {
-      description = `Showing purchases with 'Purchase Date' on ${format(dateRange.from, "LLL dd, yyyy")}`;
+      description = `Showing purchases recorded on ${format(dateRange.from, "LLL dd, yyyy")}`;
     } else if (dateRange?.from && dateRange?.to && format(dateRange.from, "yyyy-MM-dd") === format(dateRange.to, "yyyy-MM-dd")) {
-      description = `Showing purchases with 'Purchase Date' on ${format(dateRange.from, "LLL dd, yyyy")}`;
+      description = `Showing purchases recorded on ${format(dateRange.from, "LLL dd, yyyy")}`;
     } else if (dateRange?.from && dateRange?.to) {
-      description = `Showing purchases with 'Purchase Date' from ${format(dateRange.from, "LLL dd, yyyy")} to ${format(dateRange.to, "LLL dd, yyyy")}`;
+      description = `Showing purchases recorded from ${format(dateRange.from, "LLL dd, yyyy")} to ${format(dateRange.to, "LLL dd, yyyy")}`;
     } else {
       description = "Showing all purchases";
     }
     if (searchTerm) {
       description += ` matching "${searchTerm}"`;
     }
-    description += ". Sorted by Purchase Date (desc).";
+    description += ". Sorted by Recorded At date & time (desc).";
     return description;
   };
 
@@ -265,12 +273,12 @@ export default function PurchaseHistoryPage() {
                 <TableRow>
                   <TableHead className="w-[100px]">Actions</TableHead>
                   <TableHead>PO #</TableHead>
-                  <TableHead>Purchase Date</TableHead>
+                  <TableHead>Recorded At</TableHead>
+                  <TableHead>Purchase Date (User-entered)</TableHead>
                   <TableHead>Supplier</TableHead>
                   <TableHead className="min-w-[300px]">Items Purchased</TableHead>
                   <TableHead className="text-right">Total Amount</TableHead>
                   <TableHead>Notes</TableHead>
-                  <TableHead>Recorded At</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -282,6 +290,7 @@ export default function PurchaseHistoryPage() {
                       </Button>
                     </TableCell>
                     <TableCell className="font-medium">{purchase.purchaseOrderNumber}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{formatDisplayDateTime(purchase.createdAt)}</TableCell>
                     <TableCell>{formatDisplayDate(purchase.purchaseDate)}</TableCell>
                     <TableCell>{purchase.supplierName || '-'}</TableCell>
                     <TableCell className="min-w-[300px]">
@@ -296,7 +305,6 @@ export default function PurchaseHistoryPage() {
                     </TableCell>
                     <TableCell className="text-right font-semibold">{currencySymbol}{purchase.totalAmount.toFixed(2)}</TableCell>
                     <TableCell className="text-xs whitespace-pre-wrap max-w-xs">{purchase.notes || '-'}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{formatDisplayDate(purchase.createdAt)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
