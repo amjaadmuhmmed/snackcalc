@@ -89,8 +89,8 @@ function CreatePurchasePageContent() {
             
             if (purchaseToEdit.purchaseDate instanceof Timestamp) {
               setPurchaseDate(purchaseToEdit.purchaseDate.toDate());
-              setInitialLoadedPurchaseDate(purchaseToEdit.purchaseDate); // Store original Timestamp
-            } else if (purchaseToEdit.purchaseDate instanceof Date) { // Should ideally be Timestamp
+              setInitialLoadedPurchaseDate(purchaseToEdit.purchaseDate); 
+            } else if (purchaseToEdit.purchaseDate instanceof Date) { 
               setPurchaseDate(purchaseToEdit.purchaseDate);
               setInitialLoadedPurchaseDate(Timestamp.fromDate(purchaseToEdit.purchaseDate));
             }
@@ -142,7 +142,7 @@ function CreatePurchasePageContent() {
         }
       };
       
-      if(allItems.length > 0 || allSuppliers.length > 0) {
+      if(allItems.length > 0 || allSuppliers.length > 0) { // Fetch only after items/suppliers are loaded to find baseItem info
           fetchPurchaseForEdit();
       }
 
@@ -151,7 +151,7 @@ function CreatePurchasePageContent() {
       setInitialLoadedPurchaseDate(null); // Clear for new PO
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, router, toast, allItems, allSuppliers]);
+  }, [searchParams, router, toast, allItems, allSuppliers]); // Rerun if allItems or allSuppliers changes
 
   useEffect(() => {
     if (!editingPurchaseId && !purchaseDate) {
@@ -269,7 +269,7 @@ function CreatePurchasePageContent() {
     setEditingPurchaseOrderNumber(null);
     setPurchaseOrderNumber(generatePurchaseOrderNumber());
     setPurchaseDate(new Date()); 
-    setInitialLoadedPurchaseDate(null); // Clear initial loaded date
+    setInitialLoadedPurchaseDate(null); 
     setSupplierNameInput("");
     setSelectedSupplier(null);
     setNotes("");
@@ -285,55 +285,34 @@ function CreatePurchasePageContent() {
 
     let finalPurchaseDateForSave: Timestamp;
 
-    if (editingPurchaseId && initialLoadedPurchaseDate) {
-      // Editing existing PO
-      if (purchaseDate && ( // purchaseDate is the state from DatePicker
-          purchaseDate.getFullYear() !== initialLoadedPurchaseDate.toDate().getFullYear() ||
-          purchaseDate.getMonth() !== initialLoadedPurchaseDate.toDate().getMonth() ||
-          purchaseDate.getDate() !== initialLoadedPurchaseDate.toDate().getDate()
-      )) {
-          // Date part was changed by the user in DatePicker
-          const now = new Date(); // Current time
-          const combinedDateTime = new Date(
-              purchaseDate.getFullYear(), // User selected year
-              purchaseDate.getMonth(),    // User selected month
-              purchaseDate.getDate(),     // User selected day
-              now.getHours(),             // Current hour
-              now.getMinutes(),           // Current minute
-              now.getSeconds(),           // Current second
-              now.getMilliseconds()       // Current millisecond
-          );
-          finalPurchaseDateForSave = Timestamp.fromDate(combinedDateTime);
-      } else {
-          // Date part was NOT changed by the user, or purchaseDate state is not set (shouldn't occur if date is required)
-          // Preserve the original timestamp (including its original time part)
-          finalPurchaseDateForSave = initialLoadedPurchaseDate;
-      }
-    } else { 
-      // New Purchase
-      if (!purchaseDate) { // purchaseDate is the state from DatePicker
-          toast({ variant: "destructive", title: "Purchase Date is required." });
-          setIsSavingPurchase(false);
-          return; // Abort save
-      }
-      const now = new Date(); // Current time
-      const combinedDateTime = new Date(
-          purchaseDate.getFullYear(), // User selected year
-          purchaseDate.getMonth(),    // User selected month
-          purchaseDate.getDate(),     // User selected day
-          now.getHours(),             // Current hour
-          now.getMinutes(),           // Current minute
-          now.getSeconds(),           // Current second
-          now.getMilliseconds()       // Current millisecond
-      );
-      finalPurchaseDateForSave = Timestamp.fromDate(combinedDateTime);
+    // User-selected date from DatePicker state
+    const userSelectedDate = purchaseDate; 
+
+    if (!userSelectedDate) { 
+        toast({ variant: "destructive", title: "Purchase Date is required." });
+        setIsSavingPurchase(false);
+        return; 
     }
+
+    // Current system time for the time component
+    const now = new Date(); 
+    const combinedDateTime = new Date(
+        userSelectedDate.getFullYear(), 
+        userSelectedDate.getMonth(),    
+        userSelectedDate.getDate(),     
+        now.getHours(),             
+        now.getMinutes(),          
+        now.getSeconds(),          
+        now.getMilliseconds()      
+    );
+    finalPurchaseDateForSave = Timestamp.fromDate(combinedDateTime);
+    
 
     const purchaseData: PurchaseInput = {
       purchaseOrderNumber: purchaseOrderNumber,
       supplierName: finalSupplierName,
       supplierId: finalSupplierId,
-      purchaseDate: finalPurchaseDateForSave, // Use the constructed timestamp
+      purchaseDate: finalPurchaseDateForSave, 
       items: selectedItems.map(s => ({
         itemId: s.id,
         name: s.name,
@@ -373,7 +352,7 @@ function CreatePurchasePageContent() {
       toast({ variant: "default", title: "Cannot save an empty purchase order." });
       return;
     }
-    if (!purchaseDate) { // Check the state from DatePicker
+    if (!purchaseDate) { 
       toast({ variant: "destructive", title: "Purchase Date is required."});
       return;
     }
@@ -390,8 +369,10 @@ function CreatePurchasePageContent() {
         setNewSupplierNameToCreate(trimmedSupplierName);
         setShowNewSupplierDialog(true);
     } else if (trimmedSupplierName && editingPurchaseId) { 
+        // If editing and supplier name typed but not selected, save with the typed name (no ID)
         proceedToSavePurchase(trimmedSupplierName, undefined);
     } else { 
+        // No supplier selected or typed
         proceedToSavePurchase("", undefined);
     }
   };
