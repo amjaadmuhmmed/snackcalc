@@ -1449,12 +1449,12 @@ function HomeContent() {
                 {adminActiveView === 'salesAndCustomer' && (
                      <div className="flex flex-col space-y-3">
                         <h3 className="text-md font-semibold mb-1">Sales & Customer Management</h3>
+                         <Link href="/bills" passHref>
+                            <Button variant="outline" className="w-full justify-start"><History className="mr-2 h-4 w-4" /> Sales Order History</Button>
+                        </Link>
                         <Button variant="outline" className="w-full justify-start" onClick={handleOpenAddCustomerDialog}>
                            <PlusCircle className="mr-2 h-4 w-4" /> Add New Customer
                         </Button>
-                        <Link href="/customers" passHref>
-                            <Button variant="outline" className="w-full justify-start"><Users className="mr-2 h-4 w-4" /> View Customers</Button>
-                        </Link>
                         <Button variant="outline" className="w-full justify-start" onClick={() => {
                             setAdminActiveView(null);
                             setItemsVisible(true);
@@ -1462,8 +1462,8 @@ function HomeContent() {
                         }}>
                            <Newspaper className="mr-2 h-4 w-4" /> New Sales Order
                         </Button>
-                        <Link href="/bills" passHref>
-                            <Button variant="outline" className="w-full justify-start"><History className="mr-2 h-4 w-4" /> Sales Order History</Button>
+                        <Link href="/customers" passHref>
+                            <Button variant="outline" className="w-full justify-start"><Users className="mr-2 h-4 w-4" /> View Customers</Button>
                         </Link>
                     </div>
                 )}
