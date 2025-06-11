@@ -26,22 +26,22 @@ const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
 const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
   if (!timestamp) return null;
   try {
-    if (timestamp instanceof Date) { // Check if it's already a JS Date
+    if (timestamp instanceof Date) { 
       return isValid(timestamp) ? timestamp : null;
     }
-    if (timestamp.toDate && typeof timestamp.toDate === 'function') { // General toDate (covers Firestore Timestamp)
+    if (timestamp.toDate && typeof timestamp.toDate === 'function') { 
       const d = timestamp.toDate();
       return isValid(d) ? d : null;
     }
-    if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') { // For serialized timestamps (e.g. from JSON)
+    if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') { 
       const d = new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
       return isValid(d) ? d : null;
     }
-    if (typeof timestamp === 'number') { // For Unix ms timestamps
+    if (typeof timestamp === 'number') { 
       const d = new Date(timestamp);
       return isValid(d) ? d : null;
     }
-    if (typeof timestamp === 'string') { // For ISO strings or other parseable date strings
+    if (typeof timestamp === 'string') { 
       const d = new Date(timestamp);
       return isValid(d) ? d : null;
     }
@@ -53,18 +53,10 @@ const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
   }
 };
 
-const formatDisplayDate = (timestamp: any): string => {
-    const date = convertFirestoreTimestampToDate(timestamp);
-    if (date && isValid(date)) {
-      return format(date, 'MMM dd, yyyy');
-    }
-    return 'Invalid Date';
-};
-
 const formatDisplayDateTime = (timestamp: any): string => {
     const date = convertFirestoreTimestampToDate(timestamp);
     if (date && isValid(date)) {
-      return format(date, 'Pp'); // For date and time
+      return format(date, 'Pp'); // For date and time e.g., 04/30/2024, 2:30 PM
     }
     return 'Invalid Date/Time';
 };
@@ -75,7 +67,7 @@ export default function PurchaseHistoryPage() {
   const [filteredPurchases, setFilteredPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter(); // Initialized useRouter
+  const router = useRouter(); 
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [searchTerm, setSearchTerm] = useState<string>("");
@@ -101,7 +93,7 @@ export default function PurchaseHistoryPage() {
 
   // Effect to set default dateRange on client-side
   useEffect(() => {
-    if (!dateRange && !loading) { // Only set if dateRange is not already set and data is loaded
+    if (!dateRange && !loading) { 
       setDateRange({
         from: startOfDay(new Date()),
         to: endOfDay(new Date()),
@@ -115,16 +107,16 @@ export default function PurchaseHistoryPage() {
 
     let tempFiltered = [...allPurchases];
 
-    // Date Range Filter
+    // Date Range Filter (uses purchaseDate - user-entered)
     if (dateRange?.from) {
       const fromDate = startOfDay(dateRange.from);
       const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
       tempFiltered = tempFiltered.filter((purchase) => {
-        const purchaseCreationDate = convertFirestoreTimestampToDate(purchase.createdAt); // Filter by creation date
-        if (!purchaseCreationDate || !isValid(purchaseCreationDate)) {
+        const purchaseUserDate = convertFirestoreTimestampToDate(purchase.purchaseDate); 
+        if (!purchaseUserDate || !isValid(purchaseUserDate)) {
           return false;
         }
-        return isWithinInterval(purchaseCreationDate, {
+        return isWithinInterval(purchaseUserDate, {
             start: fromDate <= toDate ? fromDate : toDate,
             end: fromDate <= toDate ? toDate : fromDate
         });
@@ -158,18 +150,18 @@ export default function PurchaseHistoryPage() {
   const getCardDescription = () => {
     let description = "";
     if (dateRange?.from && !dateRange.to) {
-      description = `Showing purchases recorded on ${format(dateRange.from, "LLL dd, yyyy")}`;
+      description = `Showing purchases with a user-entered Purchase Date of ${format(dateRange.from, "LLL dd, yyyy")}`;
     } else if (dateRange?.from && dateRange?.to && format(dateRange.from, "yyyy-MM-dd") === format(dateRange.to, "yyyy-MM-dd")) {
-      description = `Showing purchases recorded on ${format(dateRange.from, "LLL dd, yyyy")}`;
+      description = `Showing purchases with a user-entered Purchase Date of ${format(dateRange.from, "LLL dd, yyyy")}`;
     } else if (dateRange?.from && dateRange?.to) {
-      description = `Showing purchases recorded from ${format(dateRange.from, "LLL dd, yyyy")} to ${format(dateRange.to, "LLL dd, yyyy")}`;
+      description = `Showing purchases with user-entered Purchase Dates from ${format(dateRange.from, "LLL dd, yyyy")} to ${format(dateRange.to, "LLL dd, yyyy")}`;
     } else {
       description = "Showing all purchases";
     }
     if (searchTerm) {
       description += ` matching "${searchTerm}"`;
     }
-    description += ". Sorted by Recorded At date & time (desc).";
+    description += ". Sorted by Purchase Date (desc), then by Recorded At time (desc).";
     return description;
   };
 
@@ -273,12 +265,12 @@ export default function PurchaseHistoryPage() {
                 <TableRow>
                   <TableHead className="w-[100px]">Actions</TableHead>
                   <TableHead>PO #</TableHead>
-                  <TableHead>Recorded At</TableHead>
                   <TableHead>Purchase Date (User-entered)</TableHead>
                   <TableHead>Supplier</TableHead>
                   <TableHead className="min-w-[300px]">Items Purchased</TableHead>
                   <TableHead className="text-right">Total Amount</TableHead>
                   <TableHead>Notes</TableHead>
+                  <TableHead>Recorded At</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -290,8 +282,7 @@ export default function PurchaseHistoryPage() {
                       </Button>
                     </TableCell>
                     <TableCell className="font-medium">{purchase.purchaseOrderNumber}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{formatDisplayDateTime(purchase.createdAt)}</TableCell>
-                    <TableCell>{formatDisplayDate(purchase.purchaseDate)}</TableCell>
+                    <TableCell>{formatDisplayDateTime(purchase.purchaseDate)}</TableCell>
                     <TableCell>{purchase.supplierName || '-'}</TableCell>
                     <TableCell className="min-w-[300px]">
                       <ul className="list-disc list-inside text-sm">
@@ -305,6 +296,7 @@ export default function PurchaseHistoryPage() {
                     </TableCell>
                     <TableCell className="text-right font-semibold">{currencySymbol}{purchase.totalAmount.toFixed(2)}</TableCell>
                     <TableCell className="text-xs whitespace-pre-wrap max-w-xs">{purchase.notes || '-'}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{formatDisplayDateTime(purchase.createdAt)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -326,4 +318,3 @@ export default function PurchaseHistoryPage() {
     </div>
   );
 }
-
