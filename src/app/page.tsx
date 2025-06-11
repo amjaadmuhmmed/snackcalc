@@ -1431,15 +1431,15 @@ function HomeContent() {
                 {adminActiveView === 'purchasing' && (
                      <div className="flex flex-col space-y-3">
                         <h3 className="text-md font-semibold mb-1">Purchasing & Supplier Management</h3>
-                        <Button variant="outline" className="w-full justify-start" onClick={handleOpenAddSupplierDialog}>
-                           <PlusCircle className="mr-2 h-4 w-4" /> Add New Supplier
-                        </Button>
                         <Link href="/purchases/create" passHref>
                             <Button variant="outline" className="w-full justify-start"><ShoppingCart className="mr-2 h-4 w-4" /> New Purchase Order</Button>
                         </Link>
                         <Link href="/purchases/history" passHref>
                             <Button variant="outline" className="w-full justify-start"><History className="mr-2 h-4 w-4" /> Purchase Order History</Button>
                         </Link>
+                        <Button variant="outline" className="w-full justify-start" onClick={handleOpenAddSupplierDialog}>
+                           <PlusCircle className="mr-2 h-4 w-4" /> Add New Supplier
+                        </Button>
                         <Link href="/suppliers" passHref>
                             <Button variant="outline" className="w-full justify-start"><ListChecks className="mr-2 h-4 w-4" /> View Suppliers List</Button>
                         </Link>
