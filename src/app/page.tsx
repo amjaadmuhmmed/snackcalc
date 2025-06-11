@@ -1455,11 +1455,7 @@ function HomeContent() {
                         <Button variant="outline" className="w-full justify-start" onClick={handleOpenAddCustomerDialog}>
                            <PlusCircle className="mr-2 h-4 w-4" /> Add New Customer
                         </Button>
-                        <Button variant="outline" className="w-full justify-start" onClick={() => {
-                            setAdminActiveView(null);
-                            setItemsVisible(true);
-                            sessionStorage.removeItem(SESSION_STORAGE_ADMIN_VIEW_KEY);
-                        }}>
+                        <Button variant="outline" className="w-full justify-start" onClick={handleAdminLogout}>
                            <Newspaper className="mr-2 h-4 w-4" /> New Sales Order
                         </Button>
                         <Link href="/customers" passHref>
