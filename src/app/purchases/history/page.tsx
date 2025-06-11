@@ -26,22 +26,22 @@ const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
 const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
   if (!timestamp) return null;
   try {
-    if (timestamp instanceof Date) { // Check if it's already a JS Date
+    if (timestamp instanceof Date) { 
       return isValid(timestamp) ? timestamp : null;
     }
-    if (timestamp.toDate && typeof timestamp.toDate === 'function') { // General toDate (covers Firestore Timestamp)
+    if (timestamp.toDate && typeof timestamp.toDate === 'function') { 
       const d = timestamp.toDate();
       return isValid(d) ? d : null;
     }
-    if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') { // For serialized timestamps (e.g. from JSON)
+    if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') { 
       const d = new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
       return isValid(d) ? d : null;
     }
-    if (typeof timestamp === 'number') { // For Unix ms timestamps
+    if (typeof timestamp === 'number') { 
       const d = new Date(timestamp);
       return isValid(d) ? d : null;
     }
-    if (typeof timestamp === 'string') { // For ISO strings or other parseable date strings
+    if (typeof timestamp === 'string') { 
       const d = new Date(timestamp);
       return isValid(d) ? d : null;
     }
@@ -56,7 +56,7 @@ const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
 const formatDisplayDateTime = (timestamp: any): string => {
     const date = convertFirestoreTimestampToDate(timestamp);
     if (date && isValid(date)) {
-      return format(date, 'Pp'); // For date and time e.g., 04/30/2024, 2:30 PM
+      return format(date, 'Pp'); 
     }
     return 'Invalid Date/Time';
 };
@@ -91,7 +91,6 @@ export default function PurchaseHistoryPage() {
     fetchPurchases();
   }, []);
 
-  // Effect to set default dateRange on client-side
   useEffect(() => {
     if (!dateRange && !loading) { 
       setDateRange({
@@ -107,7 +106,6 @@ export default function PurchaseHistoryPage() {
 
     let tempFiltered = [...allPurchases];
 
-    // Date Range Filter (uses purchaseDate - user-entered date with system-generated time)
     if (dateRange?.from) {
       const fromDate = startOfDay(dateRange.from);
       const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
@@ -123,7 +121,6 @@ export default function PurchaseHistoryPage() {
       });
     }
 
-    // Search Term Filter
     if (searchTerm.trim() !== "") {
       const lowerSearchTerm = searchTerm.toLowerCase();
       tempFiltered = tempFiltered.filter(purchase =>
@@ -161,7 +158,7 @@ export default function PurchaseHistoryPage() {
     if (searchTerm) {
       description += ` matching "${searchTerm}"`;
     }
-    description += ". Sorted by user-entered Purchase Date & Time (desc).";
+    description += ". Sorted by user-entered Purchase Date & Time (desc), then by Recorded At time (desc).";
     return description;
   };
 
