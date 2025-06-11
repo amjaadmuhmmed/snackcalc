@@ -261,11 +261,11 @@ export interface Purchase {
     purchaseOrderNumber: string;
     supplierName?: string;
     supplierId?: string;
-    purchaseDate: Timestamp | Date;
+    purchaseDate: Timestamp | Date; // User-selected date + system time of generation
     items: PurchaseItem[];
     totalAmount: number;
     notes?: string;
-    createdAt: Timestamp | Date;
+    createdAt: Timestamp | Date; // System-generated creation timestamp
     lastUpdatedAt?: Timestamp | Date;
 }
 
@@ -278,7 +278,7 @@ export async function addPurchaseToDb(purchase: PurchaseInput): Promise<{ succes
         const dataToSave: { [key: string]: any } = {
             purchaseOrderNumber: purchase.purchaseOrderNumber,
             supplierName: purchase.supplierName || '',
-            purchaseDate: purchase.purchaseDate, // User-entered date
+            purchaseDate: purchase.purchaseDate, // User-selected date + system time of generation
             items: purchase.items,
             totalAmount: purchase.totalAmount,
             notes: purchase.notes || '',
@@ -305,7 +305,7 @@ export async function updatePurchaseInDb(id: string, purchaseData: PurchaseInput
             purchaseOrderNumber: purchaseData.purchaseOrderNumber,
             supplierName: purchaseData.supplierName || '',
             supplierId: purchaseData.supplierId || '',
-            purchaseDate: purchaseData.purchaseDate, // User-entered date
+            purchaseDate: purchaseData.purchaseDate, // User-selected date + system time (if date part changed)
             items: purchaseData.items,
             totalAmount: purchaseData.totalAmount,
             notes: purchaseData.notes || '',
@@ -341,14 +341,12 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
         purchasesQuery = query(
             purchasesCollection,
             where("supplierId", "==", supplierId),
-            orderBy('purchaseDate', 'desc'), 
-            orderBy('createdAt', 'desc') 
+            orderBy('purchaseDate', 'desc')
         );
       } else {
         purchasesQuery = query(
             purchasesCollection,
-            orderBy('purchaseDate', 'desc'),
-            orderBy('createdAt', 'desc')
+            orderBy('purchaseDate', 'desc')
         );
       }
       const purchaseSnapshot = await getDocs(purchasesQuery);
@@ -372,11 +370,11 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
           purchaseOrderNumber: data.purchaseOrderNumber,
           supplierName: data.supplierName || '',
           supplierId: data.supplierId || '',
-          purchaseDate: data.purchaseDate, // User-entered date
+          purchaseDate: data.purchaseDate,
           items: items,
           totalAmount: data.totalAmount,
           notes: data.notes || '',
-          createdAt: data.createdAt, // System-generated creation timestamp
+          createdAt: data.createdAt,
           lastUpdatedAt: data.lastUpdatedAt,
         } as Purchase;
       });

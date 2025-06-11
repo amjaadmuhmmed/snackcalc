@@ -26,22 +26,22 @@ const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
 const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
   if (!timestamp) return null;
   try {
-    if (timestamp instanceof Date) { 
+    if (timestamp instanceof Date) { // Check if it's already a JS Date
       return isValid(timestamp) ? timestamp : null;
     }
-    if (timestamp.toDate && typeof timestamp.toDate === 'function') { 
+    if (timestamp.toDate && typeof timestamp.toDate === 'function') { // General toDate (covers Firestore Timestamp)
       const d = timestamp.toDate();
       return isValid(d) ? d : null;
     }
-    if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') { 
+    if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') { // For serialized timestamps (e.g. from JSON)
       const d = new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
       return isValid(d) ? d : null;
     }
-    if (typeof timestamp === 'number') { 
+    if (typeof timestamp === 'number') { // For Unix ms timestamps
       const d = new Date(timestamp);
       return isValid(d) ? d : null;
     }
-    if (typeof timestamp === 'string') { 
+    if (typeof timestamp === 'string') { // For ISO strings or other parseable date strings
       const d = new Date(timestamp);
       return isValid(d) ? d : null;
     }
@@ -107,16 +107,16 @@ export default function PurchaseHistoryPage() {
 
     let tempFiltered = [...allPurchases];
 
-    // Date Range Filter (uses purchaseDate - user-entered)
+    // Date Range Filter (uses purchaseDate - user-entered date with system-generated time)
     if (dateRange?.from) {
       const fromDate = startOfDay(dateRange.from);
       const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
       tempFiltered = tempFiltered.filter((purchase) => {
-        const purchaseUserDate = convertFirestoreTimestampToDate(purchase.purchaseDate); 
-        if (!purchaseUserDate || !isValid(purchaseUserDate)) {
+        const purchaseUserDateTime = convertFirestoreTimestampToDate(purchase.purchaseDate); 
+        if (!purchaseUserDateTime || !isValid(purchaseUserDateTime)) {
           return false;
         }
-        return isWithinInterval(purchaseUserDate, {
+        return isWithinInterval(purchaseUserDateTime, {
             start: fromDate <= toDate ? fromDate : toDate,
             end: fromDate <= toDate ? toDate : fromDate
         });
@@ -161,7 +161,7 @@ export default function PurchaseHistoryPage() {
     if (searchTerm) {
       description += ` matching "${searchTerm}"`;
     }
-    description += ". Sorted by Purchase Date (desc), then by Recorded At time (desc).";
+    description += ". Sorted by user-entered Purchase Date & Time (desc).";
     return description;
   };
 
@@ -265,7 +265,7 @@ export default function PurchaseHistoryPage() {
                 <TableRow>
                   <TableHead className="w-[100px]">Actions</TableHead>
                   <TableHead>PO #</TableHead>
-                  <TableHead>Purchase Date (User-entered)</TableHead>
+                  <TableHead>Purchase Date & Time (User-entered)</TableHead>
                   <TableHead>Supplier</TableHead>
                   <TableHead className="min-w-[300px]">Items Purchased</TableHead>
                   <TableHead className="text-right">Total Amount</TableHead>
@@ -318,3 +318,4 @@ export default function PurchaseHistoryPage() {
     </div>
   );
 }
+
