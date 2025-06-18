@@ -106,7 +106,9 @@ const generateOrderNumber = () => {
     return `ORD-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 };
 
-type AdminActiveView = 'items' | 'purchasing' | 'salesAndCustomer' | 'incomeExpense' | null; // Added 'incomeExpense'
+type AdminActiveView = 'items' | 'purchasing' | 'salesAndCustomer' | 'incomeExpense' | null; 
+type IncomeExpenseSubView = 'income' | 'expense' | null;
+
 const SESSION_STORAGE_ADMIN_LOGGED_IN_KEY = 'isAdminLoggedIn';
 const SESSION_STORAGE_ADMIN_VIEW_KEY = 'adminActiveView';
 
@@ -159,6 +161,8 @@ function HomeContent() {
   const prevShowShareDialogRef = useRef<boolean | undefined>();
 
   const [adminActiveView, setAdminActiveView] = useState<AdminActiveView>(null);
+  const [incomeExpenseSubView, setIncomeExpenseSubView] = useState<IncomeExpenseSubView>(null);
+
 
   const [showSupplierDialog, setShowSupplierDialog] = useState(false);
   const [supplierDialogMode, setSupplierDialogMode] = useState<'add' | 'edit' | null>(null);
@@ -265,6 +269,9 @@ function HomeContent() {
         setShowAdminLoginSection(false);
         setAdminActiveView(storedAdminView || 'items'); 
         setItemsVisible(false);
+        if (storedAdminView !== 'incomeExpense') {
+          setIncomeExpenseSubView(null);
+        }
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -582,7 +589,7 @@ function HomeContent() {
         } else {
           expenseForm.reset({ transactionDate: new Date(), category: "", description: "", amount: "", notes: "" });
         }
-        // Potentially re-fetch transactions if a list is displayed
+        setIncomeExpenseSubView(null); // Go back to button view
       } else {
         toast({ variant: "destructive", title: "Error", description: result.message });
       }
@@ -700,6 +707,9 @@ function HomeContent() {
       const viewToSet = storedAdminView || 'items';
       setAdminActiveView(viewToSet);
       sessionStorage.setItem(SESSION_STORAGE_ADMIN_VIEW_KEY, viewToSet);
+      if (viewToSet !== 'incomeExpense') {
+        setIncomeExpenseSubView(null);
+      }
     } else {
       toast({
         variant: "destructive",
@@ -715,6 +725,7 @@ function HomeContent() {
     setItemsVisible(true); 
     sessionStorage.removeItem(SESSION_STORAGE_ADMIN_LOGGED_IN_KEY);
     sessionStorage.removeItem(SESSION_STORAGE_ADMIN_VIEW_KEY);
+    setIncomeExpenseSubView(null);
   };
 
 
@@ -978,6 +989,9 @@ function HomeContent() {
         sessionStorage.setItem(SESSION_STORAGE_ADMIN_VIEW_KEY, view);
     } else {
         sessionStorage.removeItem(SESSION_STORAGE_ADMIN_VIEW_KEY);
+    }
+    if (view !== 'incomeExpense') {
+      setIncomeExpenseSubView(null);
     }
   };
 
@@ -1520,7 +1534,7 @@ function HomeContent() {
                 {adminActiveView === 'salesAndCustomer' && (
                      <div className="flex flex-col space-y-3">
                         <h3 className="text-md font-semibold mb-1">Sales & Customer Management</h3>
-                         <Link href="/bills" passHref>
+                        <Link href="/bills" passHref>
                             <Button variant="outline" className="w-full justify-start"><History className="mr-2 h-4 w-4" /> Sales Order History</Button>
                         </Link>
                         <Button variant="outline" className="w-full justify-start" onClick={handleOpenAddCustomerDialog}>
@@ -1537,155 +1551,183 @@ function HomeContent() {
 
                 {adminActiveView === 'incomeExpense' && (
                     <div className="space-y-6">
-                        <div>
-                            <h3 className="text-md font-semibold mb-2">Add New Income</h3>
-                            <Form {...incomeForm}>
-                                <form onSubmit={incomeForm.handleSubmit(data => handleTransactionFormSubmit(data, 'income'))} className="space-y-4">
-                                    <FormField
-                                        control={incomeForm.control}
-                                        name="transactionDate"
-                                        render={({ field }) => (
-                                        <FormItem className="flex flex-col">
-                                            <FormLabel>Income Date</FormLabel>
-                                            <DatePicker date={field.value} setDate={field.onChange} />
-                                            <FormMessage />
-                                        </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={incomeForm.control}
-                                        name="category"
-                                        render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Category</FormLabel>
-                                            <FormControl>
-                                            <Input placeholder="e.g., Asset Sale, Consultation Fee" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={incomeForm.control}
-                                        name="description"
-                                        render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Description</FormLabel>
-                                            <FormControl>
-                                            <Textarea placeholder="Detailed description of the income" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={incomeForm.control}
-                                        name="amount"
-                                        render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Amount ({currencySymbol})</FormLabel>
-                                            <FormControl>
-                                            <Input type="number" placeholder="0.00" {...field} inputMode="decimal" />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={incomeForm.control}
-                                        name="notes"
-                                        render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Notes (Optional)</FormLabel>
-                                            <FormControl>
-                                            <Textarea placeholder="Any additional notes" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                        )}
-                                    />
-                                    <Button type="submit" disabled={isSubmittingTransaction}>
-                                        {isSubmittingTransaction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        Add Income
+                        {incomeExpenseSubView === null && (
+                            <>
+                                <h3 className="text-md font-semibold mb-2">Manage Income & Expenses</h3>
+                                <div className="flex flex-col space-y-3">
+                                    <Button variant="outline" className="w-full justify-start" onClick={() => setIncomeExpenseSubView('income')}>
+                                        <PlusCircle className="mr-2 h-4 w-4" /> Add New Income
                                     </Button>
-                                </form>
-                            </Form>
-                        </div>
-                        <Separator />
-                        <div>
-                            <h3 className="text-md font-semibold mb-2">Add New Expense</h3>
-                             <Form {...expenseForm}>
-                                <form onSubmit={expenseForm.handleSubmit(data => handleTransactionFormSubmit(data, 'expense'))} className="space-y-4">
-                                   <FormField
-                                        control={expenseForm.control}
-                                        name="transactionDate"
-                                        render={({ field }) => (
-                                        <FormItem className="flex flex-col">
-                                            <FormLabel>Expense Date</FormLabel>
-                                            <DatePicker date={field.value} setDate={field.onChange} />
-                                            <FormMessage />
-                                        </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={expenseForm.control}
-                                        name="category"
-                                        render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Category</FormLabel>
-                                            <FormControl>
-                                            <Input placeholder="e.g., Rent, Utilities, Salary" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={expenseForm.control}
-                                        name="description"
-                                        render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Description</FormLabel>
-                                            <FormControl>
-                                            <Textarea placeholder="Detailed description of the expense" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={expenseForm.control}
-                                        name="amount"
-                                        render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Amount ({currencySymbol})</FormLabel>
-                                            <FormControl>
-                                            <Input type="number" placeholder="0.00" {...field} inputMode="decimal" />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={expenseForm.control}
-                                        name="notes"
-                                        render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Notes (Optional)</FormLabel>
-                                            <FormControl>
-                                            <Textarea placeholder="Any additional notes" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                        )}
-                                    />
-                                    <Button type="submit" disabled={isSubmittingTransaction}>
-                                        {isSubmittingTransaction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                        Add Expense
+                                    <Button variant="outline" className="w-full justify-start" onClick={() => setIncomeExpenseSubView('expense')}>
+                                        <Minus className="mr-2 h-4 w-4" /> Add New Expense
                                     </Button>
-                                </form>
-                            </Form>
-                        </div>
+                                </div>
+                            </>
+                        )}
+
+                        {incomeExpenseSubView === 'income' && (
+                            <div>
+                                <h3 className="text-md font-semibold mb-2">Add New Income</h3>
+                                <Form {...incomeForm}>
+                                    <form onSubmit={incomeForm.handleSubmit(data => handleTransactionFormSubmit(data, 'income'))} className="space-y-4">
+                                        <FormField
+                                            control={incomeForm.control}
+                                            name="transactionDate"
+                                            render={({ field }) => (
+                                            <FormItem className="flex flex-col">
+                                                <FormLabel>Income Date</FormLabel>
+                                                <DatePicker date={field.value} setDate={field.onChange} />
+                                                <FormMessage />
+                                            </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={incomeForm.control}
+                                            name="category"
+                                            render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Category</FormLabel>
+                                                <FormControl>
+                                                <Input placeholder="e.g., Asset Sale, Consultation Fee" {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={incomeForm.control}
+                                            name="description"
+                                            render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Description</FormLabel>
+                                                <FormControl>
+                                                <Textarea placeholder="Detailed description of the income" {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={incomeForm.control}
+                                            name="amount"
+                                            render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Amount ({currencySymbol})</FormLabel>
+                                                <FormControl>
+                                                <Input type="number" placeholder="0.00" {...field} inputMode="decimal" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={incomeForm.control}
+                                            name="notes"
+                                            render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Notes (Optional)</FormLabel>
+                                                <FormControl>
+                                                <Textarea placeholder="Any additional notes" {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                            )}
+                                        />
+                                        <div className="flex space-x-2">
+                                            <Button type="submit" disabled={isSubmittingTransaction}>
+                                                {isSubmittingTransaction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                                Add Income
+                                            </Button>
+                                            <Button type="button" variant="outline" onClick={() => setIncomeExpenseSubView(null)}>
+                                                Cancel
+                                            </Button>
+                                        </div>
+                                    </form>
+                                </Form>
+                            </div>
+                        )}
+
+                        {incomeExpenseSubView === 'expense' && (
+                            <div>
+                                <h3 className="text-md font-semibold mb-2">Add New Expense</h3>
+                                <Form {...expenseForm}>
+                                    <form onSubmit={expenseForm.handleSubmit(data => handleTransactionFormSubmit(data, 'expense'))} className="space-y-4">
+                                    <FormField
+                                            control={expenseForm.control}
+                                            name="transactionDate"
+                                            render={({ field }) => (
+                                            <FormItem className="flex flex-col">
+                                                <FormLabel>Expense Date</FormLabel>
+                                                <DatePicker date={field.value} setDate={field.onChange} />
+                                                <FormMessage />
+                                            </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={expenseForm.control}
+                                            name="category"
+                                            render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Category</FormLabel>
+                                                <FormControl>
+                                                <Input placeholder="e.g., Rent, Utilities, Salary" {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={expenseForm.control}
+                                            name="description"
+                                            render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Description</FormLabel>
+                                                <FormControl>
+                                                <Textarea placeholder="Detailed description of the expense" {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={expenseForm.control}
+                                            name="amount"
+                                            render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Amount ({currencySymbol})</FormLabel>
+                                                <FormControl>
+                                                <Input type="number" placeholder="0.00" {...field} inputMode="decimal" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={expenseForm.control}
+                                            name="notes"
+                                            render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Notes (Optional)</FormLabel>
+                                                <FormControl>
+                                                <Textarea placeholder="Any additional notes" {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                            )}
+                                        />
+                                        <div className="flex space-x-2">
+                                            <Button type="submit" disabled={isSubmittingTransaction}>
+                                                {isSubmittingTransaction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                                Add Expense
+                                            </Button>
+                                            <Button type="button" variant="outline" onClick={() => setIncomeExpenseSubView(null)}>
+                                                Cancel
+                                            </Button>
+                                        </div>
+                                    </form>
+                                </Form>
+                            </div>
+                        )}
                     </div>
                 )}
 
