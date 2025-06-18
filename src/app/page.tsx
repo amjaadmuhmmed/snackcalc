@@ -12,16 +12,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form"; // Added Controller
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building } from "lucide-react";
+import { DatePicker } from "@/components/ui/date-picker"; // Added DatePicker
+import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building, Landmark } from "lucide-react"; // Added Landmark
 import { QRCodeCanvas } from 'qrcode.react';
-import { addItem, getItems, updateItem, deleteItem, saveBill, addSupplier, addCustomer, getCustomers } from "./actions";
-import type { Snack, BillInput, BillItem as DbBillItem, SupplierInput, Customer, CustomerInput } from "@/lib/db"; 
+import { addItem, getItems, updateItem, deleteItem, saveBill, addSupplier, addCustomer, getCustomers, addTransaction } from "./actions"; // Added addTransaction
+import type { Snack, BillInput, BillItem as DbBillItem, SupplierInput, Customer, CustomerInput, TransactionInput } from "@/lib/db"; 
 import Link from "next/link";
 import {
   Dialog,
@@ -81,21 +82,31 @@ const supplierSchema = z.object({
 
 type SupplierFormData = z.infer<typeof supplierSchema>;
 
-const customerFormSchema = z.object({ // Renamed to avoid conflict
+const customerFormSchema = z.object({ 
   name: z.string().min(1, { message: "Customer name cannot be empty." }),
   phoneNumber: z.string().optional(),
   email: z.string().email({ message: "Invalid email address." }).optional().or(z.literal('')),
   address: z.string().optional(),
 });
 
-type CustomerFormDataType = z.infer<typeof customerFormSchema>; // Renamed
+type CustomerFormDataType = z.infer<typeof customerFormSchema>; 
+
+const transactionSchema = z.object({
+  transactionDate: z.date({ required_error: "Transaction date is required." }),
+  category: z.string().min(1, "Category is required."),
+  description: z.string().min(1, "Description is required."),
+  amount: z.string().refine(val => !isNaN(parseFloat(val)) && parseFloat(val) > 0, "Amount must be a positive number."),
+  notes: z.string().optional(),
+});
+
+type TransactionFormDataType = z.infer<typeof transactionSchema>;
 
 
 const generateOrderNumber = () => {
     return `ORD-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 };
 
-type AdminActiveView = 'items' | 'purchasing' | 'salesAndCustomer' | null;
+type AdminActiveView = 'items' | 'purchasing' | 'salesAndCustomer' | 'incomeExpense' | null; // Added 'incomeExpense'
 const SESSION_STORAGE_ADMIN_LOGGED_IN_KEY = 'isAdminLoggedIn';
 const SESSION_STORAGE_ADMIN_VIEW_KEY = 'adminActiveView';
 
@@ -155,6 +166,7 @@ function HomeContent() {
   
   const [showCustomerDialog, setShowCustomerDialog] = useState(false);
   const [isSubmittingCustomer, setIsSubmittingCustomer] = useState(false);
+  const [isSubmittingTransaction, setIsSubmittingTransaction] = useState(false);
 
 
   const {
@@ -187,14 +199,36 @@ function HomeContent() {
     },
   });
 
-  const customerForm = useForm<CustomerFormDataType>({ // Using renamed type
-    resolver: zodResolver(customerFormSchema), // Using renamed schema
+  const customerForm = useForm<CustomerFormDataType>({ 
+    resolver: zodResolver(customerFormSchema), 
     defaultValues: {
       name: "",
       phoneNumber: "",
       email: "",
       address: "",
     },
+  });
+
+  const incomeForm = useForm<TransactionFormDataType>({
+    resolver: zodResolver(transactionSchema),
+    defaultValues: {
+      transactionDate: new Date(),
+      category: "",
+      description: "",
+      amount: "",
+      notes: "",
+    }
+  });
+
+  const expenseForm = useForm<TransactionFormDataType>({
+    resolver: zodResolver(transactionSchema),
+    defaultValues: {
+      transactionDate: new Date(),
+      category: "",
+      description: "",
+      amount: "",
+      notes: "",
+    }
   });
 
   const loadData = useCallback(async () => {
@@ -513,7 +547,7 @@ function HomeContent() {
         toast({ title: "Success", description: result.message || "Customer added successfully!" });
         setShowCustomerDialog(false);
         customerForm.reset();
-        await loadData(); // Refresh customer list
+        await loadData(); 
       } else {
         toast({ variant: "destructive", title: "Error", description: result.message });
       }
@@ -527,6 +561,36 @@ function HomeContent() {
   const handleOpenAddCustomerDialog = () => {
     customerForm.reset();
     setShowCustomerDialog(true);
+  };
+
+  const handleTransactionFormSubmit = async (data: TransactionFormDataType, type: 'income' | 'expense') => {
+    setIsSubmittingTransaction(true);
+    const formData = new FormData();
+    formData.append('type', type);
+    formData.append('category', data.category);
+    formData.append('description', data.description);
+    formData.append('amount', data.amount);
+    formData.append('transactionDate', data.transactionDate.toISOString());
+    if (data.notes) formData.append('notes', data.notes);
+
+    try {
+      const result = await addTransaction(formData);
+      if (result.success) {
+        toast({ title: result.message });
+        if (type === 'income') {
+          incomeForm.reset({ transactionDate: new Date(), category: "", description: "", amount: "", notes: "" });
+        } else {
+          expenseForm.reset({ transactionDate: new Date(), category: "", description: "", amount: "", notes: "" });
+        }
+        // Potentially re-fetch transactions if a list is displayed
+      } else {
+        toast({ variant: "destructive", title: "Error", description: result.message });
+      }
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: "An unexpected error occurred." });
+    } finally {
+      setIsSubmittingTransaction(false);
+    }
   };
 
 
@@ -1297,6 +1361,13 @@ function HomeContent() {
                     >
                        <Users className="mr-2 h-4 w-4" /> Sales & Customer
                     </Button>
+                    <Button
+                        variant={adminActiveView === 'incomeExpense' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => handleAdminViewChange('incomeExpense')}
+                    >
+                       <Landmark className="mr-2 h-4 w-4" /> Income & Expenses
+                    </Button>
                 </div>
             </CardHeader>
             <CardContent>
@@ -1463,6 +1534,161 @@ function HomeContent() {
                         </Link>
                     </div>
                 )}
+
+                {adminActiveView === 'incomeExpense' && (
+                    <div className="space-y-6">
+                        <div>
+                            <h3 className="text-md font-semibold mb-2">Add New Income</h3>
+                            <Form {...incomeForm}>
+                                <form onSubmit={incomeForm.handleSubmit(data => handleTransactionFormSubmit(data, 'income'))} className="space-y-4">
+                                    <FormField
+                                        control={incomeForm.control}
+                                        name="transactionDate"
+                                        render={({ field }) => (
+                                        <FormItem className="flex flex-col">
+                                            <FormLabel>Income Date</FormLabel>
+                                            <DatePicker date={field.value} setDate={field.onChange} />
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={incomeForm.control}
+                                        name="category"
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Category</FormLabel>
+                                            <FormControl>
+                                            <Input placeholder="e.g., Asset Sale, Consultation Fee" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={incomeForm.control}
+                                        name="description"
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Description</FormLabel>
+                                            <FormControl>
+                                            <Textarea placeholder="Detailed description of the income" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={incomeForm.control}
+                                        name="amount"
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Amount ({currencySymbol})</FormLabel>
+                                            <FormControl>
+                                            <Input type="number" placeholder="0.00" {...field} inputMode="decimal" />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={incomeForm.control}
+                                        name="notes"
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Notes (Optional)</FormLabel>
+                                            <FormControl>
+                                            <Textarea placeholder="Any additional notes" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                    <Button type="submit" disabled={isSubmittingTransaction}>
+                                        {isSubmittingTransaction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Add Income
+                                    </Button>
+                                </form>
+                            </Form>
+                        </div>
+                        <Separator />
+                        <div>
+                            <h3 className="text-md font-semibold mb-2">Add New Expense</h3>
+                             <Form {...expenseForm}>
+                                <form onSubmit={expenseForm.handleSubmit(data => handleTransactionFormSubmit(data, 'expense'))} className="space-y-4">
+                                   <FormField
+                                        control={expenseForm.control}
+                                        name="transactionDate"
+                                        render={({ field }) => (
+                                        <FormItem className="flex flex-col">
+                                            <FormLabel>Expense Date</FormLabel>
+                                            <DatePicker date={field.value} setDate={field.onChange} />
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={expenseForm.control}
+                                        name="category"
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Category</FormLabel>
+                                            <FormControl>
+                                            <Input placeholder="e.g., Rent, Utilities, Salary" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={expenseForm.control}
+                                        name="description"
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Description</FormLabel>
+                                            <FormControl>
+                                            <Textarea placeholder="Detailed description of the expense" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={expenseForm.control}
+                                        name="amount"
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Amount ({currencySymbol})</FormLabel>
+                                            <FormControl>
+                                            <Input type="number" placeholder="0.00" {...field} inputMode="decimal" />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={expenseForm.control}
+                                        name="notes"
+                                        render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Notes (Optional)</FormLabel>
+                                            <FormControl>
+                                            <Textarea placeholder="Any additional notes" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                        )}
+                                    />
+                                    <Button type="submit" disabled={isSubmittingTransaction}>
+                                        {isSubmittingTransaction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                        Add Expense
+                                    </Button>
+                                </form>
+                            </Form>
+                        </div>
+                    </div>
+                )}
+
             </CardContent>
         </Card>
       ) }

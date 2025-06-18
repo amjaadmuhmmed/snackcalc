@@ -261,11 +261,11 @@ export interface Purchase {
     purchaseOrderNumber: string;
     supplierName?: string;
     supplierId?: string;
-    purchaseDate: Timestamp | Date; // User-selected date + system time of generation
+    purchaseDate: Timestamp | Date; 
     items: PurchaseItem[];
     totalAmount: number;
     notes?: string;
-    createdAt: Timestamp | Date; // System-generated creation timestamp
+    createdAt: Timestamp | Date; 
     lastUpdatedAt?: Timestamp | Date;
 }
 
@@ -278,11 +278,11 @@ export async function addPurchaseToDb(purchase: PurchaseInput): Promise<{ succes
         const dataToSave: { [key: string]: any } = {
             purchaseOrderNumber: purchase.purchaseOrderNumber,
             supplierName: purchase.supplierName || '',
-            purchaseDate: purchase.purchaseDate, // User-selected date + system time of generation
+            purchaseDate: purchase.purchaseDate, 
             items: purchase.items,
             totalAmount: purchase.totalAmount,
             notes: purchase.notes || '',
-            createdAt: serverTimestamp(), // System-generated creation timestamp
+            createdAt: serverTimestamp(), 
         };
 
         if (purchase.supplierId && typeof purchase.supplierId === 'string' && purchase.supplierId.trim() !== '') {
@@ -305,7 +305,7 @@ export async function updatePurchaseInDb(id: string, purchaseData: PurchaseInput
             purchaseOrderNumber: purchaseData.purchaseOrderNumber,
             supplierName: purchaseData.supplierName || '',
             supplierId: purchaseData.supplierId || '',
-            purchaseDate: purchaseData.purchaseDate, // User-selected date + system time (if date part changed)
+            purchaseDate: purchaseData.purchaseDate, 
             items: purchaseData.items,
             totalAmount: purchaseData.totalAmount,
             notes: purchaseData.notes || '',
@@ -342,13 +342,13 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
             purchasesCollection,
             where("supplierId", "==", supplierId),
             orderBy('purchaseDate', 'desc'),
-            orderBy('createdAt', 'desc') // Secondary sort
+            orderBy('createdAt', 'desc')
         );
       } else {
         purchasesQuery = query(
             purchasesCollection,
             orderBy('purchaseDate', 'desc'),
-            orderBy('createdAt', 'desc') // Secondary sort
+            orderBy('createdAt', 'desc')
         );
       }
       const purchaseSnapshot = await getDocs(purchasesQuery);
@@ -626,6 +626,46 @@ export async function getCustomersFromDb(): Promise<Customer[]> {
         console.error('Error getting customer documents: ', e);
         return [];
     }
+}
+
+// --- Transactions (Income/Expense) ---
+export interface Transaction {
+  id: string;
+  type: 'income' | 'expense';
+  category: string;
+  description: string;
+  amount: number;
+  transactionDate: Timestamp | Date; // User-selected date + system time
+  notes?: string;
+  createdAt: Timestamp | Date;
+  updatedAt?: Timestamp | Date;
+}
+
+export interface TransactionInput extends Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> {}
+
+const transactionsCollection = collection(db, 'transactions');
+
+export async function addTransactionToDb(transaction: TransactionInput): Promise<{ success: boolean; id?: string; message?: string }> {
+  try {
+    const dataToSave: any = {
+      ...transaction,
+      amount: Number(transaction.amount) || 0,
+      category: transaction.category.trim(),
+      description: transaction.description.trim(),
+      notes: transaction.notes?.trim() || '',
+      createdAt: serverTimestamp(),
+    };
+
+    if (dataToSave.amount <= 0) {
+        return { success: false, message: "Amount must be a positive number." };
+    }
+
+    const docRef = await addDoc(transactionsCollection, dataToSave);
+    return { success: true, id: docRef.id };
+  } catch (e: any) {
+    console.error('[DB addTransactionToDb] Error adding transaction document: ', e);
+    return { success: false, message: e.message };
+  }
 }
 
 

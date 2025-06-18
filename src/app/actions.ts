@@ -13,12 +13,11 @@ import {
     SnackInput,
     BillItem as DbBillItem,
     Bill,
-    // updateStockQuantitiesForBill, // To be replaced by generic updateStockQuantities
-    updateStockQuantities, // New generic stock update function
+    updateStockQuantities, 
     PurchaseInput,
     addPurchaseToDb,
     updatePurchaseInDb,
-    updateStockAfterPurchase, // This will use updateStockQuantities internally
+    updateStockAfterPurchase, 
     PurchaseItem,
     getPurchasesFromDb,
     getPurchaseByIdFromDb,
@@ -33,11 +32,14 @@ import {
     updateCustomerInDb,
     Customer,
     getDoc,
-    Purchase
+    Purchase,
+    TransactionInput, // Added
+    addTransactionToDb, // Added
 } from '@/lib/db';
 import {revalidatePath} from 'next/cache';
-import { db } from '@/lib/firebase'; // For getDoc
-import { doc } from 'firebase/firestore';
+import { db } from '@/lib/firebase'; 
+import { doc, Timestamp } from 'firebase/firestore'; // Added Timestamp
+import { isValid } from 'date-fns'; // Added
 
 
 // --- Item Actions ---
@@ -215,12 +217,12 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
 
         oldBillItems.forEach(item => {
             if (!item.itemId) return;
-            stockAdjustmentsMap.set(item.itemId, (stockAdjustmentsMap.get(item.itemId) || 0) + item.quantity); // Add back old quantities
+            stockAdjustmentsMap.set(item.itemId, (stockAdjustmentsMap.get(item.itemId) || 0) + item.quantity); 
         });
         
         itemsInCurrentBill.forEach(item => {
             if (!item.itemId) return;
-            stockAdjustmentsMap.set(item.itemId, (stockAdjustmentsMap.get(item.itemId) || 0) - item.quantity); // Subtract new quantities
+            stockAdjustmentsMap.set(item.itemId, (stockAdjustmentsMap.get(item.itemId) || 0) - item.quantity); 
         });
         
         const finalStockAdjustments = Array.from(stockAdjustmentsMap.entries())
@@ -240,7 +242,7 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
 
         if (billActionResult.success) {
             if (finalStockAdjustments.length > 0) {
-                const stockUpdateResult = await updateStockQuantities(finalStockAdjustments); // Use generic updateStockQuantities
+                const stockUpdateResult = await updateStockQuantities(finalStockAdjustments); 
                 if (!stockUpdateResult.success) {
                     stockUpdateResultMessage = stockUpdateResult.message || "Stock update failed.";
                     console.warn(`Bill ${billIdToUpdate || newBillId} action successful, but stock update failed: ${stockUpdateResultMessage}`);
@@ -251,7 +253,7 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
             revalidatePath('/'); 
             revalidatePath('/suppliers');
             revalidatePath('/customers');
-            revalidatePath('/purchases/history'); // Item stock affects purchase decisions
+            revalidatePath('/purchases/history'); 
             
             let finalMessage = billIdToUpdate ? 'Bill updated successfully!' : 'Bill saved successfully!';
             if (stockUpdateResultMessage) {
@@ -295,13 +297,13 @@ export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpda
 
             const stockAdjustmentsMap = new Map<string, number>();
 
-            // Decrease stock by old quantities (as if returning them)
+            
             oldItems.forEach(item => {
                 if (!item.itemId) return;
                 stockAdjustmentsMap.set(item.itemId, (stockAdjustmentsMap.get(item.itemId) || 0) - item.quantity);
             });
 
-            // Increase stock by new quantities
+            
             newItems.forEach(item => {
                 if (!item.itemId) return;
                 stockAdjustmentsMap.set(item.itemId, (stockAdjustmentsMap.get(item.itemId) || 0) + item.quantity);
@@ -331,7 +333,7 @@ export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpda
             
             revalidatePath('/purchases/create');
             revalidatePath('/purchases/history');
-            revalidatePath('/'); // Items list for stock quantities
+            revalidatePath('/'); 
             revalidatePath('/suppliers');
             revalidatePath('/customers');
 
@@ -342,13 +344,13 @@ export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpda
             };
 
         } else {
-            // This is a new purchase.
+            
             const purchaseResult = await addPurchaseToDb(purchaseData);
             if (!purchaseResult.success || !purchaseResult.id) {
                 return { success: false, message: purchaseResult.message || 'Failed to save purchase order.' };
             }
 
-            const stockUpdateResult = await updateStockAfterPurchase(purchaseData.items); // This now uses updateStockQuantities internally
+            const stockUpdateResult = await updateStockAfterPurchase(purchaseData.items); 
             if (!stockUpdateResult.success) {
                 console.warn(`Purchase ${purchaseResult.id} saved, but stock update failed: ${stockUpdateResult.message}`);
                 return {
@@ -408,7 +410,7 @@ export async function addSupplier(data: FormData): Promise<{ success: boolean; i
             revalidatePath('/purchases/create');
             revalidatePath('/suppliers');
             revalidatePath('/customers');
-            revalidatePath('/'); // Main page might use supplier data in future or for lists
+            revalidatePath('/'); 
             return { success: true, message: 'Supplier added successfully!', id: result.id, supplier: result.supplier};
         } else {
             return { success: false, message: result.message || 'Failed to add supplier.' };
@@ -517,4 +519,76 @@ export async function updateCustomer(id: string, data: FormData): Promise<{ succ
 
 export async function getCustomers(): Promise<Customer[]> {
     return getCustomersFromDb();
+}
+
+// --- Transaction Actions ---
+export async function addTransaction(data: FormData) {
+  try {
+    const type = data.get('type') as 'income' | 'expense';
+    const category = data.get('category') as string;
+    const description = data.get('description') as string;
+    const amountString = data.get('amount') as string;
+    const transactionDateString = data.get('transactionDate') as string; 
+    const notes = data.get('notes') as string | null;
+
+    if (!type || !['income', 'expense'].includes(type)) {
+      return { success: false, message: 'Invalid transaction type.' };
+    }
+    if (!category || category.trim() === "") {
+      return { success: false, message: 'Category is required.' };
+    }
+    if (!description || description.trim() === "") {
+      return { success: false, message: 'Description is required.' };
+    }
+    if (!amountString) {
+      return { success: false, message: 'Amount is required.' };
+    }
+    if (!transactionDateString) {
+      return { success: false, message: 'Transaction date is required.' };
+    }
+
+    const amount = parseFloat(amountString);
+    if (isNaN(amount) || amount <= 0) {
+      return { success: false, message: 'Amount must be a positive number.' };
+    }
+
+    const userSelectedDate = new Date(transactionDateString); // Parses ISO string
+    if (!isValid(userSelectedDate)) { // Use isValid from date-fns
+        return { success: false, message: 'Invalid transaction date format.' };
+    }
+    
+    const now = new Date();
+    const combinedDateTime = new Date(
+        userSelectedDate.getFullYear(),
+        userSelectedDate.getMonth(),
+        userSelectedDate.getDate(),
+        now.getHours(),
+        now.getMinutes(),
+        now.getSeconds(),
+        now.getMilliseconds()
+    );
+    const transactionDate = Timestamp.fromDate(combinedDateTime);
+
+
+    const newTransaction: TransactionInput = {
+      type,
+      category,
+      description,
+      amount,
+      transactionDate,
+      notes: notes || undefined,
+    };
+
+    const result = await addTransactionToDb(newTransaction);
+
+    if (result.success) {
+      // revalidatePath('/transactions'); // Example path
+      return { success: true, message: `${type.charAt(0).toUpperCase() + type.slice(1)} added successfully!`, id: result.id };
+    } else {
+      return { success: false, message: result.message || `Failed to add ${type}.` };
+    }
+  } catch (error: any) {
+    console.error(`Error adding ${data.get('type')}:`, error);
+    return { success: false, message: error.message || 'An unexpected error occurred.' };
+  }
 }
