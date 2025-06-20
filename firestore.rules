@@ -1,13 +1,52 @@
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write access to the snacks collection
-    match /snacks/{snackId} {
-      allow read, write: if true; // For development/testing. Secure this for production.
+
+    // WARNING: The following rules are permissive and are meant for early development.
+    // In a production environment, you MUST implement proper authentication and security rules.
+    // For example, restrict write access to authenticated admin users.
+    // e.g., allow write: if get(/databases/$(database)/documents/admins/$(request.auth.uid)).exists == true;
+
+    match /snack/{snackId} {
+      allow read, write: if true;
     }
-    // Allow read/write access to the bills collection
+
     match /bills/{billId} {
-      allow read, write: if true; // For development/testing. Secure this for production.
+      allow read, write: if true;
+    }
+
+    match /purchases/{purchaseId} {
+      allow read, write: if true;
+    }
+
+    match /suppliers/{supplierId} {
+      allow read, write: if true;
+    }
+
+    match /customers/{customerId} {
+      allow read, write: if true;
+    }
+
+    // Rules for the new Transactions collection with data validation
+    match /transactions/{transactionId} {
+      // Allow anyone to read for now (e.g., for future reports).
+      // In a real app, you would restrict this to authenticated admins.
+      allow read: if true;
+
+      // Allow creating a transaction only if the data being sent is valid.
+      allow create: if request.resource.data.type is string &&
+                       (request.resource.data.type == 'income' || request.resource.data.type == 'expense') &&
+                       request.resource.data.category is string && request.resource.data.category.size() > 0 &&
+                       request.resource.data.description is string && request.resource.data.description.size() > 0 &&
+                       request.resource.data.amount is number && request.resource.data.amount > 0 &&
+                       request.resource.data.transactionDate is timestamp &&
+                       request.resource.data.createdAt == request.time &&
+                       (!('notes' in request.resource.data) || request.resource.data.notes is string);
+
+      // Disallow updates and deletes for now, as there's no UI functionality for them.
+      allow update, delete: if false;
     }
   }
 }
