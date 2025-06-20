@@ -670,6 +670,36 @@ export async function addTransactionToDb(transaction: TransactionInput): Promise
   }
 }
 
+export async function updateTransactionInDb(id: string, transaction: Partial<TransactionInput>): Promise<{ success: boolean; message?: string }> {
+  try {
+    const transactionDoc = doc(db, 'transactions', id);
+    const dataToUpdate: { [key: string]: any } = {
+      updatedAt: serverTimestamp(),
+    };
+
+    // Only add fields to the update object if they are defined in the input
+    if (transaction.category !== undefined) dataToUpdate.category = transaction.category.trim();
+    if (transaction.description !== undefined) dataToUpdate.description = transaction.description.trim();
+    if (transaction.amount !== undefined) {
+      const amount = Number(transaction.amount);
+      if (isNaN(amount) || amount <= 0) {
+        return { success: false, message: "Amount must be a positive number." };
+      }
+      dataToUpdate.amount = amount;
+    }
+    if (transaction.transactionDate !== undefined) dataToUpdate.transactionDate = transaction.transactionDate;
+    if (transaction.notes !== undefined) dataToUpdate.notes = transaction.notes?.trim() || '';
+    if (transaction.tags !== undefined) dataToUpdate.tags = transaction.tags || [];
+    
+    await updateDoc(transactionDoc, dataToUpdate);
+    return { success: true };
+  } catch (e: any) {
+    console.error(`[DB updateTransactionInDb] Error updating transaction document ${id}: `, e);
+    return { success: false, message: e.message };
+  }
+}
+
+
 export async function getTransactionsFromDb(): Promise<Transaction[]> {
   try {
       const transactionsQuery = query(transactionsCollection, orderBy('transactionDate', 'desc'));

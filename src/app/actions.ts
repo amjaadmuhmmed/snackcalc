@@ -37,6 +37,7 @@ import {
     addTransactionToDb,
     getTransactionsFromDb, // Added
     Transaction, // Added
+    updateTransactionInDb,
 } from '@/lib/db';
 import {revalidatePath} from 'next/cache';
 import { db } from '@/lib/firebase'; 
@@ -594,6 +595,76 @@ export async function addTransaction(data: FormData) {
     }
   } catch (error: any) {
     console.error(`Error adding ${data.get('type')}:`, error);
+    return { success: false, message: error.message || 'An unexpected error occurred.' };
+  }
+}
+
+export async function updateTransaction(id: string, data: FormData) {
+  try {
+    const type = data.get('type') as 'income' | 'expense';
+    const category = data.get('category') as string;
+    const description = data.get('description') as string;
+    const amountString = data.get('amount') as string;
+    const transactionDateString = data.get('transactionDate') as string;
+    const notes = data.get('notes') as string | null;
+    const tagsString = data.get('tags') as string | null;
+
+    if (!category || category.trim() === "") {
+      return { success: false, message: 'Category is required.' };
+    }
+    if (!description || description.trim() === "") {
+      return { success: false, message: 'Description is required.' };
+    }
+    if (!amountString) {
+      return { success: false, message: 'Amount is required.' };
+    }
+    if (!transactionDateString) {
+      return { success: false, message: 'Transaction date is required.' };
+    }
+
+    const amount = parseFloat(amountString);
+    if (isNaN(amount) || amount <= 0) {
+      return { success: false, message: 'Amount must be a positive number.' };
+    }
+
+    const userSelectedDate = new Date(transactionDateString);
+    if (!isValid(userSelectedDate)) {
+        return { success: false, message: 'Invalid transaction date format.' };
+    }
+    
+    const now = new Date();
+    const combinedDateTime = new Date(
+        userSelectedDate.getFullYear(),
+        userSelectedDate.getMonth(),
+        userSelectedDate.getDate(),
+        now.getHours(),
+        now.getMinutes(),
+        now.getSeconds(),
+        now.getMilliseconds()
+    );
+    const transactionDate = Timestamp.fromDate(combinedDateTime);
+
+    const tags = tagsString ? tagsString.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
+
+    const transactionToUpdate: Partial<TransactionInput> = {
+      category,
+      description,
+      amount,
+      transactionDate,
+      notes: notes || undefined,
+      tags: tags,
+    };
+
+    const result = await updateTransactionInDb(id, transactionToUpdate);
+
+    if (result.success) {
+      revalidatePath('/transactions');
+      return { success: true, message: `${type.charAt(0).toUpperCase() + type.slice(1)} updated successfully!` };
+    } else {
+      return { success: false, message: result.message || `Failed to update ${type}.` };
+    }
+  } catch (error: any) {
+    console.error(`Error updating transaction:`, error);
     return { success: false, message: error.message || 'An unexpected error occurred.' };
   }
 }

@@ -3,20 +3,44 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { getTransactions } from "../actions"; // Import the server action
+import { getTransactions, updateTransaction } from "../actions"; // Import the server action
 import type { Transaction } from "@/lib/db";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowLeft, Calendar as CalendarIcon, XCircle, Search as SearchIcon } from "lucide-react";
+import { ArrowLeft, Calendar as CalendarIcon, XCircle, Search as SearchIcon, Edit, Loader2 } from "lucide-react";
 import { format, isValid, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import type { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import { Toaster } from "@/components/ui/toaster";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Textarea } from "@/components/ui/textarea";
 
 const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
 
@@ -51,6 +75,17 @@ const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
   }
 };
 
+const transactionSchema = z.object({
+  transactionDate: z.date({ required_error: "Transaction date is required." }),
+  category: z.string().min(1, "Category is required."),
+  description: z.string().min(1, "Description is required."),
+  amount: z.string().refine(val => !isNaN(parseFloat(val)) && parseFloat(val) > 0, "Amount must be a positive number."),
+  notes: z.string().optional(),
+  tags: z.string().optional(),
+});
+
+type TransactionFormData = z.infer<typeof transactionSchema>;
+
 export default function TransactionsPage() {
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([]);
@@ -58,9 +93,15 @@ export default function TransactionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
 
-  useEffect(() => {
-    const fetchTransactions = async () => {
+  const form = useForm<TransactionFormData>({
+    resolver: zodResolver(transactionSchema),
+  });
+
+  const fetchTransactions = async () => {
       try {
         setLoading(true);
         const fetchedTransactions = await getTransactions();
@@ -75,6 +116,7 @@ export default function TransactionsPage() {
       }
     };
 
+  useEffect(() => {
     fetchTransactions();
   }, []);
 
@@ -115,6 +157,49 @@ export default function TransactionsPage() {
     setFilteredTransactions(tempFiltered);
 
   }, [allTransactions, dateRange, searchTerm, loading]);
+
+  const handleEditClick = (transaction: Transaction) => {
+    setEditingTransaction(transaction);
+    const transactionDate = convertFirestoreTimestampToDate(transaction.transactionDate);
+    form.reset({
+        transactionDate: transactionDate || new Date(),
+        category: transaction.category,
+        description: transaction.description,
+        amount: transaction.amount.toString(),
+        notes: transaction.notes || "",
+        tags: transaction.tags?.join(", ") || "",
+    });
+  };
+
+  const onSubmit = async (data: TransactionFormData) => {
+    if (!editingTransaction) return;
+
+    setIsSubmitting(true);
+    const formData = new FormData();
+    formData.append('type', editingTransaction.type); // Needed for toast message in action
+    formData.append('category', data.category);
+    formData.append('description', data.description);
+    formData.append('amount', data.amount);
+    formData.append('transactionDate', data.transactionDate.toISOString());
+    if (data.notes) formData.append('notes', data.notes);
+    if (data.tags) formData.append('tags', data.tags);
+    
+    try {
+        const result = await updateTransaction(editingTransaction.id, formData);
+        if (result.success) {
+            toast({ title: "Success", description: result.message });
+            setEditingTransaction(null);
+            fetchTransactions(); // Re-fetch to get the latest data
+        } else {
+            toast({ variant: "destructive", title: "Error", description: result.message });
+        }
+    } catch (error: any) {
+        toast({ variant: "destructive", title: "An unexpected error occurred.", description: error.message });
+    } finally {
+        setIsSubmitting(false);
+    }
+  };
+
 
   const formatFirestoreTimestampForDisplay = (timestamp: any): string => {
     const date = convertFirestoreTimestampToDate(timestamp);
@@ -245,6 +330,7 @@ export default function TransactionsPage() {
                <TableCaption>A list of your recent income and expense transactions.</TableCaption>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[100px]">Actions</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Category</TableHead>
@@ -257,6 +343,11 @@ export default function TransactionsPage() {
               <TableBody>
                 {filteredTransactions.map((transaction) => (
                   <TableRow key={transaction.id}>
+                    <TableCell>
+                      <Button variant="outline" size="sm" onClick={() => handleEditClick(transaction)}>
+                        <Edit className="h-3 w-3 mr-1" /> Edit
+                      </Button>
+                    </TableCell>
                     <TableCell>
                         <Badge variant={transaction.type === 'income' ? 'default' : 'destructive'}>
                             {transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1)}
@@ -309,6 +400,110 @@ export default function TransactionsPage() {
             </CardFooter>
         )}
       </Card>
+
+      <Dialog open={editingTransaction !== null} onOpenChange={(open) => !open && setEditingTransaction(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit {editingTransaction?.type === 'income' ? 'Income' : 'Expense'}</DialogTitle>
+            <DialogDescription>
+              Update the details for this transaction. Click save when you're done.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4 max-h-[75vh] overflow-y-auto pr-2">
+              <FormField
+                control={form.control}
+                name="transactionDate"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Transaction Date</FormLabel>
+                    <DatePicker date={field.value} setDate={field.onChange} />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., Rent, Utilities, Salary" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Detailed description of the transaction" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="amount"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Amount ({currencySymbol})</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="0.00" {...field} inputMode="decimal" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="notes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Notes (Optional)</FormLabel>
+                    <FormControl>
+                      <Textarea placeholder="Any additional notes" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="tags"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tags (Optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., office, monthly, utilities" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Comma-separated tags for easy filtering.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter className="sticky bottom-0 bg-background py-4 border-t">
+                <Button type="button" variant="outline" onClick={() => setEditingTransaction(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+      <Toaster />
     </div>
   );
 }
