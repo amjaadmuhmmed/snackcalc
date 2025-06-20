@@ -1,52 +1,60 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // WARNING: The following rules are permissive and are meant for early development.
-    // In a production environment, you MUST implement proper authentication and security rules.
-    // For example, restrict write access to authenticated admin users.
-    // e.g., allow write: if get(/databases/$(database)/documents/admins/$(request.auth.uid)).exists == true;
-
-    match /snack/{snackId} {
-      allow read, write: if true;
-    }
-
-    match /bills/{billId} {
-      allow read, write: if true;
-    }
-
-    match /purchases/{purchaseId} {
-      allow read, write: if true;
-    }
-
-    match /suppliers/{supplierId} {
-      allow read, write: if true;
-    }
-
-    match /customers/{customerId} {
-      allow read, write: if true;
-    }
-
-    // Rules for the new Transactions collection with data validation
+    // --- Transactions (Income/Expense) Collection ---
+    // This collection stores financial transactions other than direct sales/purchases.
     match /transactions/{transactionId} {
-      // Allow anyone to read for now (e.g., for future reports).
-      // In a real app, you would restrict this to authenticated admins.
-      allow read: if true;
+      // Allow read/write for now during development.
+      // TODO: For production, you'd restrict this to authenticated admin users, e.g.,
+      // `allow read, write: if request.auth != null && request.auth.token.isAdmin == true;`
+      // You should also add data validation rules here.
+      allow read, write: if true;
+    }
 
-      // Allow creating a transaction only if the data being sent is valid.
-      allow create: if request.resource.data.type is string &&
-                       (request.resource.data.type == 'income' || request.resource.data.type == 'expense') &&
-                       request.resource.data.category is string && request.resource.data.category.size() > 0 &&
-                       request.resource.data.description is string && request.resource.data.description.size() > 0 &&
-                       request.resource.data.amount is number && request.resource.data.amount > 0 &&
-                       request.resource.data.transactionDate is timestamp &&
-                       request.resource.data.createdAt == request.time &&
-                       (!('notes' in request.resource.data) || request.resource.data.notes is string);
+    // --- Snack (Items) Collection ---
+    // Manages the list of items available for sale.
+    match /snack/{snackId} {
+      // Allow read/write for now.
+      // TODO: `allow read: if true;` is okay for public item lists.
+      // TODO: `allow write: if request.auth != null && request.auth.token.isAdmin == true;` for production.
+      allow read, write: if true;
+    }
 
-      // Disallow updates and deletes for now, as there's no UI functionality for them.
-      allow update, delete: if false;
+    // --- Bills (Sales Orders) Collection ---
+    // Stores completed sales orders.
+    match /bills/{billId} {
+      // Allow read/write for now.
+      // TODO: `allow read, write: if request.auth != null && request.auth.token.isAdmin == true;` for production.
+      // You might have more granular read access for specific users if needed.
+      allow read, write: if true;
+    }
+
+    // --- Purchases Collection ---
+    // Stores purchase orders from suppliers.
+    match /purchases/{purchaseId} {
+      // Allow read/write for now.
+      // TODO: `allow read, write: if request.auth != null && request.auth.token.isAdmin == true;` for production.
+      allow read, write: if true;
+    }
+
+    // --- Suppliers Collection ---
+    // Manages supplier information.
+    match /suppliers/{supplierId} {
+      // Allow read/write for now.
+      // TODO: `allow read: if true;` might be acceptable.
+      // TODO: `allow write: if request.auth != null && request.auth.token.isAdmin == true;` for production.
+      allow read, write: if true;
+    }
+
+    // --- Customers Collection ---
+    // Manages customer information.
+    match /customers/{customerId} {
+       // Allow read/write for now.
+      // TODO: `allow read: if true;` might be acceptable.
+      // TODO: `allow write: if request.auth != null && request.auth.token.isAdmin == true;` for production.
+      allow read, write: if true;
     }
   }
 }
