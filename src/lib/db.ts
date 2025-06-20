@@ -668,6 +668,29 @@ export async function addTransactionToDb(transaction: TransactionInput): Promise
   }
 }
 
+export async function getTransactionsFromDb(): Promise<Transaction[]> {
+  try {
+      const transactionsQuery = query(transactionsCollection, orderBy('transactionDate', 'desc'));
+      const transactionSnapshot = await getDocs(transactionsQuery);
+      return transactionSnapshot.docs.map(docSnap => {
+          const data = docSnap.data();
+          return {
+              id: docSnap.id,
+              type: data.type,
+              category: data.category,
+              description: data.description,
+              amount: Number(data.amount) || 0,
+              transactionDate: data.transactionDate,
+              notes: data.notes || '',
+              createdAt: data.createdAt,
+          } as Transaction;
+      });
+  } catch (e: any) {
+      console.error('[DB getTransactionsFromDb] Error getting transaction documents: ', e);
+      return [];
+  }
+}
+
 
 export { firestoreGetDoc as getDoc };
 

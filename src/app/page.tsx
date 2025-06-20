@@ -1561,6 +1561,11 @@ function HomeContent() {
                                     <Button variant="outline" className="w-full justify-start" onClick={() => setIncomeExpenseSubView('expense')}>
                                         <Minus className="mr-2 h-4 w-4" /> Add New Expense
                                     </Button>
+                                    <Link href="/transactions" passHref>
+                                        <Button variant="outline" className="w-full justify-start">
+                                            <History className="mr-2 h-4 w-4" /> View Transaction History
+                                        </Button>
+                                    </Link>
                                 </div>
                             </>
                         )}

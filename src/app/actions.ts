@@ -33,8 +33,10 @@ import {
     Customer,
     getDoc,
     Purchase,
-    TransactionInput, // Added
-    addTransactionToDb, // Added
+    TransactionInput,
+    addTransactionToDb,
+    getTransactionsFromDb, // Added
+    Transaction, // Added
 } from '@/lib/db';
 import {revalidatePath} from 'next/cache';
 import { db } from '@/lib/firebase'; 
@@ -582,7 +584,7 @@ export async function addTransaction(data: FormData) {
     const result = await addTransactionToDb(newTransaction);
 
     if (result.success) {
-      // revalidatePath('/transactions'); // Example path
+      revalidatePath('/transactions');
       return { success: true, message: `${type.charAt(0).toUpperCase() + type.slice(1)} added successfully!`, id: result.id };
     } else {
       return { success: false, message: result.message || `Failed to add ${type}.` };
@@ -591,4 +593,8 @@ export async function addTransaction(data: FormData) {
     console.error(`Error adding ${data.get('type')}:`, error);
     return { success: false, message: error.message || 'An unexpected error occurred.' };
   }
+}
+
+export async function getTransactions(): Promise<Transaction[]> {
+    return getTransactionsFromDb();
 }
