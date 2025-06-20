@@ -107,7 +107,8 @@ export default function TransactionsPage() {
       tempFiltered = tempFiltered.filter(transaction =>
         (transaction.category && transaction.category.toLowerCase().includes(lowerSearchTerm)) ||
         (transaction.description && transaction.description.toLowerCase().includes(lowerSearchTerm)) ||
-        (transaction.notes && transaction.notes.toLowerCase().includes(lowerSearchTerm))
+        (transaction.notes && transaction.notes.toLowerCase().includes(lowerSearchTerm)) ||
+        (transaction.tags && transaction.tags.some(tag => tag.toLowerCase().includes(lowerSearchTerm)))
       );
     }
 
@@ -222,7 +223,7 @@ export default function TransactionsPage() {
               <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                   type="search"
-                  placeholder="Search by category, description, notes..."
+                  placeholder="Search by category, description, notes, tags..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-8 w-full sm:w-1/2 md:w-1/3 h-9"
@@ -247,6 +248,7 @@ export default function TransactionsPage() {
                   <TableHead>Type</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Category</TableHead>
+                  <TableHead>Tags</TableHead>
                   <TableHead className="min-w-[250px]">Description</TableHead>
                   <TableHead className="min-w-[200px]">Notes</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
@@ -262,6 +264,17 @@ export default function TransactionsPage() {
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatFirestoreTimestampForDisplay(transaction.transactionDate)}</TableCell>
                     <TableCell>{transaction.category}</TableCell>
+                    <TableCell>
+                        {transaction.tags && transaction.tags.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                                {transaction.tags.map((tag, index) => (
+                                    <Badge key={index} variant="outline">{tag}</Badge>
+                                ))}
+                            </div>
+                        ) : (
+                            '-'
+                        )}
+                    </TableCell>
                     <TableCell className="min-w-[250px]">{transaction.description}</TableCell>
                     <TableCell className="text-xs whitespace-pre-wrap max-w-xs min-w-[200px]">{transaction.notes || '-'}</TableCell>
                     <TableCell className={`text-right font-semibold ${transaction.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>

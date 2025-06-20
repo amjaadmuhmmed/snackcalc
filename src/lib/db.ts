@@ -381,8 +381,8 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
         } as Purchase;
       });
     } catch (e: any) {
-      console.error('[DB getPurchasesFromDb] Error getting purchase documents: ', e);
-      return [];
+        console.error('[DB getPurchasesFromDb] Error getting purchase documents: ', e);
+        return [];
     }
 }
 
@@ -637,6 +637,7 @@ export interface Transaction {
   amount: number;
   transactionDate: Timestamp | Date; // User-selected date + system time
   notes?: string;
+  tags?: string[];
   createdAt: Timestamp | Date;
   updatedAt?: Timestamp | Date;
 }
@@ -653,6 +654,7 @@ export async function addTransactionToDb(transaction: TransactionInput): Promise
       category: transaction.category.trim(),
       description: transaction.description.trim(),
       notes: transaction.notes?.trim() || '',
+      tags: transaction.tags || [],
       createdAt: serverTimestamp(),
     };
 
@@ -682,6 +684,7 @@ export async function getTransactionsFromDb(): Promise<Transaction[]> {
               amount: Number(data.amount) || 0,
               transactionDate: data.transactionDate,
               notes: data.notes || '',
+              tags: data.tags || [],
               createdAt: data.createdAt,
           } as Transaction;
       });
@@ -693,4 +696,3 @@ export async function getTransactionsFromDb(): Promise<Transaction[]> {
 
 
 export { firestoreGetDoc as getDoc };
-

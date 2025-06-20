@@ -532,6 +532,7 @@ export async function addTransaction(data: FormData) {
     const amountString = data.get('amount') as string;
     const transactionDateString = data.get('transactionDate') as string; 
     const notes = data.get('notes') as string | null;
+    const tagsString = data.get('tags') as string | null;
 
     if (!type || !['income', 'expense'].includes(type)) {
       return { success: false, message: 'Invalid transaction type.' };
@@ -571,6 +572,7 @@ export async function addTransaction(data: FormData) {
     );
     const transactionDate = Timestamp.fromDate(combinedDateTime);
 
+    const tags = tagsString ? tagsString.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
 
     const newTransaction: TransactionInput = {
       type,
@@ -579,6 +581,7 @@ export async function addTransaction(data: FormData) {
       amount,
       transactionDate,
       notes: notes || undefined,
+      tags: tags,
     };
 
     const result = await addTransactionToDb(newTransaction);

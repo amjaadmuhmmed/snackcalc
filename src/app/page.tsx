@@ -36,6 +36,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -97,6 +98,7 @@ const transactionSchema = z.object({
   description: z.string().min(1, "Description is required."),
   amount: z.string().refine(val => !isNaN(parseFloat(val)) && parseFloat(val) > 0, "Amount must be a positive number."),
   notes: z.string().optional(),
+  tags: z.string().optional(),
 });
 
 type TransactionFormDataType = z.infer<typeof transactionSchema>;
@@ -221,6 +223,7 @@ function HomeContent() {
       description: "",
       amount: "",
       notes: "",
+      tags: "",
     }
   });
 
@@ -232,6 +235,7 @@ function HomeContent() {
       description: "",
       amount: "",
       notes: "",
+      tags: "",
     }
   });
 
@@ -579,15 +583,16 @@ function HomeContent() {
     formData.append('amount', data.amount);
     formData.append('transactionDate', data.transactionDate.toISOString());
     if (data.notes) formData.append('notes', data.notes);
+    if (data.tags) formData.append('tags', data.tags);
 
     try {
       const result = await addTransaction(formData);
       if (result.success) {
         toast({ title: result.message });
         if (type === 'income') {
-          incomeForm.reset({ transactionDate: new Date(), category: "", description: "", amount: "", notes: "" });
+          incomeForm.reset({ transactionDate: new Date(), category: "", description: "", amount: "", notes: "", tags: "" });
         } else {
-          expenseForm.reset({ transactionDate: new Date(), category: "", description: "", amount: "", notes: "" });
+          expenseForm.reset({ transactionDate: new Date(), category: "", description: "", amount: "", notes: "", tags: "" });
         }
         setIncomeExpenseSubView(null); // Go back to button view
       } else {
@@ -1638,6 +1643,22 @@ function HomeContent() {
                                             </FormItem>
                                             )}
                                         />
+                                        <FormField
+                                            control={incomeForm.control}
+                                            name="tags"
+                                            render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Tags (Optional)</FormLabel>
+                                                <FormControl>
+                                                <Input placeholder="e.g., office, monthly, utilities" {...field} />
+                                                </FormControl>
+                                                <FormDescription>
+                                                    Comma-separated tags for easy filtering.
+                                                </FormDescription>
+                                                <FormMessage />
+                                            </FormItem>
+                                            )}
+                                        />
                                         <div className="flex space-x-2">
                                             <Button type="submit" disabled={isSubmittingTransaction}>
                                                 {isSubmittingTransaction && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -1716,6 +1737,22 @@ function HomeContent() {
                                                 <FormControl>
                                                 <Textarea placeholder="Any additional notes" {...field} />
                                                 </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={expenseForm.control}
+                                            name="tags"
+                                            render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Tags (Optional)</FormLabel>
+                                                <FormControl>
+                                                <Input placeholder="e.g., office, monthly, utilities" {...field} />
+                                                </FormControl>
+                                                <FormDescription>
+                                                    Comma-separated tags for easy filtering.
+                                                </FormDescription>
                                                 <FormMessage />
                                             </FormItem>
                                             )}
@@ -1944,4 +1981,3 @@ export default function HomePage() {
     </Suspense>
   );
 }
-
