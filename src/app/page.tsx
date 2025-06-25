@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DatePicker } from "@/components/ui/date-picker"; // Added DatePicker
-import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building, Landmark } from "lucide-react"; // Added Landmark
+import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building, Landmark, Tag } from "lucide-react"; // Added Landmark, Tag
 import { QRCodeCanvas } from 'qrcode.react';
 import { addItem, getItems, updateItem, deleteItem, saveBill, addSupplier, addCustomer, getCustomers, addTransaction } from "./actions"; // Added addTransaction
 import type { Snack, BillInput, BillItem as DbBillItem, SupplierInput, Customer, CustomerInput, TransactionInput } from "@/lib/db"; 
@@ -137,6 +137,7 @@ function HomeContent() {
 
   const [tableNumber, setTableNumber] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
+  const [tags, setTags] = useState<string>("");
   const { toast } = useToast();
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminLoginSection, setShowAdminLoginSection] = useState(false);
@@ -362,6 +363,9 @@ function HomeContent() {
         if (String(data.notes || "") !== notes) {
           setNotes(String(data.notes || ""));
         }
+        if (String(data.tags?.join(", ") || "") !== tags) {
+          setTags(String(data.tags?.join(", ") || ""));
+        }
 
         requestAnimationFrame(() => {
             setIsUpdatingFromRTDBSync(false);
@@ -376,7 +380,7 @@ function HomeContent() {
       console.log(`Main page unsubscribing from RTDB for order: ${activeSharedOrderNumber}`);
       unsubscribe();
     };
-  }, [activeSharedOrderNumber, items, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, selectedItems, serviceCharge, orderNumber, isUpdatingRTDBFromMain, editingBillId]);
+  }, [activeSharedOrderNumber, items, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, tags, selectedItems, serviceCharge, orderNumber, isUpdatingRTDBFromMain, editingBillId]);
 
 
   const calculateTotal = () => {
@@ -633,6 +637,7 @@ function HomeContent() {
           customerId: selectedBillCustomerId || undefined,
           tableNumber: tableNumber,
           notes: notes,
+          tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag),
           items: selectedItems.map(s => ({
             itemId: s.id,
             name: s.name,
@@ -656,6 +661,7 @@ function HomeContent() {
                 setSelectedBillCustomerId(null);
                 setTableNumber("");
                 setNotes("");
+                setTags("");
                 setOrderNumber(generateOrderNumber());
                 setSearchTerm("");
                 setActiveSharedOrderNumber(null);
@@ -824,6 +830,7 @@ function HomeContent() {
       customerPhoneNumber: customerPhoneNumber,
       tableNumber: tableNumber,
       notes: notes,
+      tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag),
     };
 
     try {
@@ -843,7 +850,7 @@ function HomeContent() {
     } finally {
       setIsGeneratingShareUrl(false);
     }
-  }, [selectedItems, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, editingBillId]);
+  }, [selectedItems, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, tags, editingBillId]);
 
 
   useEffect(() => {
@@ -883,6 +890,7 @@ function HomeContent() {
         customerPhoneNumber: customerPhoneNumber,
         tableNumber: tableNumber,
         notes: notes,
+        tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag),
       };
 
       try {
@@ -910,6 +918,7 @@ function HomeContent() {
     customerPhoneNumber,
     tableNumber,
     notes,
+    tags,
     orderNumber,
     activeSharedOrderNumber,
     isLoadingItems,
@@ -962,6 +971,11 @@ function HomeContent() {
   const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setIsLocalDirty(true);
     setNotes(e.target.value);
+  };
+  
+  const handleTagsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setIsLocalDirty(true);
+    setTags(e.target.value);
   };
 
   const handlePrimaryActionClick = () => {
@@ -1299,6 +1313,22 @@ function HomeContent() {
                 />
               </div>
             </div>
+            <div className="grid gap-1.5">
+                <Label htmlFor="tags" className="text-sm">Tags</Label>
+                <div className="relative">
+                    <Tag className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        id="tags"
+                        type="text"
+                        placeholder="Optional: e.g., party, takeout, special"
+                        value={tags}
+                        onChange={handleTagsChange}
+                        className="pl-8 h-9 text-sm"
+                        aria-label="Tags"
+                    />
+                </div>
+                <p className="text-xs text-muted-foreground">Comma-separated tags for easy filtering.</p>
+            </div>
             <Separator />
             <div className="flex flex-col items-center justify-between gap-3">
                <div className="flex justify-between w-full items-center">
@@ -1539,7 +1569,7 @@ function HomeContent() {
                 {adminActiveView === 'salesAndCustomer' && (
                      <div className="flex flex-col space-y-3">
                         <h3 className="text-md font-semibold mb-1">Sales & Customer Management</h3>
-                        <Link href="/bills" passHref>
+                         <Link href="/bills" passHref>
                             <Button variant="outline" className="w-full justify-start"><History className="mr-2 h-4 w-4" /> Sales Order History</Button>
                         </Link>
                         <Button variant="outline" className="w-full justify-start" onClick={handleOpenAddCustomerDialog}>

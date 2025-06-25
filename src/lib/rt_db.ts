@@ -27,6 +27,7 @@ export interface SharedOrderData {
   customerPhoneNumber: string;
   tableNumber?: string;
   notes?: string; // Optional notes
+  tags?: string[];
   lastUpdatedAt: object; // Firebase server timestamp placeholder
 }
 
@@ -64,6 +65,7 @@ export async function setSharedOrderInRTDB(orderNumber: string, billData: Omit<S
     orderNumber: orderNumber,
     tableNumber: billData.tableNumber || '',
     notes: billData.notes || '', // Include notes
+    tags: billData.tags || [],
     lastUpdatedAt: serverTimestamp(),
   };
 
@@ -92,6 +94,7 @@ export interface SharedBillState {
   customerPhoneNumber: string;
   tableNumber?: string;
   notes?: string; // Optional notes
+  tags?: string[];
   orderNumber: string; // This is also the key in RTDB
 }
 

@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, Calendar as CalendarIconLucide, AlertCircle, Info, Loader2, Edit } from "lucide-react";
+import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, Calendar as CalendarIconLucide, AlertCircle, Info, Loader2, Edit, Tag } from "lucide-react";
 import { getItems, savePurchase, getSuppliers, addSupplier, getPurchaseById } from "@/app/actions";
 import type { Snack, PurchaseInput, PurchaseItem as DbPurchaseItem, Supplier, Purchase } from "@/lib/db";
 import { Timestamp } from "firebase/firestore";
@@ -57,6 +57,7 @@ function CreatePurchasePageContent() {
   const [initialLoadedPurchaseDate, setInitialLoadedPurchaseDate] = useState<Timestamp | null>(null); // Stores original TS for edits
 
   const [notes, setNotes] = useState<string>("");
+  const [tags, setTags] = useState<string>("");
   const [isSavingPurchase, setIsSavingPurchase] = useState(false);
   const [isLoadingItems, setIsLoadingItems] = useState(true);
   const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(true);
@@ -114,6 +115,7 @@ function CreatePurchasePageContent() {
             }
 
             setNotes(purchaseToEdit.notes || "");
+            setTags(purchaseToEdit.tags?.join(", ") || "");
             
             const itemsToEdit: SelectedItemForPurchase[] = purchaseToEdit.items.map(pItem => {
               const baseItem = allItems.find(i => i.id === pItem.itemId || i.name === pItem.name);
@@ -273,6 +275,7 @@ function CreatePurchasePageContent() {
     setSupplierNameInput("");
     setSelectedSupplier(null);
     setNotes("");
+    setTags("");
     setSelectedItems([]);
     setSearchTerm("");
     if (searchParams.get("editPurchaseId")) {
@@ -322,6 +325,7 @@ function CreatePurchasePageContent() {
       })),
       totalAmount: calculateTotal,
       notes: notes,
+      tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag),
     };
 
     try {
@@ -617,6 +621,22 @@ function CreatePurchasePageContent() {
               />
             </div>
           </div>
+           <div className="grid gap-1.5">
+                <Label htmlFor="tags">Tags (Optional)</Label>
+                <div className="relative">
+                    <Tag className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        id="tags"
+                        type="text"
+                        placeholder="e.g., regular_stock, special_order"
+                        value={tags}
+                        onChange={(e) => setTags(e.target.value)}
+                        className="pl-8 h-9 text-sm"
+                        aria-label="Tags"
+                    />
+                </div>
+                <p className="text-xs text-muted-foreground">Comma-separated tags for easy filtering.</p>
+            </div>
 
           <Separator />
 
@@ -688,4 +708,3 @@ export default function CreatePurchasePage() {
     </Suspense>
   );
 }
-

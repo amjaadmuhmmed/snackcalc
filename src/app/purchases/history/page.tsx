@@ -126,6 +126,7 @@ export default function PurchaseHistoryPage() {
       tempFiltered = tempFiltered.filter(purchase =>
         purchase.purchaseOrderNumber.toLowerCase().includes(lowerSearchTerm) ||
         (purchase.supplierName && purchase.supplierName.toLowerCase().includes(lowerSearchTerm)) ||
+        (purchase.tags && purchase.tags.some(tag => tag.toLowerCase().includes(lowerSearchTerm))) ||
         (purchase.items && purchase.items.some(item =>
           item.name.toLowerCase().includes(lowerSearchTerm) ||
           (item.itemCode && item.itemCode.toLowerCase().includes(lowerSearchTerm))
@@ -232,7 +233,7 @@ export default function PurchaseHistoryPage() {
               <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                   type="search"
-                  placeholder="Search PO#, supplier, items..."
+                  placeholder="Search PO#, supplier, items, tags..."
                   value={searchTerm}
                   onChange={(e) => {
                     const newSearchTerm = e.target.value;
@@ -265,6 +266,7 @@ export default function PurchaseHistoryPage() {
                   <TableHead>Purchase Date & Time (User-entered)</TableHead>
                   <TableHead>Supplier</TableHead>
                   <TableHead className="min-w-[300px]">Items Purchased</TableHead>
+                  <TableHead>Tags</TableHead>
                   <TableHead className="text-right">Total Amount</TableHead>
                   <TableHead>Notes</TableHead>
                   <TableHead>Recorded At</TableHead>
@@ -291,6 +293,17 @@ export default function PurchaseHistoryPage() {
                         ))}
                       </ul>
                     </TableCell>
+                    <TableCell>
+                        {purchase.tags && purchase.tags.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                                {purchase.tags.map((tag, index) => (
+                                    <Badge key={index} variant="outline">{tag}</Badge>
+                                ))}
+                            </div>
+                        ) : (
+                            '-'
+                        )}
+                    </TableCell>
                     <TableCell className="text-right font-semibold">{currencySymbol}{purchase.totalAmount.toFixed(2)}</TableCell>
                     <TableCell className="text-xs whitespace-pre-wrap max-w-xs">{purchase.notes || '-'}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatDisplayDateTime(purchase.createdAt)}</TableCell>
@@ -315,4 +328,3 @@ export default function PurchaseHistoryPage() {
     </div>
   );
 }
-

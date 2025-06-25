@@ -163,6 +163,7 @@ export interface Bill {
     customerId?: string;
     tableNumber?: string;
     notes?: string;
+    tags?: string[];
     items: BillItem[];
     serviceCharge: number;
     totalAmount: number;
@@ -183,6 +184,7 @@ export async function addBillToDb(bill: BillInput) {
         customerId: bill.customerId || '',
         tableNumber: bill.tableNumber || '',
         notes: bill.notes || '',
+        tags: bill.tags || [],
         createdAt: serverTimestamp()
       });
       return {success: true, id: docRef.id};
@@ -202,6 +204,7 @@ export async function updateBillInDb(id: string, bill: BillInput) {
             customerId: bill.customerId || '',
             tableNumber: bill.tableNumber || '',
             notes: bill.notes || '',
+            tags: bill.tags || [],
             lastUpdatedAt: serverTimestamp()
         });
         return {success: true};
@@ -233,6 +236,7 @@ export async function getBillsFromDb(): Promise<Bill[]> {
           customerId: data.customerId || '',
           tableNumber: data.tableNumber || '',
           notes: data.notes || '',
+          tags: data.tags || [],
           items: itemsWithCode,
           serviceCharge: data.serviceCharge,
           totalAmount: data.totalAmount,
@@ -265,6 +269,7 @@ export interface Purchase {
     items: PurchaseItem[];
     totalAmount: number;
     notes?: string;
+    tags?: string[];
     createdAt: Timestamp | Date; 
     lastUpdatedAt?: Timestamp | Date;
 }
@@ -282,6 +287,7 @@ export async function addPurchaseToDb(purchase: PurchaseInput): Promise<{ succes
             items: purchase.items,
             totalAmount: purchase.totalAmount,
             notes: purchase.notes || '',
+            tags: purchase.tags || [],
             createdAt: serverTimestamp(), 
         };
 
@@ -309,6 +315,7 @@ export async function updatePurchaseInDb(id: string, purchaseData: PurchaseInput
             items: purchaseData.items,
             totalAmount: purchaseData.totalAmount,
             notes: purchaseData.notes || '',
+            tags: purchaseData.tags || [],
             lastUpdatedAt: serverTimestamp(),
         };
 
@@ -376,6 +383,7 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
           items: items,
           totalAmount: data.totalAmount,
           notes: data.notes || '',
+          tags: data.tags || [],
           createdAt: data.createdAt,
           lastUpdatedAt: data.lastUpdatedAt,
         } as Purchase;
@@ -414,6 +422,7 @@ export async function getPurchaseByIdFromDb(id: string): Promise<Purchase | null
             items: items,
             totalAmount: data.totalAmount,
             notes: data.notes || '',
+            tags: data.tags || [],
             createdAt: data.createdAt,
             lastUpdatedAt: data.lastUpdatedAt,
         } as Purchase;
