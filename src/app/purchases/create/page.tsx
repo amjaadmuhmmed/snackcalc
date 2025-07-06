@@ -15,8 +15,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
-import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, Calendar as CalendarIconLucide, AlertCircle, Info, Loader2, Edit, Tag } from "lucide-react";
-import { getItems, savePurchase, getSuppliers, addSupplier, getPurchaseById } from "@/app/actions";
+import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, Calendar as CalendarIconLucide, AlertCircle, Info, Loader2, Edit, Tag, Upload } from "lucide-react";
+import { getItems, savePurchase, getSuppliers, addSupplier, getPurchaseById, scanReceipt } from "@/app/actions";
 import type { Snack, PurchaseInput, PurchaseItem as DbPurchaseItem, Supplier, Purchase } from "@/lib/db";
 import { Timestamp } from "firebase/firestore";
 import {
@@ -70,6 +70,11 @@ function CreatePurchasePageContent() {
   const [editingPurchaseId, setEditingPurchaseId] = useState<string | null>(null);
   const [editingPurchaseOrderNumber, setEditingPurchaseOrderNumber] = useState<string | null>(null);
 
+  const [tax, setTax] = useState<number>(0);
+  const [serviceCharge, setServiceCharge] = useState<number>(0);
+  const [isScanning, setIsScanning] = useState(false);
+  const receiptFileRef = useRef<HTMLInputElement>(null);
+
 
   const listRefs = useRef<Record<string, HTMLLIElement | null>>({});
   const lastInteractedItemIdRef = useRef<string | null>(null);
@@ -116,6 +121,8 @@ function CreatePurchasePageContent() {
 
             setNotes(purchaseToEdit.notes || "");
             setTags(purchaseToEdit.tags?.join(", ") || "");
+            setTax(purchaseToEdit.tax || 0);
+            setServiceCharge(purchaseToEdit.serviceCharge || 0);
             
             const itemsToEdit: SelectedItemForPurchase[] = purchaseToEdit.items.map(pItem => {
               const baseItem = allItems.find(i => i.id === pItem.itemId || i.name === pItem.name);
@@ -210,10 +217,112 @@ function CreatePurchasePageContent() {
     }
   };
 
+  const handleReceiptScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+        toast({
+            variant: "destructive",
+            title: "Invalid File Type",
+            description: "Please select an image file (e.g., JPG, PNG).",
+        });
+        return;
+    }
+
+    setIsScanning(true);
+    toast({ title: "Scanning receipt...", description: "The AI is analyzing the image. Please wait." });
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onloadend = async () => {
+        const dataUri = reader.result as string;
+        try {
+            const result = await scanReceipt({ photoDataUri: dataUri });
+
+            if (result.success && result.data) {
+                const { supplierName, items: extractedItems, tax: extractedTax, serviceCharge: extractedServiceCharge } = result.data;
+                
+                // Update supplier
+                setSupplierNameInput(supplierName);
+                const foundSupplier = allSuppliers.find(s => s.name.toLowerCase() === supplierName.trim().toLowerCase());
+                if (foundSupplier) {
+                    setSelectedSupplier(foundSupplier);
+                } else {
+                    setSelectedSupplier(null);
+                }
+
+                // Update tax and service charge
+                setTax(extractedTax || 0);
+                setServiceCharge(extractedServiceCharge || 0);
+                
+                // Process and match items
+                const matchedItems: SelectedItemForPurchase[] = [];
+                const unmatchedNames: string[] = [];
+
+                for (const extractedItem of extractedItems) {
+                    const match = allItems.find(dbItem => dbItem.name.toLowerCase() === extractedItem.name.toLowerCase());
+                    if (match) {
+                        matchedItems.push({ 
+                            ...match, 
+                            quantity: extractedItem.quantity, 
+                            purchaseCost: extractedItem.price 
+                        });
+                    } else {
+                        unmatchedNames.push(extractedItem.name);
+                    }
+                }
+                setSelectedItems(matchedItems);
+
+                toast({
+                    title: "Scan Complete!",
+                    description: `Extracted ${extractedItems.length} items. ${matchedItems.length} were matched.`
+                });
+                
+                if (unmatchedNames.length > 0) {
+                    toast({
+                        variant: "default",
+                        title: "Some items not matched",
+                        description: `Could not find these items in your database: ${unmatchedNames.join(', ')}. Please add them manually if needed.`
+                    });
+                }
+            } else {
+                 toast({
+                    variant: "destructive",
+                    title: "AI Scan Failed",
+                    description: result.message || "Could not extract data from the receipt. Please try another image or enter manually.",
+                });
+            }
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Scan Error",
+                description: "An unexpected error occurred during the scan. " + error.message,
+            });
+        } finally {
+            setIsScanning(false);
+            // Reset file input value to allow scanning the same file again
+            if (receiptFileRef.current) {
+                receiptFileRef.current.value = "";
+            }
+        }
+    };
+    reader.onerror = () => {
+        toast({
+            variant: "destructive",
+            title: "File Read Error",
+            description: "Could not read the selected file.",
+        });
+        setIsScanning(false);
+    };
+};
+
 
   const calculateTotal = useMemo(() => {
-    return selectedItems.reduce((total, item) => total + Number(item.purchaseCost) * item.quantity, 0);
-  }, [selectedItems]);
+    const itemsTotal = selectedItems.reduce((total, item) => total + Number(item.purchaseCost) * item.quantity, 0);
+    return itemsTotal + Number(tax) + Number(serviceCharge);
+  }, [selectedItems, tax, serviceCharge]);
 
   const handleItemIncrement = (item: Snack) => {
     lastInteractedItemIdRef.current = item.id;
@@ -278,6 +387,8 @@ function CreatePurchasePageContent() {
     setTags("");
     setSelectedItems([]);
     setSearchTerm("");
+    setTax(0);
+    setServiceCharge(0);
     if (searchParams.get("editPurchaseId")) {
         router.push("/purchases/create", { scroll: false });
     }
@@ -288,7 +399,6 @@ function CreatePurchasePageContent() {
 
     let finalPurchaseDateForSave: Timestamp;
 
-    // User-selected date from DatePicker state
     const userSelectedDate = purchaseDate; 
 
     if (!userSelectedDate) { 
@@ -297,7 +407,6 @@ function CreatePurchasePageContent() {
         return; 
     }
 
-    // Current system time for the time component
     const now = new Date(); 
     const combinedDateTime = new Date(
         userSelectedDate.getFullYear(), 
@@ -310,7 +419,6 @@ function CreatePurchasePageContent() {
     );
     finalPurchaseDateForSave = Timestamp.fromDate(combinedDateTime);
     
-
     const purchaseData: PurchaseInput = {
       purchaseOrderNumber: purchaseOrderNumber,
       supplierName: finalSupplierName,
@@ -324,6 +432,8 @@ function CreatePurchasePageContent() {
         itemCode: s.itemCode || ''
       })),
       totalAmount: calculateTotal,
+      tax: Number(tax) || 0,
+      serviceCharge: Number(serviceCharge) || 0,
       notes: notes,
       tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag),
     };
@@ -373,10 +483,8 @@ function CreatePurchasePageContent() {
         setNewSupplierNameToCreate(trimmedSupplierName);
         setShowNewSupplierDialog(true);
     } else if (trimmedSupplierName && editingPurchaseId) { 
-        // If editing and supplier name typed but not selected, save with the typed name (no ID)
         proceedToSavePurchase(trimmedSupplierName, undefined);
     } else { 
-        // No supplier selected or typed
         proceedToSavePurchase("", undefined);
     }
   };
@@ -482,15 +590,24 @@ function CreatePurchasePageContent() {
             </div>
             <div className="grid gap-1.5 sm:col-span-2">
               <Label htmlFor="supplier-name-input">Supplier Name</Label>
-              <Input
-                id="supplier-name-input"
-                type="text"
-                value={supplierNameInput}
-                onChange={handleSupplierInputChange}
-                placeholder="Type or select supplier (optional)"
-                list="suppliers-datalist"
-                autoComplete="off"
-              />
+              <div className="flex items-center gap-2">
+                 <Input
+                    id="supplier-name-input"
+                    type="text"
+                    value={supplierNameInput}
+                    onChange={handleSupplierInputChange}
+                    placeholder="Type or select supplier"
+                    list="suppliers-datalist"
+                    autoComplete="off"
+                    className="flex-grow"
+                 />
+                 <Button type="button" variant="outline" onClick={() => receiptFileRef.current?.click()} disabled={isScanning}>
+                    {isScanning ? <Loader2 className="h-4 w-4 animate-spin"/> : <Upload className="h-4 w-4" />}
+                    <span className="ml-2 hidden sm:inline">Scan Receipt</span>
+                 </Button>
+                 <Input type="file" ref={receiptFileRef} onChange={handleReceiptScan} accept="image/*" className="hidden" />
+              </div>
+              
               {isLoadingSuppliers ? (
                 <p className="text-xs text-muted-foreground">Loading suppliers...</p>
               ) : (
@@ -637,10 +754,31 @@ function CreatePurchasePageContent() {
                 </div>
                 <p className="text-xs text-muted-foreground">Comma-separated tags for easy filtering.</p>
             </div>
-
           <Separator />
+           <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="tax">Tax ({currencySymbol})</Label>
+                <Input
+                  id="tax"
+                  type="number"
+                  placeholder="0.00"
+                  value={tax}
+                  onChange={(e) => setTax(parseFloat(e.target.value) || 0)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="serviceCharge">Service Charge ({currencySymbol})</Label>
+                <Input
+                  id="serviceCharge"
+                  type="number"
+                  placeholder="0.00"
+                  value={serviceCharge}
+                  onChange={(e) => setServiceCharge(parseFloat(e.target.value) || 0)}
+                />
+              </div>
+            </div>
 
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-col items-end gap-2 mt-4">
             <div className="flex justify-between w-full sm:w-auto sm:min-w-[200px] items-center">
               <span className="text-lg font-semibold">Total Purchase Amount:</span>
               <Badge variant="secondary" className="text-lg font-semibold tabular-nums">

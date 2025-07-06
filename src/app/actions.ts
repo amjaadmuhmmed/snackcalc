@@ -43,6 +43,7 @@ import {revalidatePath} from 'next/cache';
 import { db } from '@/lib/firebase'; 
 import { doc, Timestamp } from 'firebase/firestore'; // Added Timestamp
 import { isValid } from 'date-fns'; // Added
+import { extractReceiptData, ExtractReceiptInput } from '@/ai/flows/extract-receipt-flow';
 
 
 // --- Item Actions ---
@@ -290,6 +291,10 @@ export async function getBills() {
 // --- Purchase Actions ---
 export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpdate?: string) {
     try {
+        const itemsTotal = purchaseData.items.reduce((sum, item) => sum + (item.purchaseCost * item.quantity), 0);
+        const finalTotal = itemsTotal + (purchaseData.tax || 0) + (purchaseData.serviceCharge || 0);
+        purchaseData.totalAmount = finalTotal;
+
         if (purchaseIdToUpdate) {
             const oldPurchase = await getPurchaseByIdFromDb(purchaseIdToUpdate);
             if (!oldPurchase) {
@@ -671,4 +676,16 @@ export async function updateTransaction(id: string, data: FormData) {
 
 export async function getTransactions(): Promise<Transaction[]> {
     return getTransactionsFromDb();
+}
+
+
+// --- AI Actions ---
+export async function scanReceipt(input: ExtractReceiptInput) {
+    try {
+        const result = await extractReceiptData(input);
+        return { success: true, data: result };
+    } catch (error: any) {
+        console.error('Error scanning receipt:', error);
+        return { success: false, message: error.message || 'An unexpected error occurred while scanning the receipt.' };
+    }
 }

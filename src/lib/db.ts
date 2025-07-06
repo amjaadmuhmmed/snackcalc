@@ -268,6 +268,8 @@ export interface Purchase {
     purchaseDate: Timestamp | Date; 
     items: PurchaseItem[];
     totalAmount: number;
+    tax?: number;
+    serviceCharge?: number;
     notes?: string;
     tags?: string[];
     createdAt: Timestamp | Date; 
@@ -286,6 +288,8 @@ export async function addPurchaseToDb(purchase: PurchaseInput): Promise<{ succes
             purchaseDate: purchase.purchaseDate, 
             items: purchase.items,
             totalAmount: purchase.totalAmount,
+            tax: purchase.tax || 0,
+            serviceCharge: purchase.serviceCharge || 0,
             notes: purchase.notes || '',
             tags: purchase.tags || [],
             createdAt: serverTimestamp(), 
@@ -314,6 +318,8 @@ export async function updatePurchaseInDb(id: string, purchaseData: PurchaseInput
             purchaseDate: purchaseData.purchaseDate, 
             items: purchaseData.items,
             totalAmount: purchaseData.totalAmount,
+            tax: purchaseData.tax || 0,
+            serviceCharge: purchaseData.serviceCharge || 0,
             notes: purchaseData.notes || '',
             tags: purchaseData.tags || [],
             lastUpdatedAt: serverTimestamp(),
@@ -382,6 +388,8 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
           purchaseDate: data.purchaseDate,
           items: items,
           totalAmount: data.totalAmount,
+          tax: data.tax,
+          serviceCharge: data.serviceCharge,
           notes: data.notes || '',
           tags: data.tags || [],
           createdAt: data.createdAt,
@@ -389,8 +397,8 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
         } as Purchase;
       });
     } catch (e: any) {
-        console.error('[DB getPurchasesFromDb] Error getting purchase documents: ', e);
-        return [];
+      console.error('[DB getPurchasesFromDb] Error getting purchase documents: ', e);
+      return [];
     }
 }
 
@@ -421,6 +429,8 @@ export async function getPurchaseByIdFromDb(id: string): Promise<Purchase | null
             purchaseDate: data.purchaseDate,
             items: items,
             totalAmount: data.totalAmount,
+            tax: data.tax,
+            serviceCharge: data.serviceCharge,
             notes: data.notes || '',
             tags: data.tags || [],
             createdAt: data.createdAt,

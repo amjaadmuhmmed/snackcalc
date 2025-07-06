@@ -267,6 +267,8 @@ export default function PurchaseHistoryPage() {
                   <TableHead>Supplier</TableHead>
                   <TableHead className="min-w-[300px]">Items Purchased</TableHead>
                   <TableHead>Tags</TableHead>
+                  <TableHead className="text-right">Tax</TableHead>
+                  <TableHead className="text-right">Svc. Charge</TableHead>
                   <TableHead className="text-right">Total Amount</TableHead>
                   <TableHead>Notes</TableHead>
                   <TableHead>Recorded At</TableHead>
@@ -304,6 +306,8 @@ export default function PurchaseHistoryPage() {
                             '-'
                         )}
                     </TableCell>
+                    <TableCell className="text-right">{currencySymbol}{(purchase.tax || 0).toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{currencySymbol}{(purchase.serviceCharge || 0).toFixed(2)}</TableCell>
                     <TableCell className="text-right font-semibold">{currencySymbol}{purchase.totalAmount.toFixed(2)}</TableCell>
                     <TableCell className="text-xs whitespace-pre-wrap max-w-xs">{purchase.notes || '-'}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatDisplayDateTime(purchase.createdAt)}</TableCell>
