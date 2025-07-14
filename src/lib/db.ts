@@ -163,6 +163,7 @@ export interface Bill {
     customerId?: string;
     tableNumber?: string;
     notes?: string;
+    tags?: string[];
     items: BillItem[];
     serviceCharge: number;
     totalAmount: number;
@@ -183,6 +184,7 @@ export async function addBillToDb(bill: BillInput) {
         customerId: bill.customerId || '',
         tableNumber: bill.tableNumber || '',
         notes: bill.notes || '',
+        tags: bill.tags || [],
         createdAt: serverTimestamp()
       });
       return {success: true, id: docRef.id};
@@ -202,6 +204,7 @@ export async function updateBillInDb(id: string, bill: BillInput) {
             customerId: bill.customerId || '',
             tableNumber: bill.tableNumber || '',
             notes: bill.notes || '',
+            tags: bill.tags || [],
             lastUpdatedAt: serverTimestamp()
         });
         return {success: true};
@@ -233,6 +236,7 @@ export async function getBillsFromDb(): Promise<Bill[]> {
           customerId: data.customerId || '',
           tableNumber: data.tableNumber || '',
           notes: data.notes || '',
+          tags: data.tags || [],
           items: itemsWithCode,
           serviceCharge: data.serviceCharge,
           totalAmount: data.totalAmount,
@@ -261,11 +265,12 @@ export interface Purchase {
     purchaseOrderNumber: string;
     supplierName?: string;
     supplierId?: string;
-    purchaseDate: Timestamp | Date; // User-selected date + system time of generation
+    purchaseDate: Timestamp | Date; 
     items: PurchaseItem[];
     totalAmount: number;
     notes?: string;
-    createdAt: Timestamp | Date; // System-generated creation timestamp
+    tags?: string[];
+    createdAt: Timestamp | Date; 
     lastUpdatedAt?: Timestamp | Date;
 }
 
@@ -278,11 +283,12 @@ export async function addPurchaseToDb(purchase: PurchaseInput): Promise<{ succes
         const dataToSave: { [key: string]: any } = {
             purchaseOrderNumber: purchase.purchaseOrderNumber,
             supplierName: purchase.supplierName || '',
-            purchaseDate: purchase.purchaseDate, // User-selected date + system time of generation
+            purchaseDate: purchase.purchaseDate, 
             items: purchase.items,
             totalAmount: purchase.totalAmount,
             notes: purchase.notes || '',
-            createdAt: serverTimestamp(), // System-generated creation timestamp
+            tags: purchase.tags || [],
+            createdAt: serverTimestamp(), 
         };
 
         if (purchase.supplierId && typeof purchase.supplierId === 'string' && purchase.supplierId.trim() !== '') {
@@ -305,10 +311,11 @@ export async function updatePurchaseInDb(id: string, purchaseData: PurchaseInput
             purchaseOrderNumber: purchaseData.purchaseOrderNumber,
             supplierName: purchaseData.supplierName || '',
             supplierId: purchaseData.supplierId || '',
-            purchaseDate: purchaseData.purchaseDate, // User-selected date + system time (if date part changed)
+            purchaseDate: purchaseData.purchaseDate, 
             items: purchaseData.items,
             totalAmount: purchaseData.totalAmount,
             notes: purchaseData.notes || '',
+            tags: purchaseData.tags || [],
             lastUpdatedAt: serverTimestamp(),
         };
 
@@ -342,13 +349,13 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
             purchasesCollection,
             where("supplierId", "==", supplierId),
             orderBy('purchaseDate', 'desc'),
-            orderBy('createdAt', 'desc') // Secondary sort
+            orderBy('createdAt', 'desc')
         );
       } else {
         purchasesQuery = query(
             purchasesCollection,
             orderBy('purchaseDate', 'desc'),
-            orderBy('createdAt', 'desc') // Secondary sort
+            orderBy('createdAt', 'desc')
         );
       }
       const purchaseSnapshot = await getDocs(purchasesQuery);
@@ -376,13 +383,14 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
           items: items,
           totalAmount: data.totalAmount,
           notes: data.notes || '',
+          tags: data.tags || [],
           createdAt: data.createdAt,
           lastUpdatedAt: data.lastUpdatedAt,
         } as Purchase;
       });
     } catch (e: any) {
-      console.error('[DB getPurchasesFromDb] Error getting purchase documents: ', e);
-      return [];
+        console.error('[DB getPurchasesFromDb] Error getting purchase documents: ', e);
+        return [];
     }
 }
 
@@ -414,6 +422,7 @@ export async function getPurchaseByIdFromDb(id: string): Promise<Purchase | null
             items: items,
             totalAmount: data.totalAmount,
             notes: data.notes || '',
+            tags: data.tags || [],
             createdAt: data.createdAt,
             lastUpdatedAt: data.lastUpdatedAt,
         } as Purchase;
@@ -628,6 +637,101 @@ export async function getCustomersFromDb(): Promise<Customer[]> {
     }
 }
 
+// --- Transactions (Income/Expense) ---
+export interface Transaction {
+  id: string;
+  type: 'income' | 'expense';
+  category: string;
+  description: string;
+  amount: number;
+  transactionDate: Timestamp | Date; // User-selected date + system time
+  notes?: string;
+  tags?: string[];
+  createdAt: Timestamp | Date;
+  updatedAt?: Timestamp | Date;
+}
+
+export interface TransactionInput extends Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> {}
+
+const transactionsCollection = collection(db, 'transactions');
+
+export async function addTransactionToDb(transaction: TransactionInput): Promise<{ success: boolean; id?: string; message?: string }> {
+  try {
+    const dataToSave: any = {
+      ...transaction,
+      amount: Number(transaction.amount) || 0,
+      category: transaction.category.trim(),
+      description: transaction.description.trim(),
+      notes: transaction.notes?.trim() || '',
+      tags: transaction.tags || [],
+      createdAt: serverTimestamp(),
+    };
+
+    if (dataToSave.amount <= 0) {
+        return { success: false, message: "Amount must be a positive number." };
+    }
+
+    const docRef = await addDoc(transactionsCollection, dataToSave);
+    return { success: true, id: docRef.id };
+  } catch (e: any) {
+    console.error('[DB addTransactionToDb] Error adding transaction document: ', e);
+    return { success: false, message: e.message };
+  }
+}
+
+export async function updateTransactionInDb(id: string, transaction: Partial<TransactionInput>): Promise<{ success: boolean; message?: string }> {
+  try {
+    const transactionDoc = doc(db, 'transactions', id);
+    const dataToUpdate: { [key: string]: any } = {
+      updatedAt: serverTimestamp(),
+    };
+
+    // Only add fields to the update object if they are defined in the input
+    if (transaction.category !== undefined) dataToUpdate.category = transaction.category.trim();
+    if (transaction.description !== undefined) dataToUpdate.description = transaction.description.trim();
+    if (transaction.amount !== undefined) {
+      const amount = Number(transaction.amount);
+      if (isNaN(amount) || amount <= 0) {
+        return { success: false, message: "Amount must be a positive number." };
+      }
+      dataToUpdate.amount = amount;
+    }
+    if (transaction.transactionDate !== undefined) dataToUpdate.transactionDate = transaction.transactionDate;
+    if (transaction.notes !== undefined) dataToUpdate.notes = transaction.notes?.trim() || '';
+    if (transaction.tags !== undefined) dataToUpdate.tags = transaction.tags || [];
+    
+    await updateDoc(transactionDoc, dataToUpdate);
+    return { success: true };
+  } catch (e: any) {
+    console.error(`[DB updateTransactionInDb] Error updating transaction document ${id}: `, e);
+    return { success: false, message: e.message };
+  }
+}
+
+
+export async function getTransactionsFromDb(): Promise<Transaction[]> {
+  try {
+      const transactionsQuery = query(transactionsCollection, orderBy('transactionDate', 'desc'));
+      const transactionSnapshot = await getDocs(transactionsQuery);
+      return transactionSnapshot.docs.map(docSnap => {
+          const data = docSnap.data();
+          return {
+              id: docSnap.id,
+              type: data.type,
+              category: data.category,
+              description: data.description,
+              amount: Number(data.amount) || 0,
+              transactionDate: data.transactionDate,
+              notes: data.notes || '',
+              tags: data.tags || [],
+              createdAt: data.createdAt,
+          } as Transaction;
+      });
+  } catch (e: any) {
+      console.error('[DB getTransactionsFromDb] Error getting transaction documents: ', e);
+      return [];
+  }
+}
+
 
 export { firestoreGetDoc as getDoc };
-

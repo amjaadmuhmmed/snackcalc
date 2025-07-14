@@ -136,6 +136,7 @@ export default function BillsPage() {
         (bill.customerPhoneNumber && bill.customerPhoneNumber.toLowerCase().includes(lowerSearchTerm)) ||
         (bill.tableNumber && bill.tableNumber.toLowerCase().includes(lowerSearchTerm)) ||
         (bill.notes && bill.notes.toLowerCase().includes(lowerSearchTerm)) ||
+        (bill.tags && bill.tags.some(tag => tag.toLowerCase().includes(lowerSearchTerm))) ||
         (bill.items && bill.items.some(item =>
           (item.name && item.name.toLowerCase().includes(lowerSearchTerm)) ||
           (item.itemCode && item.itemCode.toLowerCase().includes(lowerSearchTerm))
@@ -173,6 +174,7 @@ export default function BillsPage() {
         customerPhoneNumber: bill.customerPhoneNumber || "",
         tableNumber: bill.tableNumber || "",
         notes: bill.notes || "",
+        tags: bill.tags || [],
       });
 
       router.push(`/?editOrder=${bill.orderNumber}&editBillId=${bill.id}`);
@@ -563,7 +565,7 @@ export default function BillsPage() {
               <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                   type="search"
-                  placeholder="Search orders, customers, items, notes..."
+                  placeholder="Search orders, customers, items, tags, notes..."
                   value={searchTerm}
                   onChange={(e) => {
                     const newSearchTerm = e.target.value;
@@ -594,6 +596,7 @@ export default function BillsPage() {
                   <TableHead className="text-center">Actions</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead className="min-w-[200px] sm:min-w-[250px] md:min-w-[300px]">Items</TableHead>
+                  <TableHead>Tags</TableHead>
                   <TableHead>Notes</TableHead>
                   <TableHead>Table #</TableHead>
                   <TableHead className="text-right">Total</TableHead>
@@ -626,6 +629,17 @@ export default function BillsPage() {
                         ))}
                       </ul>
                     </TableCell>
+                    <TableCell>
+                        {bill.tags && bill.tags.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                                {bill.tags.map((tag, index) => (
+                                    <Badge key={index} variant="outline">{tag}</Badge>
+                                ))}
+                            </div>
+                        ) : (
+                            '-'
+                        )}
+                    </TableCell>
                     <TableCell className="text-xs whitespace-pre-wrap max-w-xs">{bill.notes || '-'}</TableCell>
                     <TableCell>{bill.tableNumber || '-'}</TableCell>
                     <TableCell className="text-right font-semibold">{currencySymbol}{bill.totalAmount.toFixed(2)}</TableCell>
@@ -652,6 +666,3 @@ export default function BillsPage() {
     </div>
   );
 }
-
-
-    

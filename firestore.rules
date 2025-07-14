@@ -1,13 +1,60 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write access to the snacks collection
-    match /snacks/{snackId} {
-      allow read, write: if true; // For development/testing. Secure this for production.
+
+    // --- Transactions (Income/Expense) Collection ---
+    // This collection stores financial transactions other than direct sales/purchases.
+    match /transactions/{transactionId} {
+      // Allow read/write for now during development.
+      // TODO: For production, you'd restrict this to authenticated admin users, e.g.,
+      // `allow read, write: if request.auth != null && request.auth.token.isAdmin == true;`
+      // You should also add data validation rules here.
+      allow read, write: if true;
     }
-    // Allow read/write access to the bills collection
+
+    // --- Snack (Items) Collection ---
+    // Manages the list of items available for sale.
+    match /snack/{snackId} {
+      // Allow read/write for now.
+      // TODO: `allow read: if true;` is okay for public item lists.
+      // TODO: `allow write: if request.auth != null && request.auth.token.isAdmin == true;` for production.
+      allow read, write: if true;
+    }
+
+    // --- Bills (Sales Orders) Collection ---
+    // Stores completed sales orders.
     match /bills/{billId} {
-      allow read, write: if true; // For development/testing. Secure this for production.
+      // Allow read/write for now.
+      // TODO: `allow read, write: if request.auth != null && request.auth.token.isAdmin == true;` for production.
+      // You might have more granular read access for specific users if needed.
+      allow read, write: if true;
+    }
+
+    // --- Purchases Collection ---
+    // Stores purchase orders from suppliers.
+    match /purchases/{purchaseId} {
+      // Allow read/write for now.
+      // TODO: `allow read, write: if request.auth != null && request.auth.token.isAdmin == true;` for production.
+      allow read, write: if true;
+    }
+
+    // --- Suppliers Collection ---
+    // Manages supplier information.
+    match /suppliers/{supplierId} {
+      // Allow read/write for now.
+      // TODO: `allow read: if true;` might be acceptable.
+      // TODO: `allow write: if request.auth != null && request.auth.token.isAdmin == true;` for production.
+      allow read, write: if true;
+    }
+
+    // --- Customers Collection ---
+    // Manages customer information.
+    match /customers/{customerId} {
+       // Allow read/write for now.
+      // TODO: `allow read: if true;` might be acceptable.
+      // TODO: `allow write: if request.auth != null && request.auth.token.isAdmin == true;` for production.
+      allow read, write: if true;
     }
   }
 }
