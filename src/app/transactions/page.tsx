@@ -455,7 +455,7 @@ export default function TransactionsPage() {
                   <FormItem>
                     <FormLabel>Amount ({currencySymbol})</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="0.00" {...field} inputMode="decimal" />
+                      <Input type="text" placeholder="0.00" {...field} inputMode="decimal" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
