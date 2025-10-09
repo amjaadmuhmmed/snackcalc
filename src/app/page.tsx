@@ -644,7 +644,7 @@ function HomeContent() {
     try {
         const result = await parseTransactionFromText(transactionText);
         if (result.success && result.data) {
-            const { type, category, amount, source } = result.data;
+            const { type, category, amount, source, tags } = result.data;
             
             setIncomeExpenseSubView(type);
             
@@ -655,11 +655,13 @@ function HomeContent() {
                     incomeForm.setValue('amount', String(amount));
                     incomeForm.setValue('source', source || lastTransactionSource);
                     incomeForm.setValue('notes', transactionText);
+                    incomeForm.setValue('tags', tags?.join(', ') || '');
                 } else {
                     expenseForm.setValue('category', category);
                     expenseForm.setValue('amount', String(amount));
                     expenseForm.setValue('source', source || lastTransactionSource);
                     expenseForm.setValue('notes', transactionText);
+                    expenseForm.setValue('tags', tags?.join(', ') || '');
                 }
             }, 0);
 
