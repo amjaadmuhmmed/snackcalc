@@ -548,7 +548,6 @@ export async function addTransaction(data: FormData) {
   try {
     const type = data.get('type') as 'income' | 'expense';
     const category = data.get('category') as string;
-    const description = data.get('description') as string;
     const amountString = data.get('amount') as string;
     const source = data.get('source') as string | null;
     const transactionDateString = data.get('transactionDate') as string; 
@@ -560,9 +559,6 @@ export async function addTransaction(data: FormData) {
     }
     if (!category || category.trim() === "") {
       return { success: false, message: 'Category is required.' };
-    }
-    if (!description || description.trim() === "") {
-      return { success: false, message: 'Description is required.' };
     }
     if (!amountString) {
       return { success: false, message: 'Amount is required.' };
@@ -598,7 +594,6 @@ export async function addTransaction(data: FormData) {
     const newTransaction: TransactionInput = {
       type,
       category,
-      description,
       amount,
       source: source || undefined,
       transactionDate,
@@ -624,7 +619,6 @@ export async function updateTransaction(id: string, data: FormData) {
   try {
     const type = data.get('type') as 'income' | 'expense';
     const category = data.get('category') as string;
-    const description = data.get('description') as string;
     const amountString = data.get('amount') as string;
     const source = data.get('source') as string | null;
     const transactionDateString = data.get('transactionDate') as string;
@@ -633,9 +627,6 @@ export async function updateTransaction(id: string, data: FormData) {
 
     if (!category || category.trim() === "") {
       return { success: false, message: 'Category is required.' };
-    }
-    if (!description || description.trim() === "") {
-      return { success: false, message: 'Description is required.' };
     }
     if (!amountString) {
       return { success: false, message: 'Amount is required.' };
@@ -670,7 +661,6 @@ export async function updateTransaction(id: string, data: FormData) {
 
     const transactionToUpdate: Partial<TransactionInput> = {
       category,
-      description,
       amount,
       source: source || undefined,
       transactionDate,

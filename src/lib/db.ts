@@ -652,7 +652,6 @@ export interface Transaction {
   id: string;
   type: 'income' | 'expense';
   category: string;
-  description: string;
   amount: number;
   source?: string;
   transactionDate: Timestamp | Date; // User-selected date + system time
@@ -672,7 +671,6 @@ export async function addTransactionToDb(transaction: TransactionInput): Promise
       ...transaction,
       amount: Number(transaction.amount) || 0,
       category: transaction.category.trim(),
-      description: transaction.description.trim(),
       source: transaction.source?.trim() || '',
       notes: transaction.notes?.trim() || '',
       tags: transaction.tags || [],
@@ -700,7 +698,6 @@ export async function updateTransactionInDb(id: string, transaction: Partial<Tra
 
     // Only add fields to the update object if they are defined in the input
     if (transaction.category !== undefined) dataToUpdate.category = transaction.category.trim();
-    if (transaction.description !== undefined) dataToUpdate.description = transaction.description.trim();
     if (transaction.amount !== undefined) {
       const amount = Number(transaction.amount);
       if (isNaN(amount) || amount <= 0) {
@@ -732,7 +729,6 @@ export async function getTransactionsFromDb(): Promise<Transaction[]> {
               id: docSnap.id,
               type: data.type,
               category: data.category,
-              description: data.description,
               amount: Number(data.amount) || 0,
               source: data.source || '',
               transactionDate: data.transactionDate,

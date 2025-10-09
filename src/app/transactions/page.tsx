@@ -78,7 +78,6 @@ const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
 const transactionSchema = z.object({
   transactionDate: z.date({ required_error: "Transaction date is required." }),
   category: z.string().min(1, "Category is required."),
-  description: z.string().min(1, "Description is required."),
   amount: z.string().refine(val => !isNaN(parseFloat(val)) && parseFloat(val) > 0, "Amount must be a positive number."),
   source: z.string().min(1, "Source is required."),
   notes: z.string().optional(),
@@ -149,7 +148,6 @@ export default function TransactionsPage() {
       const lowerSearchTerm = searchTerm.toLowerCase();
       tempFiltered = tempFiltered.filter(transaction =>
         (transaction.category && transaction.category.toLowerCase().includes(lowerSearchTerm)) ||
-        (transaction.description && transaction.description.toLowerCase().includes(lowerSearchTerm)) ||
         (transaction.source && transaction.source.toLowerCase().includes(lowerSearchTerm)) ||
         (transaction.notes && transaction.notes.toLowerCase().includes(lowerSearchTerm)) ||
         (transaction.tags && transaction.tags.some(tag => tag.toLowerCase().includes(lowerSearchTerm)))
@@ -166,7 +164,6 @@ export default function TransactionsPage() {
     form.reset({
         transactionDate: transactionDate || new Date(),
         category: transaction.category,
-        description: transaction.description,
         amount: transaction.amount.toString(),
         source: transaction.source || "",
         notes: transaction.notes || "",
@@ -181,7 +178,6 @@ export default function TransactionsPage() {
     const formData = new FormData();
     formData.append('type', editingTransaction.type); // Needed for toast message in action
     formData.append('category', data.category);
-    formData.append('description', data.description);
     formData.append('amount', data.amount);
     formData.append('source', data.source);
     formData.append('transactionDate', data.transactionDate.toISOString());
@@ -312,7 +308,7 @@ export default function TransactionsPage() {
               <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                   type="search"
-                  placeholder="Search by category, description, source, tags..."
+                  placeholder="Search by category, source, notes, tags..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-8 w-full sm:w-1/2 md:w-1/3 h-9"
@@ -340,8 +336,7 @@ export default function TransactionsPage() {
                   <TableHead>Category</TableHead>
                   <TableHead>Source</TableHead>
                   <TableHead>Tags</TableHead>
-                  <TableHead className="min-w-[250px]">Description</TableHead>
-                  <TableHead className="min-w-[200px]">Notes</TableHead>
+                  <TableHead className="min-w-[300px]">Notes</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                 </TableRow>
               </TableHeader>
@@ -372,8 +367,7 @@ export default function TransactionsPage() {
                             '-'
                         )}
                     </TableCell>
-                    <TableCell className="min-w-[250px]">{transaction.description}</TableCell>
-                    <TableCell className="text-xs whitespace-pre-wrap max-w-xs min-w-[200px]">{transaction.notes || '-'}</TableCell>
+                    <TableCell className="text-xs whitespace-pre-wrap max-w-xs min-w-[300px]">{transaction.notes || '-'}</TableCell>
                     <TableCell className={`text-right font-semibold ${transaction.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
                         {transaction.type === 'income' ? '+' : '-'}{currencySymbol}{transaction.amount.toFixed(2)}
                     </TableCell>
@@ -443,19 +437,6 @@ export default function TransactionsPage() {
               />
               <FormField
                 control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea placeholder="Detailed description of the transaction" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
                 name="amount"
                 render={({ field }) => (
                   <FormItem>
@@ -490,7 +471,7 @@ export default function TransactionsPage() {
                   <FormItem>
                     <FormLabel>Notes (Optional)</FormLabel>
                     <FormControl>
-                      <Textarea placeholder="Any additional notes" {...field} />
+                      <Textarea placeholder="Detailed notes about the transaction" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

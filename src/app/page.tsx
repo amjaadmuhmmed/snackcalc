@@ -95,7 +95,6 @@ type CustomerFormDataType = z.infer<typeof customerFormSchema>;
 const transactionSchema = z.object({
   transactionDate: z.date({ required_error: "Transaction date is required." }),
   category: z.string().min(1, "Category is required."),
-  description: z.string().min(1, "Description is required."),
   amount: z.string().refine(val => !isNaN(parseFloat(val)) && parseFloat(val) > 0, "Amount must be a positive number."),
   source: z.string().min(1, "Source is required."),
   notes: z.string().optional(),
@@ -224,7 +223,6 @@ function HomeContent() {
     defaultValues: {
       transactionDate: new Date(),
       category: "",
-      description: "",
       amount: "",
       source: "",
       notes: "",
@@ -237,7 +235,6 @@ function HomeContent() {
     defaultValues: {
       transactionDate: new Date(),
       category: "",
-      description: "",
       amount: "",
       source: "",
       notes: "",
@@ -602,7 +599,6 @@ function HomeContent() {
     const formData = new FormData();
     formData.append('type', type);
     formData.append('category', data.category);
-    formData.append('description', data.description);
     formData.append('amount', data.amount);
     formData.append('source', data.source);
     formData.append('transactionDate', data.transactionDate.toISOString());
@@ -620,9 +616,9 @@ function HomeContent() {
             console.warn("Could not save last transaction source to localStorage.");
         }
         if (type === 'income') {
-          incomeForm.reset({ transactionDate: new Date(), category: "", description: "", amount: "", notes: "", tags: "", source: data.source });
+          incomeForm.reset({ transactionDate: new Date(), category: "", amount: "", notes: "", tags: "", source: data.source });
         } else {
-          expenseForm.reset({ transactionDate: new Date(), category: "", description: "", amount: "", notes: "", tags: "", source: data.source });
+          expenseForm.reset({ transactionDate: new Date(), category: "", amount: "", notes: "", tags: "", source: data.source });
         }
         setIncomeExpenseSubView(null); // Go back to button view
       } else {
@@ -1662,19 +1658,6 @@ function HomeContent() {
                                         />
                                         <FormField
                                             control={incomeForm.control}
-                                            name="description"
-                                            render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Description</FormLabel>
-                                                <FormControl>
-                                                <Textarea placeholder="Detailed description of the income" {...field} />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                            )}
-                                        />
-                                        <FormField
-                                            control={incomeForm.control}
                                             name="amount"
                                             render={({ field }) => (
                                             <FormItem>
@@ -1709,7 +1692,7 @@ function HomeContent() {
                                             <FormItem>
                                                 <FormLabel>Notes (Optional)</FormLabel>
                                                 <FormControl>
-                                                <Textarea placeholder="Any additional notes" {...field} />
+                                                <Textarea placeholder="Detailed notes about the income" {...field} />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
@@ -1776,19 +1759,6 @@ function HomeContent() {
                                         />
                                         <FormField
                                             control={expenseForm.control}
-                                            name="description"
-                                            render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Description</FormLabel>
-                                                <FormControl>
-                                                <Textarea placeholder="Detailed description of the expense" {...field} />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                            )}
-                                        />
-                                        <FormField
-                                            control={expenseForm.control}
                                             name="amount"
                                             render={({ field }) => (
                                             <FormItem>
@@ -1823,7 +1793,7 @@ function HomeContent() {
                                             <FormItem>
                                                 <FormLabel>Notes (Optional)</FormLabel>
                                                 <FormControl>
-                                                <Textarea placeholder="Any additional notes" {...field} />
+                                                <Textarea placeholder="Detailed notes about the expense" {...field} />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
