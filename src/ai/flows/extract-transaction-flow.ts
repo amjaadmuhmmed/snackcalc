@@ -20,17 +20,24 @@ const TransactionDataSchema = z.object({
 
 export type TransactionData = z.infer<typeof TransactionDataSchema>;
 
-export async function parseTransaction(text: string): Promise<TransactionData> {
-    return extractTransactionFlow(text);
+const TransactionInputSchema = z.object({
+    prompt: z.string(),
+    existingCategories: z.array(z.string()).optional(),
+});
+export type TransactionInput = z.infer<typeof TransactionInputSchema>;
+
+
+export async function parseTransaction(input: TransactionInput): Promise<TransactionData> {
+    return extractTransactionFlow(input);
 }
 
 const extractTransactionFlow = ai.defineFlow(
   {
     name: 'extractTransactionFlow',
-    inputSchema: z.string(),
+    inputSchema: TransactionInputSchema,
     outputSchema: TransactionDataSchema,
   },
-  async (prompt) => {
+  async (input) => {
     const llmResponse = await ai.generate({
         prompt: `You are an expert financial assistant. Analyze the following text and extract the transaction details into the specified JSON format.
 
@@ -38,7 +45,12 @@ const extractTransactionFlow = ai.defineFlow(
         - Identify the category of the transaction.
         - Extract the numerical amount.
         - Identify the source of the transaction (e.g., cash, bank).
-        - Extract any tags associated with the transaction.
+        - Extract any tags associated with the transaction (e.g., from phrases like 'with tag monthly').
+
+        {{#if existingCategories}}
+        Here is a list of existing categories: {{jsonStringify existingCategories}}
+        If the category you identify is very similar to one in this list, please use the existing category name to maintain consistency. For example, if you see 'Salery', use 'Salary'.
+        {{/if}}
 
         Examples:
         - "rent received of 20000 by cash" -> { "type": "income", "category": "Rent", "amount": 20000, "source": "Cash" }
@@ -46,7 +58,7 @@ const extractTransactionFlow = ai.defineFlow(
         - "salary of 50000 from bank" -> { "type": "income", "category": "Salary", "amount": 50000, "source": "Bank" }
 
         Text to analyze:
-        "${prompt}"`,
+        "${input.prompt}"`,
         output: {
             schema: TransactionDataSchema,
         },

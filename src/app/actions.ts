@@ -46,7 +46,7 @@ import { doc, Timestamp } from 'firebase/firestore';
 import { isValid } from 'date-fns'; 
 import {ai} from '@/ai/ai-instance';
 import {scanReceiptFlow, type ReceiptData} from '@/ai/flows/extract-receipt-flow';
-import { parseTransaction as parseTransactionFlow, type TransactionData } from '@/ai/flows/extract-transaction-flow';
+import { parseTransaction, type TransactionData } from '@/ai/flows/extract-transaction-flow';
 
 
 // --- Item Actions ---
@@ -690,7 +690,13 @@ export async function getTransactions(): Promise<Transaction[]> {
 
 export async function parseTransactionFromText(text: string): Promise<{ success: boolean; data?: TransactionData; message?: string }> {
     try {
-        const result = await parseTransactionFlow(text);
+        const allTransactions = await getTransactionsFromDb();
+        const existingCategories = [...new Set(allTransactions.map(t => t.category))];
+
+        const result = await parseTransaction({
+            prompt: text,
+            existingCategories: existingCategories,
+        });
         return { success: true, data: result };
     } catch (e: any) {
         console.error("Error in parseTransactionFromText action:", e);
