@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import {
@@ -35,16 +36,17 @@ import {
     Purchase,
     TransactionInput,
     addTransactionToDb,
-    getTransactionsFromDb, // Added
-    Transaction, // Added
+    getTransactionsFromDb,
+    Transaction,
     updateTransactionInDb,
 } from '@/lib/db';
 import {revalidatePath} from 'next/cache';
 import { db } from '@/lib/firebase'; 
-import { doc, Timestamp } from 'firebase/firestore'; // Added Timestamp
-import { isValid } from 'date-fns'; // Added
+import { doc, Timestamp } from 'firebase/firestore'; 
+import { isValid } from 'date-fns'; 
 import {ai} from '@/ai/ai-instance';
-import {scanReceiptFlow} from '@/ai/flows/extract-receipt-flow';
+import {scanReceiptFlow, type ReceiptData} from '@/ai/flows/extract-receipt-flow';
+import { parseTransaction as parseTransactionFlow, type TransactionData } from '@/ai/flows/extract-transaction-flow';
 
 
 // --- Item Actions ---
@@ -400,7 +402,7 @@ export async function getPurchaseById(id: string): Promise<Purchase | null> {
     return getPurchaseByIdFromDb(id);
 }
 
-export async function scanReceipt(photoDataUri: string) {
+export async function scanReceipt(photoDataUri: string): Promise<{ success: boolean; data?: ReceiptData; message?: string }> {
   try {
     const result = await scanReceiptFlow({ photoDataUri });
     return { success: true, data: result };
@@ -684,4 +686,14 @@ export async function updateTransaction(id: string, data: FormData) {
 
 export async function getTransactions(): Promise<Transaction[]> {
     return getTransactionsFromDb();
+}
+
+export async function parseTransactionFromText(text: string): Promise<{ success: boolean; data?: TransactionData; message?: string }> {
+    try {
+        const result = await parseTransactionFlow(text);
+        return { success: true, data: result };
+    } catch (e: any) {
+        console.error("Error in parseTransactionFromText action:", e);
+        return { success: false, message: e.message || "Failed to parse transaction from text." };
+    }
 }

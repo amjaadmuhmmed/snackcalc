@@ -1,4 +1,5 @@
 
+
 // src/app/page.tsx
 "use client";
 
@@ -19,9 +20,9 @@ import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DatePicker } from "@/components/ui/date-picker"; // Added DatePicker
-import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building, Landmark, Tag, PiggyBank } from "lucide-react"; // Added Landmark, Tag
+import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building, Landmark, Tag, PiggyBank, Bot } from "lucide-react"; // Added Bot
 import { QRCodeCanvas } from 'qrcode.react';
-import { addItem, getItems, updateItem, deleteItem, saveBill, addSupplier, addCustomer, getCustomers, addTransaction } from "./actions"; // Added addTransaction
+import { addItem, getItems, updateItem, deleteItem, saveBill, addSupplier, addCustomer, getCustomers, addTransaction, parseTransactionFromText } from "./actions"; // Added addTransaction, parseTransactionFromText
 import type { Snack, BillInput, BillItem as DbBillItem, SupplierInput, Customer, CustomerInput, TransactionInput } from "@/lib/db"; 
 import Link from "next/link";
 import {
@@ -176,6 +177,9 @@ function HomeContent() {
   const [showCustomerDialog, setShowCustomerDialog] = useState(false);
   const [isSubmittingCustomer, setIsSubmittingCustomer] = useState(false);
   const [isSubmittingTransaction, setIsSubmittingTransaction] = useState(false);
+
+  const [transactionText, setTransactionText] = useState("");
+  const [isParsingTransaction, setIsParsingTransaction] = useState(false);
 
 
   const {
@@ -628,6 +632,45 @@ function HomeContent() {
       toast({ variant: "destructive", title: "Error", description: "An unexpected error occurred." });
     } finally {
       setIsSubmittingTransaction(false);
+    }
+  };
+
+  const handleParseTransaction = async () => {
+    if (!transactionText.trim()) {
+        toast({ variant: "default", title: "Please enter a transaction description." });
+        return;
+    }
+    setIsParsingTransaction(true);
+    try {
+        const result = await parseTransactionFromText(transactionText);
+        if (result.success && result.data) {
+            const { type, category, amount, source } = result.data;
+            
+            setIncomeExpenseSubView(type);
+            
+            // Use timeout to ensure the correct form is visible before setting values
+            setTimeout(() => {
+                if (type === 'income') {
+                    incomeForm.setValue('category', category);
+                    incomeForm.setValue('amount', String(amount));
+                    incomeForm.setValue('source', source || lastTransactionSource);
+                    incomeForm.setValue('notes', transactionText);
+                } else {
+                    expenseForm.setValue('category', category);
+                    expenseForm.setValue('amount', String(amount));
+                    expenseForm.setValue('source', source || lastTransactionSource);
+                    expenseForm.setValue('notes', transactionText);
+                }
+            }, 0);
+
+            toast({ title: "Fields auto-filled", description: "Please review and save the transaction." });
+        } else {
+            toast({ variant: "destructive", title: "Parsing Failed", description: result.message || "Could not understand the transaction details." });
+        }
+    } catch (error: any) {
+        toast({ variant: "destructive", title: "AI Error", description: error.message || "An error occurred while parsing." });
+    } finally {
+        setIsParsingTransaction(false);
     }
   };
 
@@ -1611,18 +1654,44 @@ function HomeContent() {
                         {incomeExpenseSubView === null && (
                             <>
                                 <h3 className="text-md font-semibold mb-2">Manage Income & Expenses</h3>
-                                <div className="flex flex-col space-y-3">
-                                    <Button variant="outline" className="w-full justify-start" onClick={() => setIncomeExpenseSubView('income')}>
-                                        <PlusCircle className="mr-2 h-4 w-4" /> Add New Income
-                                    </Button>
-                                    <Button variant="outline" className="w-full justify-start" onClick={() => setIncomeExpenseSubView('expense')}>
-                                        <Minus className="mr-2 h-4 w-4" /> Add New Expense
-                                    </Button>
-                                    <Link href="/transactions" passHref>
-                                        <Button variant="outline" className="w-full justify-start">
-                                            <History className="mr-2 h-4 w-4" /> View Transaction History
+                                <div className="space-y-4">
+                                    <div className="relative">
+                                        <Label htmlFor="transaction-text" className="text-sm font-medium">Create Transaction from Text</Label>
+                                        <Bot className="absolute left-2.5 top-10 h-4 w-4 text-muted-foreground" />
+                                        <Input
+                                            id="transaction-text"
+                                            placeholder="e.g., received 5000 for rent"
+                                            value={transactionText}
+                                            onChange={(e) => setTransactionText(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleParseTransaction()}
+                                            className="pl-8 mt-1"
+                                        />
+                                         <Button
+                                            size="sm"
+                                            onClick={handleParseTransaction}
+                                            disabled={isParsingTransaction}
+                                            className="mt-2"
+                                        >
+                                            {isParsingTransaction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
+                                            Parse & Fill
                                         </Button>
-                                    </Link>
+                                    </div>
+
+                                    <Separator />
+
+                                    <div className="flex flex-col space-y-3">
+                                        <Button variant="outline" className="w-full justify-start" onClick={() => setIncomeExpenseSubView('income')}>
+                                            <PlusCircle className="mr-2 h-4 w-4" /> Add New Income Manually
+                                        </Button>
+                                        <Button variant="outline" className="w-full justify-start" onClick={() => setIncomeExpenseSubView('expense')}>
+                                            <Minus className="mr-2 h-4 w-4" /> Add New Expense Manually
+                                        </Button>
+                                        <Link href="/transactions" passHref>
+                                            <Button variant="outline" className="w-full justify-start">
+                                                <History className="mr-2 h-4 w-4" /> View Transaction History
+                                            </Button>
+                                        </Link>
+                                    </div>
                                 </div>
                             </>
                         )}

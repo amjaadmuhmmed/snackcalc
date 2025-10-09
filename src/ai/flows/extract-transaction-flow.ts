@@ -1,0 +1,56 @@
+
+'use server';
+/**
+ * @fileOverview An AI flow for extracting transaction details from natural language.
+ *
+ * - parseTransaction - A function that handles parsing a text string for transaction data.
+ * - TransactionDataSchema - The Zod schema for the output data structure.
+ * - TransactionData - The TypeScript type for the output.
+ */
+
+import { ai } from '@/ai/ai-instance';
+import { z } from 'zod';
+
+const TransactionDataSchema = z.object({
+    type: z.enum(['income', 'expense']).describe('The type of the transaction.'),
+    category: z.string().describe('The category of the transaction (e.g., Rent, Salary, Groceries).'),
+    amount: z.number().describe('The numerical amount of the transaction.'),
+    source: z.string().optional().describe('The source of the funds (e.g., Cash, Bank, Credit Card).'),
+});
+
+export type TransactionData = z.infer<typeof TransactionDataSchema>;
+
+const extractTransactionFlow = ai.defineFlow(
+  {
+    name: 'extractTransactionFlow',
+    inputSchema: z.string(),
+    outputSchema: TransactionDataSchema,
+  },
+  async (prompt) => {
+    const llmResponse = await ai.generate({
+        prompt: `You are an expert financial assistant. Analyze the following text and extract the transaction details into the specified JSON format.
+
+        - Determine if the transaction is 'income' or 'expense'.
+        - Identify the category of the transaction.
+        - Extract the numerical amount.
+        - Identify the source of the transaction (e.g., cash, bank).
+
+        Examples:
+        - "rent received of 20000 by cash" -> { "type": "income", "category": "Rent", "amount": 20000, "source": "Cash" }
+        - "paid 500 for electricity bill" -> { "type": "expense", "category": "Electricity Bill", "amount": 500, "source": "Unknown" }
+        - "salary of 50000 from bank" -> { "type": "income", "category": "Salary", "amount": 50000, "source": "Bank" }
+
+        Text to analyze:
+        "${prompt}"`,
+        output: {
+            schema: TransactionDataSchema,
+        },
+    });
+
+    return llmResponse.output()!;
+  }
+);
+
+export async function parseTransaction(text: string): Promise<TransactionData> {
+    return extractTransactionFlow(text);
+}
