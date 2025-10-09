@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DatePicker } from "@/components/ui/date-picker"; // Added DatePicker
-import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building, Landmark, Tag } from "lucide-react"; // Added Landmark, Tag
+import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building, Landmark, Tag, PiggyBank } from "lucide-react"; // Added Landmark, Tag
 import { QRCodeCanvas } from 'qrcode.react';
 import { addItem, getItems, updateItem, deleteItem, saveBill, addSupplier, addCustomer, getCustomers, addTransaction } from "./actions"; // Added addTransaction
 import type { Snack, BillInput, BillItem as DbBillItem, SupplierInput, Customer, CustomerInput, TransactionInput } from "@/lib/db"; 
@@ -97,6 +97,7 @@ const transactionSchema = z.object({
   category: z.string().min(1, "Category is required."),
   description: z.string().min(1, "Description is required."),
   amount: z.string().refine(val => !isNaN(parseFloat(val)) && parseFloat(val) > 0, "Amount must be a positive number."),
+  source: z.string().min(1, "Source is required."),
   notes: z.string().optional(),
   tags: z.string().optional(),
 });
@@ -113,6 +114,7 @@ type IncomeExpenseSubView = 'income' | 'expense' | null;
 
 const SESSION_STORAGE_ADMIN_LOGGED_IN_KEY = 'isAdminLoggedIn';
 const SESSION_STORAGE_ADMIN_VIEW_KEY = 'adminActiveView';
+const LOCAL_STORAGE_LAST_TRANSACTION_SOURCE = 'lastTransactionSource';
 
 const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
 
@@ -165,6 +167,7 @@ function HomeContent() {
 
   const [adminActiveView, setAdminActiveView] = useState<AdminActiveView>(null);
   const [incomeExpenseSubView, setIncomeExpenseSubView] = useState<IncomeExpenseSubView>(null);
+  const [lastTransactionSource, setLastTransactionSource] = useState("");
 
 
   const [showSupplierDialog, setShowSupplierDialog] = useState(false);
@@ -223,6 +226,7 @@ function HomeContent() {
       category: "",
       description: "",
       amount: "",
+      source: "",
       notes: "",
       tags: "",
     }
@@ -235,10 +239,25 @@ function HomeContent() {
       category: "",
       description: "",
       amount: "",
+      source: "",
       notes: "",
       tags: "",
     }
   });
+
+  useEffect(() => {
+    try {
+        const savedSource = localStorage.getItem(LOCAL_STORAGE_LAST_TRANSACTION_SOURCE);
+        if (savedSource) {
+            setLastTransactionSource(savedSource);
+            incomeForm.setValue('source', savedSource);
+            expenseForm.setValue('source', savedSource);
+        }
+    } catch (e) {
+        console.warn("Could not read last transaction source from localStorage.");
+    }
+  }, [incomeForm, expenseForm]);
+
 
   const loadData = useCallback(async () => {
     setIsLoadingItems(true);
@@ -585,6 +604,7 @@ function HomeContent() {
     formData.append('category', data.category);
     formData.append('description', data.description);
     formData.append('amount', data.amount);
+    formData.append('source', data.source);
     formData.append('transactionDate', data.transactionDate.toISOString());
     if (data.notes) formData.append('notes', data.notes);
     if (data.tags) formData.append('tags', data.tags);
@@ -593,10 +613,16 @@ function HomeContent() {
       const result = await addTransaction(formData);
       if (result.success) {
         toast({ title: result.message });
+        setLastTransactionSource(data.source);
+        try {
+            localStorage.setItem(LOCAL_STORAGE_LAST_TRANSACTION_SOURCE, data.source);
+        } catch (e) {
+            console.warn("Could not save last transaction source to localStorage.");
+        }
         if (type === 'income') {
-          incomeForm.reset({ transactionDate: new Date(), category: "", description: "", amount: "", notes: "", tags: "" });
+          incomeForm.reset({ transactionDate: new Date(), category: "", description: "", amount: "", notes: "", tags: "", source: data.source });
         } else {
-          expenseForm.reset({ transactionDate: new Date(), category: "", description: "", amount: "", notes: "", tags: "" });
+          expenseForm.reset({ transactionDate: new Date(), category: "", description: "", amount: "", notes: "", tags: "", source: data.source });
         }
         setIncomeExpenseSubView(null); // Go back to button view
       } else {
@@ -1527,7 +1553,7 @@ function HomeContent() {
                                 </div>
                                 <div className="grid gap-2">
                                 <Label htmlFor="stockQuantity">Stock Quantity</Label>
-                                <Input id="stockQuantity" type="number" placeholder="Initial Stock (e.g., 0)" {...register("stockQuantity")} />
+                                <Input id="stockQuantity" type="text" placeholder="Initial Stock (e.g., 0)" {...register("stockQuantity")} inputMode="numeric" />
                                 {errors.stockQuantity && <p className="text-sm text-destructive">{errors.stockQuantity.message}</p>}
                                 </div>
                                 <div className="grid gap-2">
@@ -1662,6 +1688,22 @@ function HomeContent() {
                                         />
                                         <FormField
                                             control={incomeForm.control}
+                                            name="source"
+                                            render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Source</FormLabel>
+                                                 <div className="relative">
+                                                    <PiggyBank className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                                    <FormControl>
+                                                        <Input placeholder="e.g., Cash, Bank, Credit" {...field} className="pl-8"/>
+                                                    </FormControl>
+                                                </div>
+                                                <FormMessage />
+                                            </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={incomeForm.control}
                                             name="notes"
                                             render={({ field }) => (
                                             <FormItem>
@@ -1754,6 +1796,22 @@ function HomeContent() {
                                                 <FormControl>
                                                 <Input type="text" placeholder="0.00" {...field} inputMode="decimal" />
                                                 </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={expenseForm.control}
+                                            name="source"
+                                            render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Source</FormLabel>
+                                                <div className="relative">
+                                                    <PiggyBank className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                                    <FormControl>
+                                                        <Input placeholder="e.g., Cash, Bank, Credit" {...field} className="pl-8" />
+                                                    </FormControl>
+                                                </div>
                                                 <FormMessage />
                                             </FormItem>
                                             )}

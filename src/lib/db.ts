@@ -267,6 +267,8 @@ export interface Purchase {
     supplierId?: string;
     purchaseDate: Timestamp | Date; 
     items: PurchaseItem[];
+    tax?: number;
+    serviceCharge?: number;
     totalAmount: number;
     notes?: string;
     tags?: string[];
@@ -286,6 +288,8 @@ export async function addPurchaseToDb(purchase: PurchaseInput): Promise<{ succes
             purchaseDate: purchase.purchaseDate, 
             items: purchase.items,
             totalAmount: purchase.totalAmount,
+            tax: purchase.tax || 0,
+            serviceCharge: purchase.serviceCharge || 0,
             notes: purchase.notes || '',
             tags: purchase.tags || [],
             createdAt: serverTimestamp(), 
@@ -314,6 +318,8 @@ export async function updatePurchaseInDb(id: string, purchaseData: PurchaseInput
             purchaseDate: purchaseData.purchaseDate, 
             items: purchaseData.items,
             totalAmount: purchaseData.totalAmount,
+            tax: purchaseData.tax || 0,
+            serviceCharge: purchaseData.serviceCharge || 0,
             notes: purchaseData.notes || '',
             tags: purchaseData.tags || [],
             lastUpdatedAt: serverTimestamp(),
@@ -381,6 +387,8 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
           supplierId: data.supplierId || '',
           purchaseDate: data.purchaseDate,
           items: items,
+          tax: data.tax || 0,
+          serviceCharge: data.serviceCharge || 0,
           totalAmount: data.totalAmount,
           notes: data.notes || '',
           tags: data.tags || [],
@@ -420,6 +428,8 @@ export async function getPurchaseByIdFromDb(id: string): Promise<Purchase | null
             supplierId: data.supplierId || '',
             purchaseDate: data.purchaseDate,
             items: items,
+            tax: data.tax || 0,
+            serviceCharge: data.serviceCharge || 0,
             totalAmount: data.totalAmount,
             notes: data.notes || '',
             tags: data.tags || [],
@@ -644,6 +654,7 @@ export interface Transaction {
   category: string;
   description: string;
   amount: number;
+  source?: string;
   transactionDate: Timestamp | Date; // User-selected date + system time
   notes?: string;
   tags?: string[];
@@ -662,6 +673,7 @@ export async function addTransactionToDb(transaction: TransactionInput): Promise
       amount: Number(transaction.amount) || 0,
       category: transaction.category.trim(),
       description: transaction.description.trim(),
+      source: transaction.source?.trim() || '',
       notes: transaction.notes?.trim() || '',
       tags: transaction.tags || [],
       createdAt: serverTimestamp(),
@@ -697,6 +709,7 @@ export async function updateTransactionInDb(id: string, transaction: Partial<Tra
       dataToUpdate.amount = amount;
     }
     if (transaction.transactionDate !== undefined) dataToUpdate.transactionDate = transaction.transactionDate;
+    if (transaction.source !== undefined) dataToUpdate.source = transaction.source.trim();
     if (transaction.notes !== undefined) dataToUpdate.notes = transaction.notes?.trim() || '';
     if (transaction.tags !== undefined) dataToUpdate.tags = transaction.tags || [];
     
@@ -721,6 +734,7 @@ export async function getTransactionsFromDb(): Promise<Transaction[]> {
               category: data.category,
               description: data.description,
               amount: Number(data.amount) || 0,
+              source: data.source || '',
               transactionDate: data.transactionDate,
               notes: data.notes || '',
               tags: data.tags || [],

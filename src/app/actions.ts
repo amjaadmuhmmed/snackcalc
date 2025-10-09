@@ -43,6 +43,8 @@ import {revalidatePath} from 'next/cache';
 import { db } from '@/lib/firebase'; 
 import { doc, Timestamp } from 'firebase/firestore'; // Added Timestamp
 import { isValid } from 'date-fns'; // Added
+import {ai} from '@/ai/ai-instance';
+import {scanReceiptFlow} from '@/ai/flows/extract-receipt-flow';
 
 
 // --- Item Actions ---
@@ -290,13 +292,21 @@ export async function getBills() {
 // --- Purchase Actions ---
 export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpdate?: string) {
     try {
+        const totalItemsCost = purchaseData.items.reduce((sum, item) => sum + item.purchaseCost * item.quantity, 0);
+        const finalTotalAmount = totalItemsCost + (purchaseData.tax || 0) + (purchaseData.serviceCharge || 0);
+
+        const finalPurchaseData = {
+          ...purchaseData,
+          totalAmount: finalTotalAmount
+        };
+
         if (purchaseIdToUpdate) {
             const oldPurchase = await getPurchaseByIdFromDb(purchaseIdToUpdate);
             if (!oldPurchase) {
                 return { success: false, message: 'Original purchase order not found for update.' };
             }
             const oldItems = oldPurchase.items;
-            const newItems = purchaseData.items;
+            const newItems = finalPurchaseData.items;
 
             const stockAdjustmentsMap = new Map<string, number>();
 
@@ -329,7 +339,7 @@ export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpda
                 stockUpdateResultMsgPart = " No changes in item quantities, stock levels unaffected by this update.";
             }
             
-            const purchaseUpdateResult = await updatePurchaseInDb(purchaseIdToUpdate, purchaseData);
+            const purchaseUpdateResult = await updatePurchaseInDb(purchaseIdToUpdate, finalPurchaseData);
             if (!purchaseUpdateResult.success) {
                 return { success: false, message: purchaseUpdateResult.message || 'Failed to update purchase order document.' };
             }
@@ -348,12 +358,12 @@ export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpda
 
         } else {
             
-            const purchaseResult = await addPurchaseToDb(purchaseData);
+            const purchaseResult = await addPurchaseToDb(finalPurchaseData);
             if (!purchaseResult.success || !purchaseResult.id) {
                 return { success: false, message: purchaseResult.message || 'Failed to save purchase order.' };
             }
 
-            const stockUpdateResult = await updateStockAfterPurchase(purchaseData.items); 
+            const stockUpdateResult = await updateStockAfterPurchase(finalPurchaseData.items); 
             if (!stockUpdateResult.success) {
                 console.warn(`Purchase ${purchaseResult.id} saved, but stock update failed: ${stockUpdateResult.message}`);
                 return {
@@ -390,6 +400,15 @@ export async function getPurchaseById(id: string): Promise<Purchase | null> {
     return getPurchaseByIdFromDb(id);
 }
 
+export async function scanReceipt(photoDataUri: string) {
+  try {
+    const result = await scanReceiptFlow({ photoDataUri });
+    return { success: true, data: result };
+  } catch (e: any) {
+    console.error("Error in scanReceipt action:", e);
+    return { success: false, message: e.message || "Failed to process receipt image." };
+  }
+}
 
 // --- Supplier Actions ---
 export async function addSupplier(data: FormData): Promise<{ success: boolean; id?: string; supplier?: Supplier; message?: string }> {
@@ -531,6 +550,7 @@ export async function addTransaction(data: FormData) {
     const category = data.get('category') as string;
     const description = data.get('description') as string;
     const amountString = data.get('amount') as string;
+    const source = data.get('source') as string | null;
     const transactionDateString = data.get('transactionDate') as string; 
     const notes = data.get('notes') as string | null;
     const tagsString = data.get('tags') as string | null;
@@ -580,6 +600,7 @@ export async function addTransaction(data: FormData) {
       category,
       description,
       amount,
+      source: source || undefined,
       transactionDate,
       notes: notes || undefined,
       tags: tags,
@@ -605,6 +626,7 @@ export async function updateTransaction(id: string, data: FormData) {
     const category = data.get('category') as string;
     const description = data.get('description') as string;
     const amountString = data.get('amount') as string;
+    const source = data.get('source') as string | null;
     const transactionDateString = data.get('transactionDate') as string;
     const notes = data.get('notes') as string | null;
     const tagsString = data.get('tags') as string | null;
@@ -650,6 +672,7 @@ export async function updateTransaction(id: string, data: FormData) {
       category,
       description,
       amount,
+      source: source || undefined,
       transactionDate,
       notes: notes || undefined,
       tags: tags,

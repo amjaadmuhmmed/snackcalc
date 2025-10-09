@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCap
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowLeft, Calendar as CalendarIcon, XCircle, Search as SearchIcon, Edit, Loader2 } from "lucide-react";
+import { ArrowLeft, Calendar as CalendarIcon, XCircle, Search as SearchIcon, Edit, Loader2, PiggyBank } from "lucide-react";
 import { format, isValid, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -80,6 +80,7 @@ const transactionSchema = z.object({
   category: z.string().min(1, "Category is required."),
   description: z.string().min(1, "Description is required."),
   amount: z.string().refine(val => !isNaN(parseFloat(val)) && parseFloat(val) > 0, "Amount must be a positive number."),
+  source: z.string().min(1, "Source is required."),
   notes: z.string().optional(),
   tags: z.string().optional(),
 });
@@ -149,6 +150,7 @@ export default function TransactionsPage() {
       tempFiltered = tempFiltered.filter(transaction =>
         (transaction.category && transaction.category.toLowerCase().includes(lowerSearchTerm)) ||
         (transaction.description && transaction.description.toLowerCase().includes(lowerSearchTerm)) ||
+        (transaction.source && transaction.source.toLowerCase().includes(lowerSearchTerm)) ||
         (transaction.notes && transaction.notes.toLowerCase().includes(lowerSearchTerm)) ||
         (transaction.tags && transaction.tags.some(tag => tag.toLowerCase().includes(lowerSearchTerm)))
       );
@@ -166,6 +168,7 @@ export default function TransactionsPage() {
         category: transaction.category,
         description: transaction.description,
         amount: transaction.amount.toString(),
+        source: transaction.source || "",
         notes: transaction.notes || "",
         tags: transaction.tags?.join(", ") || "",
     });
@@ -180,6 +183,7 @@ export default function TransactionsPage() {
     formData.append('category', data.category);
     formData.append('description', data.description);
     formData.append('amount', data.amount);
+    formData.append('source', data.source);
     formData.append('transactionDate', data.transactionDate.toISOString());
     if (data.notes) formData.append('notes', data.notes);
     if (data.tags) formData.append('tags', data.tags);
@@ -308,7 +312,7 @@ export default function TransactionsPage() {
               <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                   type="search"
-                  placeholder="Search by category, description, notes, tags..."
+                  placeholder="Search by category, description, source, tags..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-8 w-full sm:w-1/2 md:w-1/3 h-9"
@@ -334,6 +338,7 @@ export default function TransactionsPage() {
                   <TableHead>Type</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Category</TableHead>
+                  <TableHead>Source</TableHead>
                   <TableHead>Tags</TableHead>
                   <TableHead className="min-w-[250px]">Description</TableHead>
                   <TableHead className="min-w-[200px]">Notes</TableHead>
@@ -355,6 +360,7 @@ export default function TransactionsPage() {
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatFirestoreTimestampForDisplay(transaction.transactionDate)}</TableCell>
                     <TableCell>{transaction.category}</TableCell>
+                    <TableCell>{transaction.source || '-'}</TableCell>
                     <TableCell>
                         {transaction.tags && transaction.tags.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
@@ -457,6 +463,22 @@ export default function TransactionsPage() {
                     <FormControl>
                       <Input type="text" placeholder="0.00" {...field} inputMode="decimal" />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+               <FormField
+                control={form.control}
+                name="source"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Source</FormLabel>
+                    <div className="relative">
+                        <PiggyBank className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <FormControl>
+                            <Input placeholder="e.g., Cash, Bank, Credit" {...field} className="pl-8"/>
+                        </FormControl>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
