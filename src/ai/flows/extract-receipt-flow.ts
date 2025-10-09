@@ -43,7 +43,7 @@ const extractReceiptFlow = ai.defineFlow(
       },
     });
 
-    return llmResponse.output()!;
+    return llmResponse.output!;
   }
 );
 

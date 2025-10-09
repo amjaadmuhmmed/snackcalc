@@ -4,7 +4,6 @@
  * @fileOverview An AI flow for extracting transaction details from natural language.
  *
  * - parseTransaction - A function that handles parsing a text string for transaction data.
- * - TransactionDataSchema - The Zod schema for the output data structure.
  * - TransactionData - The TypeScript type for the output.
  */
 
@@ -47,7 +46,7 @@ const extractTransactionFlow = ai.defineFlow(
         },
     });
 
-    return llmResponse.output()!;
+    return llmResponse.output!;
   }
 );
 
