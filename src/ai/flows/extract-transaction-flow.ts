@@ -48,7 +48,7 @@ const extractTransactionFlow = ai.defineFlow(
         - Extract any tags associated with the transaction (e.g., from phrases like 'with tag monthly').
 
         {{#if existingCategories}}
-        Here is a list of existing categories: {{jsonStringify existingCategories}}
+        Here is a list of existing categories: [{{#each existingCategories}}"{{this}}"{{#unless @last}}, {{/unless}}{{/each}}]
         If the category you identify is very similar to one in this list, please use the existing category name to maintain consistency. For example, if you see 'Salery', use 'Salary'.
         {{/if}}
 
