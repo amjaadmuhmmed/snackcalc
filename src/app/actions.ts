@@ -46,7 +46,7 @@ import { doc, Timestamp } from 'firebase/firestore';
 import { isValid } from 'date-fns'; 
 import {ai} from '@/ai/ai-instance';
 import {scanReceiptFlow, type ReceiptData} from '@/ai/flows/extract-receipt-flow';
-import { parseTransaction, type TransactionData } from '@/ai/flows/extract-transaction-flow';
+import { parseTransaction, type TransactionData, TransactionInput as ParseTransactionInput } from '@/ai/flows/extract-transaction-flow';
 
 
 // --- Item Actions ---
