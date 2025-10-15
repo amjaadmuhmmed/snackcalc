@@ -148,13 +148,32 @@ export default function TransactionsPage() {
 
     // Search Term Filter
     if (searchTerm.trim() !== "") {
-      const lowerSearchTerm = searchTerm.toLowerCase();
-      tempFiltered = tempFiltered.filter(transaction =>
-        (transaction.category && transaction.category.toLowerCase().includes(lowerSearchTerm)) ||
-        (transaction.source && transaction.source.toLowerCase().includes(lowerSearchTerm)) ||
-        (transaction.notes && transaction.notes.toLowerCase().includes(lowerSearchTerm)) ||
-        (transaction.tags && transaction.tags.some(tag => tag.toLowerCase().includes(lowerSearchTerm)))
-      );
+        const searchTags = searchTerm.split(',').map(tag => tag.trim().toLowerCase()).filter(tag => tag);
+        const hasTagsToSearch = searchTags.length > 0;
+
+        tempFiltered = tempFiltered.filter(transaction => {
+            const lowerSearchTerm = searchTerm.toLowerCase();
+
+            // General text search
+            const textMatch = (
+                (transaction.category && transaction.category.toLowerCase().includes(lowerSearchTerm)) ||
+                (transaction.source && transaction.source.toLowerCase().includes(lowerSearchTerm)) ||
+                (transaction.notes && transaction.notes.toLowerCase().includes(lowerSearchTerm))
+            );
+
+            // Tag specific search
+            const transactionTags = (transaction.tags || []).map(t => t.toLowerCase());
+            const tagMatch = hasTagsToSearch 
+                ? searchTags.every(searchTag => transactionTags.includes(searchTag)) 
+                : transaction.tags && transaction.tags.some(tag => tag.toLowerCase().includes(lowerSearchTerm));
+
+            // If user is searching for multiple tags, prioritize that. Otherwise, do a general search.
+            if (hasTagsToSearch && searchTerm.includes(',')) {
+                return tagMatch;
+            }
+            
+            return textMatch || tagMatch;
+        });
     }
 
     setFilteredTransactions(tempFiltered);
@@ -311,7 +330,7 @@ export default function TransactionsPage() {
               <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                   type="search"
-                  placeholder="Search by category, source, notes, tags..."
+                  placeholder="Search category, notes, or tags (e.g. tag1,tag2)..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-8 w-full sm:w-1/2 md:w-1/3 h-9"
