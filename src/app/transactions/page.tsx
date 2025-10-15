@@ -1,4 +1,3 @@
-
 // src/app/transactions/page.tsx
 "use client";
 
@@ -10,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCap
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowLeft, Calendar as CalendarIcon, XCircle, Search as SearchIcon, Edit, Loader2, PiggyBank } from "lucide-react";
+import { ArrowLeft, Calendar as CalendarIcon, XCircle, Search as SearchIcon, Edit, Loader2, PiggyBank, X } from "lucide-react";
 import { format, isValid, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -96,6 +95,7 @@ export default function TransactionsPage() {
     to: endOfDay(new Date()),
   });
   const [searchTerm, setSearchTerm] = useState<string>("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
@@ -146,39 +146,43 @@ export default function TransactionsPage() {
       });
     }
 
-    // Search Term Filter
-    if (searchTerm.trim() !== "") {
-        const searchTags = searchTerm.split(',').map(tag => tag.trim().toLowerCase()).filter(tag => tag);
-        const hasTagsToSearch = searchTags.length > 0;
-
+    // Selected Tags Filter (AND logic)
+    if (selectedTags.length > 0) {
         tempFiltered = tempFiltered.filter(transaction => {
-            const lowerSearchTerm = searchTerm.toLowerCase();
-
-            // General text search
-            const textMatch = (
-                (transaction.category && transaction.category.toLowerCase().includes(lowerSearchTerm)) ||
-                (transaction.source && transaction.source.toLowerCase().includes(lowerSearchTerm)) ||
-                (transaction.notes && transaction.notes.toLowerCase().includes(lowerSearchTerm))
-            );
-
-            // Tag specific search
             const transactionTags = (transaction.tags || []).map(t => t.toLowerCase());
-            const tagMatch = hasTagsToSearch 
-                ? searchTags.every(searchTag => transactionTags.includes(searchTag)) 
-                : transaction.tags && transaction.tags.some(tag => tag.toLowerCase().includes(lowerSearchTerm));
-
-            // If user is searching for multiple tags, prioritize that. Otherwise, do a general search.
-            if (hasTagsToSearch && searchTerm.includes(',')) {
-                return tagMatch;
-            }
-            
-            return textMatch || tagMatch;
+            return selectedTags.every(filterTag => transactionTags.includes(filterTag.toLowerCase()));
         });
+    }
+
+
+    // Search Term Filter (for text fields, not tags)
+    if (searchTerm.trim() !== "") {
+        const lowerSearchTerm = searchTerm.toLowerCase();
+        tempFiltered = tempFiltered.filter(transaction =>
+            (transaction.category && transaction.category.toLowerCase().includes(lowerSearchTerm)) ||
+            (transaction.source && transaction.source.toLowerCase().includes(lowerSearchTerm)) ||
+            (transaction.notes && transaction.notes.toLowerCase().includes(lowerSearchTerm))
+        );
     }
 
     setFilteredTransactions(tempFiltered);
 
-  }, [allTransactions, dateRange, searchTerm, loading]);
+  }, [allTransactions, dateRange, searchTerm, selectedTags, loading]);
+
+  const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && searchTerm.trim() !== "") {
+        event.preventDefault();
+        const newTag = searchTerm.trim();
+        if (!selectedTags.map(t => t.toLowerCase()).includes(newTag.toLowerCase())) {
+            setSelectedTags(prev => [...prev, newTag]);
+        }
+        setSearchTerm("");
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+      setSelectedTags(prev => prev.filter(tag => tag.toLowerCase() !== tagToRemove.toLowerCase()));
+  };
 
   const handleEditClick = (transaction: Transaction) => {
     setEditingTransaction(transaction);
@@ -259,6 +263,9 @@ export default function TransactionsPage() {
     if (searchTerm) {
       description += ` matching "${searchTerm}"`;
     }
+    if (selectedTags.length > 0) {
+        description += ` tagged with: ${selectedTags.join(', ')}`;
+    }
     description += ".";
     return description;
   };
@@ -326,16 +333,45 @@ export default function TransactionsPage() {
                     )}
                 </div>
             </div>
-            <div className="relative">
-              <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                  type="search"
-                  placeholder="Search category, notes, or tags (e.g. tag1,tag2)..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8 w-full sm:w-1/2 md:w-1/3 h-9"
-                  aria-label="Search transactions"
-              />
+            <div className="space-y-2">
+                <div className="relative">
+                <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                    type="search"
+                    placeholder="Search text or add a tag by pressing Enter..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={handleSearchKeyDown}
+                    className="pl-8 w-full sm:w-1/2 md:w-1/3 h-9"
+                    aria-label="Search transactions"
+                />
+                </div>
+                {selectedTags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 items-center">
+                        <span className="text-sm text-muted-foreground">Filtering by tags:</span>
+                        {selectedTags.map(tag => (
+                            <Badge key={tag} variant="secondary" className="pl-2 pr-1 py-0.5 text-sm">
+                                {tag}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="ml-1 h-4 w-4 rounded-full"
+                                    onClick={() => removeTag(tag)}
+                                >
+                                    <X className="h-3 w-3" />
+                                </Button>
+                            </Badge>
+                        ))}
+                         <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs text-muted-foreground"
+                            onClick={() => setSelectedTags([])}
+                         >
+                            Clear All
+                         </Button>
+                    </div>
+                )}
             </div>
         </CardHeader>
         <CardContent>
