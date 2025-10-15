@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCap
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowLeft, Calendar as CalendarIcon, XCircle, Search as SearchIcon, Edit, Loader2, PiggyBank, X } from "lucide-react";
+import { ArrowLeft, Calendar as CalendarIcon, XCircle, Search as SearchIcon, Edit, Loader2, PiggyBank, X, Tag } from "lucide-react";
 import { format, isValid, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -94,7 +94,8 @@ export default function TransactionsPage() {
     from: startOfDay(new Date()),
     to: endOfDay(new Date()),
   });
-  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [textSearchTerm, setTextSearchTerm] = useState<string>("");
+  const [tagSearchTerm, setTagSearchTerm] = useState<string>("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -155,9 +156,9 @@ export default function TransactionsPage() {
     }
 
 
-    // Search Term Filter (for text fields, not tags)
-    if (searchTerm.trim() !== "") {
-        const lowerSearchTerm = searchTerm.toLowerCase();
+    // Text Search Term Filter
+    if (textSearchTerm.trim() !== "") {
+        const lowerSearchTerm = textSearchTerm.toLowerCase();
         tempFiltered = tempFiltered.filter(transaction =>
             (transaction.category && transaction.category.toLowerCase().includes(lowerSearchTerm)) ||
             (transaction.source && transaction.source.toLowerCase().includes(lowerSearchTerm)) ||
@@ -167,16 +168,16 @@ export default function TransactionsPage() {
 
     setFilteredTransactions(tempFiltered);
 
-  }, [allTransactions, dateRange, searchTerm, selectedTags, loading]);
+  }, [allTransactions, dateRange, textSearchTerm, selectedTags, loading]);
 
-  const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter' && searchTerm.trim() !== "") {
+  const handleTagSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && tagSearchTerm.trim() !== "") {
         event.preventDefault();
-        const newTag = searchTerm.trim();
+        const newTag = tagSearchTerm.trim();
         if (!selectedTags.map(t => t.toLowerCase()).includes(newTag.toLowerCase())) {
             setSelectedTags(prev => [...prev, newTag]);
         }
-        setSearchTerm("");
+        setTagSearchTerm("");
     }
   };
 
@@ -260,8 +261,8 @@ export default function TransactionsPage() {
       description = "Showing all transactions";
     }
 
-    if (searchTerm) {
-      description += ` matching "${searchTerm}"`;
+    if (textSearchTerm) {
+      description += ` matching "${textSearchTerm}"`;
     }
     if (selectedTags.length > 0) {
         description += ` tagged with: ${selectedTags.join(', ')}`;
@@ -333,18 +334,35 @@ export default function TransactionsPage() {
                     )}
                 </div>
             </div>
-            <div className="space-y-2">
-                <div className="relative">
-                <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                    type="search"
-                    placeholder="Search text or add a tag by pressing Enter..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    onKeyDown={handleSearchKeyDown}
-                    className="pl-8 w-full sm:w-1/2 md:w-1/3 h-9"
-                    aria-label="Search transactions"
-                />
+            <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="relative">
+                        <Label htmlFor="text-search" className="sr-only">Search Text</Label>
+                        <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            id="text-search"
+                            type="search"
+                            placeholder="Search category, source, notes..."
+                            value={textSearchTerm}
+                            onChange={(e) => setTextSearchTerm(e.target.value)}
+                            className="pl-8 w-full h-9"
+                            aria-label="Search transactions by text"
+                        />
+                    </div>
+                     <div className="relative">
+                        <Label htmlFor="tag-search" className="sr-only">Add Tag Filter</Label>
+                        <Tag className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            id="tag-search"
+                            type="search"
+                            placeholder="Add tag filter and press Enter..."
+                            value={tagSearchTerm}
+                            onChange={(e) => setTagSearchTerm(e.target.value)}
+                            onKeyDown={handleTagSearchKeyDown}
+                            className="pl-8 w-full h-9"
+                            aria-label="Add tag filter"
+                        />
+                    </div>
                 </div>
                 {selectedTags.length > 0 && (
                     <div className="flex flex-wrap gap-2 items-center">
@@ -363,9 +381,9 @@ export default function TransactionsPage() {
                             </Badge>
                         ))}
                          <Button
-                            variant="ghost"
+                            variant="link"
                             size="sm"
-                            className="text-xs text-muted-foreground"
+                            className="text-xs text-muted-foreground h-auto p-0"
                             onClick={() => setSelectedTags([])}
                          >
                             Clear All
