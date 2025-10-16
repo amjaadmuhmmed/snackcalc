@@ -407,32 +407,25 @@ export default function TransactionsPage() {
                <TableCaption>A list of your recent income and expense transactions.</TableCaption>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[100px]">Actions</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Date</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Source</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Date</TableHead>
                   <TableHead>Tags</TableHead>
                   <TableHead className="min-w-[300px]">Notes</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead className="w-[100px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredTransactions.map((transaction) => (
                   <TableRow key={transaction.id}>
-                    <TableCell>
-                      <Button variant="outline" size="sm" onClick={() => handleEditClick(transaction)}>
-                        <Edit className="h-3 w-3 mr-1" /> Edit
-                      </Button>
-                    </TableCell>
-                    <TableCell>
-                        <Badge variant={transaction.type === 'income' ? 'default' : 'destructive'}>
-                            {transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1)}
-                        </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{formatFirestoreTimestampForDisplay(transaction.transactionDate)}</TableCell>
                     <TableCell>{transaction.category}</TableCell>
                     <TableCell>{transaction.source || '-'}</TableCell>
+                    <TableCell className={`text-right font-semibold ${transaction.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                        {transaction.type === 'income' ? '+' : '-'}{currencySymbol}{transaction.amount.toFixed(2)}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{formatFirestoreTimestampForDisplay(transaction.transactionDate)}</TableCell>
                     <TableCell>
                         {transaction.tags && transaction.tags.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
@@ -445,8 +438,15 @@ export default function TransactionsPage() {
                         )}
                     </TableCell>
                     <TableCell className="text-xs whitespace-pre-wrap max-w-xs min-w-[300px]">{transaction.notes || '-'}</TableCell>
-                    <TableCell className={`text-right font-semibold ${transaction.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                        {transaction.type === 'income' ? '+' : '-'}{currencySymbol}{transaction.amount.toFixed(2)}
+                    <TableCell>
+                        <Badge variant={transaction.type === 'income' ? 'default' : 'destructive'}>
+                            {transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1)}
+                        </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="outline" size="sm" onClick={() => handleEditClick(transaction)}>
+                        <Edit className="h-3 w-3 mr-1" /> Edit
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
