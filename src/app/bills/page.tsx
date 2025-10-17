@@ -33,36 +33,33 @@ import {
 
 const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
 
-// Helper to convert Firestore Timestamp to JS Date
+// This helper is now more robust to handle different timestamp representations from Firebase.
 const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
   if (!timestamp) return null;
   try {
-    if (timestamp instanceof Date) { // Check if it's already a JS Date
+    // Already a JS Date object
+    if (timestamp instanceof Date) {
       return isValid(timestamp) ? timestamp : null;
     }
-    if (timestamp.toDate && typeof timestamp.toDate === 'function') { // General toDate (covers Firestore Timestamp)
+    // Firebase client SDK Timestamp object
+    if (timestamp.toDate && typeof timestamp.toDate === 'function') {
       const d = timestamp.toDate();
       return isValid(d) ? d : null;
     }
-    if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') { // For serialized timestamps (e.g. from JSON)
+    // Serialized timestamp from server actions (often happens with Next.js)
+    if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') {
       const d = new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
       return isValid(d) ? d : null;
     }
-    if (typeof timestamp === 'number') { // For Unix ms timestamps
-      const d = new Date(timestamp);
-      return isValid(d) ? d : null;
-    }
-    if (typeof timestamp === 'string') { // For ISO strings or other parseable date strings
-      const d = new Date(timestamp);
-      return isValid(d) ? d : null;
-    }
-    console.warn('Invalid or unsupported timestamp format for conversion:', typeof timestamp, timestamp);
-    return null;
+    // Fallback for Unix milliseconds or ISO string
+    const d = new Date(timestamp);
+    return isValid(d) ? d : null;
   } catch (e) {
     console.error("Error converting timestamp to Date:", e, "Timestamp value:", timestamp);
     return null;
   }
 };
+
 
 interface SummaryItem {
   name: string;

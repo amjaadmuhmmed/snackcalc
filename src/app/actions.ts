@@ -574,15 +574,14 @@ export async function addTransaction(data: FormData) {
       return { success: false, message: 'Amount must be a positive number.' };
     }
     
-    // Correctly handle date to prevent timezone shifts
-    const utcDate = new Date(transactionDateString);
-    const userSelectedDate = new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate(), 12, 0, 0);
-
-    if (!isValid(userSelectedDate)) {
-        return { success: false, message: 'Invalid transaction date format.' };
+    // This is the robust fix: Convert the ISO string directly to a Timestamp.
+    // The client sends an ISO string (e.g., from `date.toISOString()`).
+    // `Timestamp.fromDate(new Date(isoString))` correctly preserves the date part across timezones.
+    const transactionDate = Timestamp.fromDate(new Date(transactionDateString));
+    if (!isValid(transactionDate.toDate())) {
+      return { success: false, message: 'Invalid transaction date format.' };
     }
     
-    const transactionDate = Timestamp.fromDate(userSelectedDate);
 
     const tags = tagsString ? tagsString.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
 
@@ -635,15 +634,11 @@ export async function updateTransaction(id: string, data: FormData) {
       return { success: false, message: 'Amount must be a positive number.' };
     }
     
-    // Correctly handle date to prevent timezone shifts
-    const utcDate = new Date(transactionDateString);
-    const userSelectedDate = new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate(), 12, 0, 0);
-
-    if (!isValid(userSelectedDate)) {
-        return { success: false, message: 'Invalid transaction date format.' };
+    // This is the robust fix: Convert the ISO string directly to a Timestamp.
+    const transactionDate = Timestamp.fromDate(new Date(transactionDateString));
+    if (!isValid(transactionDate.toDate())) {
+      return { success: false, message: 'Invalid transaction date format.' };
     }
-    
-    const transactionDate = Timestamp.fromDate(userSelectedDate);
 
     const tags = tagsString ? tagsString.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
 
