@@ -634,8 +634,25 @@ export async function updateTransaction(id: string, data: FormData) {
       return { success: false, message: 'Amount must be a positive number.' };
     }
     
-    // This is the robust fix: Convert the ISO string directly to a Timestamp.
-    const transactionDate = Timestamp.fromDate(new Date(transactionDateString));
+    // IDEA 1 IMPLEMENTATION:
+    // Take the new date from the date picker and combine it with the *current* time.
+    const userSelectedDate = new Date(transactionDateString); // This will be at 00:00 UTC
+    const now = new Date(); // Current time
+
+    // Create a new Date object using the year, month, and day from the user's selection,
+    // and the hours, minutes, seconds from the current time. This preserves the user's
+    // intended date and captures the time of the update.
+    const combinedDateTime = new Date(
+        userSelectedDate.getUTCFullYear(),
+        userSelectedDate.getUTCMonth(),
+        userSelectedDate.getUTCDate(),
+        now.getHours(),
+        now.getMinutes(),
+        now.getSeconds()
+    );
+
+    const transactionDate = Timestamp.fromDate(combinedDateTime);
+    
     if (!isValid(transactionDate.toDate())) {
       return { success: false, message: 'Invalid transaction date format.' };
     }
