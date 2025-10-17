@@ -573,23 +573,16 @@ export async function addTransaction(data: FormData) {
     if (isNaN(amount) || amount <= 0) {
       return { success: false, message: 'Amount must be a positive number.' };
     }
+    
+    // Correctly handle date to prevent timezone shifts
+    const utcDate = new Date(transactionDateString);
+    const userSelectedDate = new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate(), 12, 0, 0);
 
-    const userSelectedDate = new Date(transactionDateString); // Parses ISO string
-    if (!isValid(userSelectedDate)) { // Use isValid from date-fns
+    if (!isValid(userSelectedDate)) {
         return { success: false, message: 'Invalid transaction date format.' };
     }
     
-    const now = new Date();
-    const combinedDateTime = new Date(
-        userSelectedDate.getFullYear(),
-        userSelectedDate.getMonth(),
-        userSelectedDate.getDate(),
-        now.getHours(),
-        now.getMinutes(),
-        now.getSeconds(),
-        now.getMilliseconds()
-    );
-    const transactionDate = Timestamp.fromDate(combinedDateTime);
+    const transactionDate = Timestamp.fromDate(userSelectedDate);
 
     const tags = tagsString ? tagsString.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
 
@@ -641,23 +634,16 @@ export async function updateTransaction(id: string, data: FormData) {
     if (isNaN(amount) || amount <= 0) {
       return { success: false, message: 'Amount must be a positive number.' };
     }
+    
+    // Correctly handle date to prevent timezone shifts
+    const utcDate = new Date(transactionDateString);
+    const userSelectedDate = new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate(), 12, 0, 0);
 
-    const userSelectedDate = new Date(transactionDateString);
     if (!isValid(userSelectedDate)) {
         return { success: false, message: 'Invalid transaction date format.' };
     }
     
-    const now = new Date();
-    const combinedDateTime = new Date(
-        userSelectedDate.getFullYear(),
-        userSelectedDate.getMonth(),
-        userSelectedDate.getDate(),
-        now.getHours(),
-        now.getMinutes(),
-        now.getSeconds(),
-        now.getMilliseconds()
-    );
-    const transactionDate = Timestamp.fromDate(combinedDateTime);
+    const transactionDate = Timestamp.fromDate(userSelectedDate);
 
     const tags = tagsString ? tagsString.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
 
