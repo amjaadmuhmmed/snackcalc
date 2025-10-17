@@ -692,8 +692,10 @@ function HomeContent() {
             const result = await parseTransactionFromAudio(base64Audio);
 
             if (result.success && result.data) {
-                const { type, category, amount, source, tags } = result.data;
-                const transcribedText = result.transcribedText || 'Audio processed';
+                const { parsedData, transcribedText } = result.data;
+                const { type, category, amount, source, tags } = parsedData;
+
+                setTransactionText(transcribedText); // Populate the text input
                 
                 setIncomeExpenseSubView(type);
                 

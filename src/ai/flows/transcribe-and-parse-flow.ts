@@ -16,7 +16,14 @@ const AudioInputSchema = z.object({
   existingCategories: z.array(z.string()).optional(),
 });
 
-export async function transcribeAndParseTransaction(input: z.infer<typeof AudioInputSchema>): Promise<TransactionData> {
+const TranscribedAndParsedOutputSchema = z.object({
+    transcribedText: z.string(),
+    parsedData: z.custom<TransactionData>(),
+});
+
+export type TranscribedAndParsedOutput = z.infer<typeof TranscribedAndParsedOutputSchema>;
+
+export async function transcribeAndParseTransaction(input: z.infer<typeof AudioInputSchema>): Promise<TranscribedAndParsedOutput> {
   return transcribeAndParseFlow(input);
 }
 
@@ -24,7 +31,7 @@ const transcribeAndParseFlow = ai.defineFlow(
   {
     name: 'transcribeAndParseFlow',
     inputSchema: AudioInputSchema,
-    outputSchema: z.custom<TransactionData>(),
+    outputSchema: TranscribedAndParsedOutputSchema,
   },
   async (input) => {
     // Step 1: Transcribe the audio to text.
@@ -44,6 +51,10 @@ const transcribeAndParseFlow = ai.defineFlow(
     };
 
     const parsedData = await parseTransaction(transactionInput);
-    return parsedData;
+    
+    return {
+        transcribedText: transcribedText,
+        parsedData: parsedData,
+    };
   }
 );

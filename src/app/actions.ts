@@ -47,7 +47,7 @@ import { isValid } from 'date-fns';
 import {ai} from '@/ai/ai-instance';
 import {scanReceiptFlow, type ReceiptData} from '@/ai/flows/extract-receipt-flow';
 import { parseTransaction, type TransactionData, TransactionInput as ParseTransactionInput } from '@/ai/flows/extract-transaction-flow';
-import { transcribeAndParseTransaction } from '@/ai/flows/transcribe-and-parse-flow';
+import { transcribeAndParseTransaction, type TranscribedAndParsedOutput } from '@/ai/flows/transcribe-and-parse-flow';
 
 
 // --- Item Actions ---
@@ -635,24 +635,7 @@ export async function updateTransaction(id: string, data: FormData) {
       return { success: false, message: 'Amount must be a positive number.' };
     }
     
-    // IDEA 1 IMPLEMENTATION:
-    // Take the new date from the date picker and combine it with the *current* time.
-    const userSelectedDate = new Date(transactionDateString); // This will be at 00:00 UTC
-    const now = new Date(); // Current time
-
-    // Create a new Date object using the year, month, and day from the user's selection,
-    // and the hours, minutes, seconds from the current time. This preserves the user's
-    // intended date and captures the time of the update.
-    const combinedDateTime = new Date(
-        userSelectedDate.getUTCFullYear(),
-        userSelectedDate.getUTCMonth(),
-        userSelectedDate.getUTCDate(),
-        now.getHours(),
-        now.getMinutes(),
-        now.getSeconds()
-    );
-
-    const transactionDate = Timestamp.fromDate(combinedDateTime);
+    const transactionDate = Timestamp.fromDate(new Date(transactionDateString));
     
     if (!isValid(transactionDate.toDate())) {
       return { success: false, message: 'Invalid transaction date format.' };
@@ -703,7 +686,7 @@ export async function parseTransactionFromText(text: string): Promise<{ success:
     }
 }
 
-export async function parseTransactionFromAudio(audioDataUri: string): Promise<{ success: boolean; data?: TransactionData; message?: string, transcribedText?: string }> {
+export async function parseTransactionFromAudio(audioDataUri: string): Promise<{ success: boolean; data?: TranscribedAndParsedOutput; message?: string }> {
     try {
         const allTransactions = await getTransactionsFromDb();
         const existingCategories = [...new Set(allTransactions.map(t => t.category))];
@@ -713,9 +696,6 @@ export async function parseTransactionFromAudio(audioDataUri: string): Promise<{
             existingCategories,
         });
 
-        // The underlying flow that this calls does not return the transcribed text,
-        // so we cannot return it here without modifying that flow.
-        // For now, we just return the parsed data.
         return { success: true, data: result };
     } catch (e: any) {
         console.error("Error in parseTransactionFromAudio action:", e);
