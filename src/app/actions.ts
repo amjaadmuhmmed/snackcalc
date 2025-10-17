@@ -47,6 +47,7 @@ import { isValid } from 'date-fns';
 import {ai} from '@/ai/ai-instance';
 import {scanReceiptFlow, type ReceiptData} from '@/ai/flows/extract-receipt-flow';
 import { parseTransaction, type TransactionData, TransactionInput as ParseTransactionInput } from '@/ai/flows/extract-transaction-flow';
+import { transcribeAndParseTransaction } from '@/ai/flows/transcribe-and-parse-flow';
 
 
 // --- Item Actions ---
@@ -699,5 +700,25 @@ export async function parseTransactionFromText(text: string): Promise<{ success:
     } catch (e: any) {
         console.error("Error in parseTransactionFromText action:", e);
         return { success: false, message: e.message || "Failed to parse transaction from text." };
+    }
+}
+
+export async function parseTransactionFromAudio(audioDataUri: string): Promise<{ success: boolean; data?: TransactionData; message?: string, transcribedText?: string }> {
+    try {
+        const allTransactions = await getTransactionsFromDb();
+        const existingCategories = [...new Set(allTransactions.map(t => t.category))];
+
+        const result = await transcribeAndParseTransaction({
+            audioDataUri,
+            existingCategories,
+        });
+
+        // The underlying flow that this calls does not return the transcribed text,
+        // so we cannot return it here without modifying that flow.
+        // For now, we just return the parsed data.
+        return { success: true, data: result };
+    } catch (e: any) {
+        console.error("Error in parseTransactionFromAudio action:", e);
+        return { success: false, message: e.message || "Failed to parse transaction from audio." };
     }
 }

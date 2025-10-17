@@ -20,9 +20,9 @@ import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DatePicker } from "@/components/ui/date-picker"; // Added DatePicker
-import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building, Landmark, Tag, PiggyBank, Bot } from "lucide-react"; // Added Bot
+import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building, Landmark, Tag, PiggyBank, Bot, Mic, MicOff, Square } from "lucide-react"; // Added Mic, MicOff, Square
 import { QRCodeCanvas } from 'qrcode.react';
-import { addItem, getItems, updateItem, deleteItem, saveBill, addSupplier, addCustomer, getCustomers, addTransaction, parseTransactionFromText } from "./actions"; // Added addTransaction, parseTransactionFromText
+import { addItem, getItems, updateItem, deleteItem, saveBill, addSupplier, addCustomer, getCustomers, addTransaction, parseTransactionFromText, parseTransactionFromAudio } from "./actions"; // Added addTransaction, parseTransactionFromText, parseTransactionFromAudio
 import type { Snack, BillInput, BillItem as DbBillItem, SupplierInput, Customer, CustomerInput, TransactionInput } from "@/lib/db"; 
 import Link from "next/link";
 import {
@@ -180,6 +180,10 @@ function HomeContent() {
 
   const [transactionText, setTransactionText] = useState("");
   const [isParsingTransaction, setIsParsingTransaction] = useState(false);
+
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
 
   const {
@@ -673,6 +677,88 @@ function HomeContent() {
         toast({ variant: "destructive", title: "AI Error", description: error.message || "An error occurred while parsing." });
     } finally {
         setIsParsingTransaction(false);
+    }
+  };
+
+  const handleParseTransactionFromAudio = async (audioBlob: Blob) => {
+    setIsParsingTransaction(true);
+    try {
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = async () => {
+            const base64Audio = reader.result as string;
+            
+            const result = await parseTransactionFromAudio(base64Audio);
+
+            if (result.success && result.data) {
+                const { type, category, amount, source, tags } = result.data;
+                const transcribedText = result.transcribedText || 'Audio processed';
+                
+                setIncomeExpenseSubView(type);
+                
+                setTimeout(() => {
+                    if (type === 'income') {
+                        incomeForm.setValue('category', category);
+                        incomeForm.setValue('amount', String(amount));
+                        incomeForm.setValue('source', source || lastTransactionSource);
+                        incomeForm.setValue('notes', transcribedText);
+                        incomeForm.setValue('tags', tags?.join(', ') || '');
+                    } else {
+                        expenseForm.setValue('category', category);
+                        expenseForm.setValue('amount', String(amount));
+                        expenseForm.setValue('source', source || lastTransactionSource);
+                        expenseForm.setValue('notes', transcribedText);
+                        expenseForm.setValue('tags', tags?.join(', ') || '');
+                    }
+                }, 0);
+
+                toast({ title: "Fields auto-filled from voice", description: "Please review and save the transaction." });
+            } else {
+                toast({ variant: "destructive", title: "Parsing Failed", description: result.message || "Could not understand the transaction details from audio." });
+            }
+            setIsParsingTransaction(false);
+        };
+    } catch (error: any) {
+        toast({ variant: "destructive", title: "AI Error", description: error.message || "An error occurred while parsing audio." });
+        setIsParsingTransaction(false);
+    }
+  };
+
+  const handleStartRecording = async () => {
+    if (isRecording) {
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const newMediaRecorder = new MediaRecorder(stream);
+      setMediaRecorder(newMediaRecorder);
+      
+      newMediaRecorder.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
+      
+      newMediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        handleParseTransactionFromAudio(audioBlob);
+        audioChunksRef.current = [];
+        stream.getTracks().forEach(track => track.stop()); // Stop microphone
+      };
+
+      newMediaRecorder.start();
+      setIsRecording(true);
+      toast({ title: "Recording started...", description: "Click the stop button when you're done." });
+    } catch (err) {
+      console.error("Error starting recording:", err);
+      toast({ variant: "destructive", title: "Microphone Error", description: "Could not access microphone. Please check permissions." });
+    }
+  };
+
+  const handleStopRecording = () => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      setIsRecording(false);
+      setMediaRecorder(null);
+      toast({ title: "Recording stopped.", description: "Processing your voice input..." });
     }
   };
 
@@ -1658,24 +1744,38 @@ function HomeContent() {
                                 <h3 className="text-md font-semibold mb-2">Manage Income & Expenses</h3>
                                 <div className="space-y-4">
                                     <div className="relative">
-                                        <Label htmlFor="transaction-text" className="text-sm font-medium">Create Transaction from Text</Label>
-                                        <Bot className="absolute left-2.5 top-10 h-4 w-4 text-muted-foreground" />
-                                        <Input
-                                            id="transaction-text"
-                                            placeholder="e.g., received 5000 for rent"
-                                            value={transactionText}
-                                            onChange={(e) => setTransactionText(e.target.value)}
-                                            onKeyDown={(e) => e.key === 'Enter' && handleParseTransaction()}
-                                            className="pl-8 mt-1"
-                                        />
+                                        <Label htmlFor="transaction-text" className="text-sm font-medium">Create Transaction from Text or Voice</Label>
+                                        <div className="flex items-center gap-2 mt-1">
+                                          <div className="relative flex-grow">
+                                            <Bot className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                            <Input
+                                                id="transaction-text"
+                                                placeholder="e.g., received 5000 for rent"
+                                                value={transactionText}
+                                                onChange={(e) => setTransactionText(e.target.value)}
+                                                onKeyDown={(e) => e.key === 'Enter' && handleParseTransaction()}
+                                                className="pl-8"
+                                                disabled={isRecording}
+                                            />
+                                          </div>
+                                          {!isRecording ? (
+                                              <Button size="icon" variant="outline" onClick={handleStartRecording} disabled={isParsingTransaction} aria-label="Start recording">
+                                                  <Mic className="h-4 w-4" />
+                                              </Button>
+                                          ) : (
+                                              <Button size="icon" variant="destructive" onClick={handleStopRecording} aria-label="Stop recording">
+                                                  <Square className="h-4 w-4" />
+                                              </Button>
+                                          )}
+                                        </div>
                                          <Button
                                             size="sm"
                                             onClick={handleParseTransaction}
-                                            disabled={isParsingTransaction}
+                                            disabled={isParsingTransaction || isRecording}
                                             className="mt-2"
                                         >
                                             {isParsingTransaction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
-                                            Parse & Fill
+                                            Parse Text
                                         </Button>
                                     </div>
 
