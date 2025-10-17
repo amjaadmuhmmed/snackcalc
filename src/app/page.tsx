@@ -1775,7 +1775,7 @@ function HomeContent() {
                                             className="mt-2"
                                         >
                                             {isParsingTransaction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
-                                            Parse Text
+                                            Smart Entry
                                         </Button>
                                     </div>
 
