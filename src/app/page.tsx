@@ -628,6 +628,7 @@ function HomeContent() {
         } else {
           expenseForm.reset({ transactionDate: new Date(), category: "", amount: "", notes: "", tags: "", source: data.source });
         }
+        setTransactionText(""); // Clear smart entry on success
         setIncomeExpenseSubView(null); // Go back to button view
       } else {
         toast({ variant: "destructive", title: "Error", description: result.message });
