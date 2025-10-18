@@ -423,7 +423,7 @@ export default function TransactionsPage() {
                   <TableHead>Tags</TableHead>
                   <TableHead className="min-w-[300px]">Notes</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead className="w-[100px]">Actions</TableHead>
+                  <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -452,13 +452,13 @@ export default function TransactionsPage() {
                             {transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1)}
                         </Badge>
                     </TableCell>
-                    <TableCell className="space-x-1">
+                    <TableCell className="text-center space-x-1">
                       <Button variant="outline" size="sm" onClick={() => handleEditClick(transaction)}>
                         <Edit className="h-3 w-3 mr-1" /> Edit
                       </Button>
                       <Dialog>
                         <DialogTrigger asChild>
-                           <Button variant="destructive" size="sm">
+                           <Button variant="outline" size="sm">
                              <Trash2 className="h-3 w-3 mr-1" /> Delete
                            </Button>
                         </DialogTrigger>
