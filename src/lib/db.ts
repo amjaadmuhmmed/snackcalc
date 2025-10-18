@@ -718,6 +718,17 @@ export async function updateTransactionInDb(id: string, transaction: Partial<Tra
   }
 }
 
+export async function deleteTransactionFromDb(id: string): Promise<{ success: boolean; message?: string }> {
+  try {
+    const transactionDoc = doc(db, 'transactions', id);
+    await deleteDoc(transactionDoc);
+    return { success: true };
+  } catch (e: any) {
+    console.error(`[DB deleteTransactionFromDb] Error deleting transaction document ${id}: `, e);
+    return { success: false, message: e.message };
+  }
+}
+
 
 export async function getTransactionsFromDb(): Promise<Transaction[]> {
   try {

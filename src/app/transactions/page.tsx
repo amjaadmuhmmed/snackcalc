@@ -2,14 +2,14 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { getTransactions, updateTransaction } from "../actions"; // Import the server action
+import { getTransactions, updateTransaction, deleteTransaction } from "../actions"; // Import the server action
 import type { Transaction } from "@/lib/db";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowLeft, Calendar as CalendarIcon, XCircle, Search as SearchIcon, Edit, Loader2, PiggyBank, X, Tag } from "lucide-react";
+import { ArrowLeft, Calendar as CalendarIcon, XCircle, Search as SearchIcon, Edit, Loader2, PiggyBank, X, Tag, Trash2 } from "lucide-react";
 import { format, isValid, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -26,6 +26,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
+  DialogClose,
 } from "@/components/ui/dialog";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -194,6 +196,16 @@ export default function TransactionsPage() {
         notes: transaction.notes || "",
         tags: transaction.tags?.join(", ") || "",
     });
+  };
+  
+  const handleDeleteTransaction = async (id: string) => {
+    const result = await deleteTransaction(id);
+    if (result.success) {
+      toast({ title: result.message });
+      fetchTransactions();
+    } else {
+      toast({ variant: "destructive", title: "Error", description: result.message });
+    }
   };
 
   const onSubmit = async (data: TransactionFormData) => {
@@ -440,10 +452,38 @@ export default function TransactionsPage() {
                             {transaction.type.charAt(0).toUpperCase() + transaction.type.slice(1)}
                         </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="space-x-1">
                       <Button variant="outline" size="sm" onClick={() => handleEditClick(transaction)}>
                         <Edit className="h-3 w-3 mr-1" /> Edit
                       </Button>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                           <Button variant="destructive" size="sm">
+                             <Trash2 className="h-3 w-3 mr-1" /> Delete
+                           </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Confirm Deletion</DialogTitle>
+                            <DialogDescription>
+                              Are you sure you want to delete this transaction?
+                              <br />
+                              <strong className="mt-2 block">{transaction.category}: {currencySymbol}{transaction.amount.toFixed(2)}</strong>
+                              This action cannot be undone.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <DialogFooter>
+                            <DialogClose asChild>
+                              <Button variant="outline">Cancel</Button>
+                            </DialogClose>
+                            <DialogClose asChild>
+                              <Button variant="destructive" onClick={() => handleDeleteTransaction(transaction.id)}>
+                                Delete Transaction
+                              </Button>
+                            </DialogClose>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
                     </TableCell>
                   </TableRow>
                 ))}

@@ -39,6 +39,7 @@ import {
     getTransactionsFromDb,
     Transaction,
     updateTransactionInDb,
+    deleteTransactionFromDb,
 } from '@/lib/db';
 import {revalidatePath} from 'next/cache';
 import { db } from '@/lib/firebase'; 
@@ -635,11 +636,22 @@ export async function updateTransaction(id: string, data: FormData) {
       return { success: false, message: 'Amount must be a positive number.' };
     }
     
-    const transactionDate = Timestamp.fromDate(new Date(transactionDateString));
-    
-    if (!isValid(transactionDate.toDate())) {
-      return { success: false, message: 'Invalid transaction date format.' };
+    const userSelectedDate = new Date(transactionDateString);
+    if (!isValid(userSelectedDate)) {
+        return { success: false, message: 'Invalid transaction date format.' };
     }
+    // Combine user's chosen date with the current time
+    const now = new Date();
+    const finalDateTime = new Date(
+        userSelectedDate.getFullYear(),
+        userSelectedDate.getMonth(),
+        userSelectedDate.getDate(),
+        now.getHours(),
+        now.getMinutes(),
+        now.getSeconds()
+    );
+
+    const transactionDate = Timestamp.fromDate(finalDateTime);
 
     const tags = tagsString ? tagsString.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
 
@@ -662,6 +674,21 @@ export async function updateTransaction(id: string, data: FormData) {
     }
   } catch (error: any) {
     console.error(`Error updating transaction:`, error);
+    return { success: false, message: error.message || 'An unexpected error occurred.' };
+  }
+}
+
+export async function deleteTransaction(id: string) {
+  try {
+    const result = await deleteTransactionFromDb(id);
+    if (result.success) {
+      revalidatePath('/transactions');
+      return { success: true, message: 'Transaction deleted successfully!' };
+    } else {
+      return { success: false, message: result.message || 'Failed to delete transaction.' };
+    }
+  } catch (error: any) {
+    console.error('Error deleting transaction:', error);
     return { success: false, message: error.message || 'An unexpected error occurred.' };
   }
 }
