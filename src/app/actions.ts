@@ -299,9 +299,32 @@ export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpda
         const totalItemsCost = purchaseData.items.reduce((sum, item) => sum + item.purchaseCost * item.quantity, 0);
         const finalTotalAmount = totalItemsCost + (purchaseData.tax || 0) + (purchaseData.serviceCharge || 0);
 
+        const purchaseDateFromClient = purchaseData.purchaseDate;
+        let finalPurchaseDateForSave: Timestamp;
+
+        if (purchaseDateFromClient instanceof Timestamp) {
+            finalPurchaseDateForSave = purchaseDateFromClient;
+        } else if (isValid(new Date(purchaseDateFromClient as any))) {
+            const userSelectedDate = new Date(purchaseDateFromClient as any);
+            const now = new Date();
+            const finalDateTime = new Date(
+                userSelectedDate.getFullYear(),
+                userSelectedDate.getMonth(),
+                userSelectedDate.getDate(),
+                now.getHours(),
+                now.getMinutes(),
+                now.getSeconds()
+            );
+            finalPurchaseDateForSave = Timestamp.fromDate(finalDateTime);
+        } else {
+            return { success: false, message: 'Invalid purchase date format provided.' };
+        }
+
+
         const finalPurchaseData = {
           ...purchaseData,
-          totalAmount: finalTotalAmount
+          totalAmount: finalTotalAmount,
+          purchaseDate: finalPurchaseDateForSave,
         };
 
         if (purchaseIdToUpdate) {

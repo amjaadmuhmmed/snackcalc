@@ -53,8 +53,7 @@ function CreatePurchasePageContent() {
   const [supplierNameInput, setSupplierNameInput] = useState<string>("");
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
 
-  const [purchaseDate, setPurchaseDate] = useState<Date | undefined>(undefined); // This holds user's date choice from DatePicker
-  const [initialLoadedPurchaseDate, setInitialLoadedPurchaseDate] = useState<Timestamp | null>(null); // Stores original TS for edits
+  const [purchaseDate, setPurchaseDate] = useState<Date | undefined>(new Date());
 
   const [notes, setNotes] = useState<string>("");
   const [tags, setTags] = useState<string>("");
@@ -88,13 +87,13 @@ function CreatePurchasePageContent() {
           if (purchaseToEdit) {
             setPurchaseOrderNumber(purchaseToEdit.purchaseOrderNumber);
             
+            let initialDate: Date | undefined;
             if (purchaseToEdit.purchaseDate instanceof Timestamp) {
-              setPurchaseDate(purchaseToEdit.purchaseDate.toDate());
-              setInitialLoadedPurchaseDate(purchaseToEdit.purchaseDate); 
-            } else if (purchaseToEdit.purchaseDate instanceof Date) { 
-              setPurchaseDate(purchaseToEdit.purchaseDate);
-              setInitialLoadedPurchaseDate(Timestamp.fromDate(purchaseToEdit.purchaseDate));
+                initialDate = purchaseToEdit.purchaseDate.toDate();
+            } else if (purchaseToEdit.purchaseDate instanceof Date) {
+                initialDate = purchaseToEdit.purchaseDate;
             }
+            setPurchaseDate(initialDate);
 
 
             if (purchaseToEdit.supplierId && purchaseToEdit.supplierName) {
@@ -150,16 +149,9 @@ function CreatePurchasePageContent() {
 
     } else {
       setPurchaseOrderNumber(generatePurchaseOrderNumber());
-      setInitialLoadedPurchaseDate(null); // Clear for new PO
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, router, toast, allItems, allSuppliers]); // Rerun if allItems or allSuppliers changes
-
-  useEffect(() => {
-    if (!editingPurchaseId && !purchaseDate) {
-      setPurchaseDate(new Date());
-    }
-  }, [editingPurchaseId, purchaseDate]);
+  }, [searchParams, router, toast, allItems, allSuppliers]);
 
 
   useEffect(() => {
@@ -271,7 +263,6 @@ function CreatePurchasePageContent() {
     setEditingPurchaseOrderNumber(null);
     setPurchaseOrderNumber(generatePurchaseOrderNumber());
     setPurchaseDate(new Date()); 
-    setInitialLoadedPurchaseDate(null); 
     setSupplierNameInput("");
     setSelectedSupplier(null);
     setNotes("");
@@ -286,36 +277,17 @@ function CreatePurchasePageContent() {
   const proceedToSavePurchase = async (finalSupplierName: string, finalSupplierId?: string) => {
     setIsSavingPurchase(true);
 
-    let finalPurchaseDateForSave: Timestamp;
-
-    // User-selected date from DatePicker state
-    const userSelectedDate = purchaseDate; 
-
-    if (!userSelectedDate) { 
+    if (!purchaseDate) { 
         toast({ variant: "destructive", title: "Purchase Date is required." });
         setIsSavingPurchase(false);
         return; 
     }
 
-    // Current system time for the time component
-    const now = new Date(); 
-    const combinedDateTime = new Date(
-        userSelectedDate.getFullYear(), 
-        userSelectedDate.getMonth(),    
-        userSelectedDate.getDate(),     
-        now.getHours(),             
-        now.getMinutes(),          
-        now.getSeconds(),          
-        now.getMilliseconds()      
-    );
-    finalPurchaseDateForSave = Timestamp.fromDate(combinedDateTime);
-    
-
     const purchaseData: PurchaseInput = {
       purchaseOrderNumber: purchaseOrderNumber,
       supplierName: finalSupplierName,
       supplierId: finalSupplierId,
-      purchaseDate: finalPurchaseDateForSave, 
+      purchaseDate: purchaseDate, 
       items: selectedItems.map(s => ({
         itemId: s.id,
         name: s.name,
