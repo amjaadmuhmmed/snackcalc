@@ -1742,63 +1742,59 @@ function HomeContent() {
 
                 {adminActiveView === 'incomeExpense' && (
                     <div className="space-y-6">
-                        {incomeExpenseSubView === null && (
-                            <>
-                                <h3 className="text-md font-semibold mb-2">Manage Income & Expenses</h3>
-                                <div className="space-y-4">
-                                    <div className="relative">
-                                        <Label htmlFor="transaction-text" className="text-sm font-medium">Create Transaction from Text or Voice</Label>
-                                        <div className="flex items-center gap-2 mt-1">
-                                          <div className="relative flex-grow">
-                                            <Bot className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                                            <Input
-                                                id="transaction-text"
-                                                placeholder="e.g., received 5000 for rent"
-                                                value={transactionText}
-                                                onChange={(e) => setTransactionText(e.target.value)}
-                                                onKeyDown={(e) => e.key === 'Enter' && handleParseTransaction()}
-                                                className="pl-8"
-                                                disabled={isRecording}
-                                            />
-                                          </div>
-                                          {!isRecording ? (
-                                              <Button size="icon" variant="outline" onClick={handleStartRecording} disabled={isParsingTransaction} aria-label="Start recording">
-                                                  <Mic className="h-4 w-4" />
-                                              </Button>
-                                          ) : (
-                                              <Button size="icon" variant="destructive" onClick={handleStopRecording} aria-label="Stop recording">
-                                                  <Square className="h-4 w-4" />
-                                              </Button>
-                                          )}
-                                        </div>
-                                         <Button
-                                            size="sm"
-                                            onClick={handleParseTransaction}
-                                            disabled={isParsingTransaction || isRecording}
-                                            className="mt-2"
-                                        >
-                                            {isParsingTransaction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
-                                            Smart Entry
-                                        </Button>
+                        <div className="space-y-4">
+                            <div className="relative">
+                                <Label htmlFor="transaction-text" className="text-sm font-medium">Create Transaction from Text or Voice</Label>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <div className="relative flex-grow">
+                                        <Bot className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                                        <Input
+                                            id="transaction-text"
+                                            placeholder="e.g., received 5000 for rent"
+                                            value={transactionText}
+                                            onChange={(e) => setTransactionText(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleParseTransaction()}
+                                            className="pl-8"
+                                            disabled={isRecording}
+                                        />
                                     </div>
-
-                                    <Separator />
-
-                                    <div className="flex flex-col space-y-3">
-                                        <Button variant="outline" className="w-full justify-start" onClick={() => setIncomeExpenseSubView('income')}>
-                                            <PlusCircle className="mr-2 h-4 w-4" /> Add New Income Manually
+                                    {!isRecording ? (
+                                        <Button size="icon" variant="outline" onClick={handleStartRecording} disabled={isParsingTransaction} aria-label="Start recording">
+                                            <Mic className="h-4 w-4" />
                                         </Button>
-                                        <Button variant="outline" className="w-full justify-start" onClick={() => setIncomeExpenseSubView('expense')}>
-                                            <Minus className="mr-2 h-4 w-4" /> Add New Expense Manually
+                                    ) : (
+                                        <Button size="icon" variant="destructive" onClick={handleStopRecording} aria-label="Stop recording">
+                                            <Square className="h-4 w-4" />
                                         </Button>
-                                        <Link href="/transactions" passHref>
-                                            <Button variant="outline" className="w-full justify-start">
-                                                <History className="mr-2 h-4 w-4" /> View Transaction History
-                                            </Button>
-                                        </Link>
-                                    </div>
+                                    )}
                                 </div>
-                            </>
+                                <Button
+                                    size="sm"
+                                    onClick={handleParseTransaction}
+                                    disabled={isParsingTransaction || isRecording}
+                                    className="mt-2"
+                                >
+                                    {isParsingTransaction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
+                                    Smart Entry
+                                </Button>
+                            </div>
+                            <Separator />
+                        </div>
+
+                        {incomeExpenseSubView === null && (
+                            <div className="flex flex-col space-y-3">
+                                <Button variant="outline" className="w-full justify-start" onClick={() => setIncomeExpenseSubView('income')}>
+                                    <PlusCircle className="mr-2 h-4 w-4" /> Add New Income Manually
+                                </Button>
+                                <Button variant="outline" className="w-full justify-start" onClick={() => setIncomeExpenseSubView('expense')}>
+                                    <Minus className="mr-2 h-4 w-4" /> Add New Expense Manually
+                                </Button>
+                                <Link href="/transactions" passHref>
+                                    <Button variant="outline" className="w-full justify-start">
+                                        <History className="mr-2 h-4 w-4" /> View Transaction History
+                                    </Button>
+                                </Link>
+                            </div>
                         )}
 
                         {incomeExpenseSubView === 'income' && (
