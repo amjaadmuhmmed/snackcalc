@@ -1,3 +1,4 @@
+
 // src/app/sales/page.tsx (Formerly page.tsx)
 "use client";
 
@@ -41,8 +42,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { setSharedOrderInRTDB, SharedOrderItem, SharedOrderData, subscribeToSharedOrder, SharedOrderDataSnapshot } from "@/lib/rt_db";
-
 
 interface SelectedItem extends Snack { 
   quantity: number;
@@ -112,6 +111,7 @@ type IncomeExpenseSubView = 'income' | 'expense' | null;
 
 const SESSION_STORAGE_ADMIN_LOGGED_IN_KEY = 'isAdminLoggedIn';
 const SESSION_STORAGE_ADMIN_VIEW_KEY = 'adminActiveView';
+const SESSION_STORAGE_EDIT_BILL_KEY = 'editBillData';
 const LOCAL_STORAGE_LAST_TRANSACTION_SOURCE = 'lastTransactionSource';
 
 const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
@@ -144,23 +144,14 @@ function SalesPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [adminItemSearchTerm, setAdminItemSearchTerm] = useState("");
-  const [showShareDialog, setShowShareDialog] = useState(false);
-  const [shareUrl, setShareUrl] = useState("");
-  const [isGeneratingShareUrl, setIsGeneratingShareUrl] = useState(false);
-
-  const [activeSharedOrderNumber, setActiveSharedOrderNumber] = useState<string | null>(null);
+  
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
-  const [isUpdatingRTDBFromMain, setIsUpdatingRTDBFromMain] = useState(false);
-  const [mainDebounceTimer, setMainDebounceTimer] = useState<NodeJS.Timeout | null>(null);
-  const [isUpdatingFromRTDBSync, setIsUpdatingFromRTDBSync] = useState(false);
-  const [isLocalDirty, setIsLocalDirty] = useState(false);
-
+  
   const listRefs = useRef<Record<string, HTMLLIElement | null>>({});
   const lastInteractedItemIdRef = useRef<string | null>(null);
 
   const [itemsVisible, setItemsVisible] = useState(true);
-  const prevShowShareDialogRef = useRef<boolean | undefined>();
-
+  
   const [adminActiveView, setAdminActiveView] = useState<AdminActiveView>(null);
   const [incomeExpenseSubView, setIncomeExpenseSubView] = useState<IncomeExpenseSubView>(null);
   const [lastTransactionSource, setLastTransactionSource] = useState("");
@@ -269,6 +260,7 @@ function SalesPageContent() {
       ]);
       setAllCustomers(customersData || []);
       setItems(itemsFromDb || []);
+      return itemsFromDb || []; // Return items for edit mode loading
     } catch (error: any) {
       console.error("Failed to load initial data:", error);
       toast({
@@ -278,11 +270,13 @@ function SalesPageContent() {
       });
       setAllCustomers([]);
       setItems([]);
+      return [];
     } finally {
         setIsLoading(false);
     }
   }, [toast]);
 
+  // Main Effect for initialization
   useEffect(() => {
     try {
       const adminLoggedIn = sessionStorage.getItem(SESSION_STORAGE_ADMIN_LOGGED_IN_KEY);
@@ -297,115 +291,49 @@ function SalesPageContent() {
       if (storedAdminView !== 'incomeExpense') {
           setIncomeExpenseSubView(null);
       }
+      
+      const editBillIdParam = searchParams.get('editBillId');
+      if (editBillIdParam) {
+        const billDataString = sessionStorage.getItem(SESSION_STORAGE_EDIT_BILL_KEY);
+        if (billDataString) {
+          const billData = JSON.parse(billDataString);
+          loadData().then(loadedItems => {
+              const itemsToSet = billData.items.map((item: DbBillItem) => {
+                  const baseItem = loadedItems.find(i => i.id === item.itemId);
+                  return { ...baseItem, ...item } as SelectedItem;
+              });
+
+              setEditingBillId(editBillIdParam);
+              setOrderNumber(billData.orderNumber);
+              setSelectedItems(itemsToSet);
+              setServiceCharge(billData.serviceCharge || 0);
+              setCustomerName(billData.customerName || "");
+              setCustomerPhoneNumber(billData.customerPhoneNumber || "");
+              setSelectedBillCustomerId(billData.customerId || null);
+              setTableNumber(billData.tableNumber || "");
+              setNotes(billData.notes || "");
+              setTags(billData.tags?.join(', ') || "");
+              setItemsVisible(true); // Ensure form is visible
+          });
+          sessionStorage.removeItem(SESSION_STORAGE_EDIT_BILL_KEY);
+        }
+      } else {
+        loadData();
+        setOrderNumber(generateOrderNumber());
+      }
     } catch (error) {
         console.warn("Session storage not available. Redirecting to login.");
         router.replace('/');
     }
-
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!isAdmin) return; // Don't load data if not authenticated
-
-    loadData();
-
-    const editOrderNum = searchParams.get('editOrder');
-    const editFsBillId = searchParams.get('editBillId');
-
-    if (editOrderNum && editFsBillId) {
-      setOrderNumber(editOrderNum);
-      setEditingBillId(editFsBillId);
-      setActiveSharedOrderNumber(editOrderNum);
-      setItemsVisible(true);
-      setIsLocalDirty(false); 
-      console.log(`Editing mode activated for order ${editOrderNum}, bill ID ${editFsBillId}`);
-    } else if (!orderNumber) {
-      setOrderNumber(generateOrderNumber());
-      setItemsVisible(true);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadData, searchParams, isAdmin]);
+  }, [searchParams, router, loadData]);
 
 
   useEffect(() => {
-    if (document.activeElement?.id !== 'service-charge' && document.activeElement?.id !== 'shared-service-charge') {
+    if (document.activeElement?.id !== 'service-charge') {
         setServiceChargeInput(serviceCharge.toFixed(2));
     }
   }, [serviceCharge]);
-
-  useEffect(() => {
-    if (!activeSharedOrderNumber || items.length === 0 || isUpdatingRTDBFromMain) {
-      return;
-    }
-
-    console.log(`Main page subscribing to RTDB for order: ${activeSharedOrderNumber}`);
-    const unsubscribe = subscribeToSharedOrder(activeSharedOrderNumber, (data: SharedOrderDataSnapshot | null) => {
-      if (isUpdatingRTDBFromMain) return;
-
-      if (data && data.orderNumber === activeSharedOrderNumber) {
-         if (isLocalDirty && orderNumber === activeSharedOrderNumber) {
-            console.log(`Main page: Received RTDB update for ${activeSharedOrderNumber}, but local is dirty. Ignoring direct state update to prevent overwriting local edits.`);
-            return;
-        }
-        console.log(`Main page received RTDB update for ${activeSharedOrderNumber}:`, data);
-        setIsUpdatingFromRTDBSync(true);
-
-        const newSelected = (data.items || []).map(item => {
-          const baseItem = items.find(s => s.id === item.id || s.name === item.name);
-          return {
-            id: baseItem?.id || item.id,
-            name: item.name,
-            price: Number(item.price), 
-            quantity: item.quantity,
-            category: baseItem?.category || 'Unknown',
-            cost: baseItem?.cost,
-            itemCode: item.itemCode || baseItem?.itemCode || '',
-            stockQuantity: baseItem?.stockQuantity || 0,
-          };
-        });
-
-        const currentSimpleSelected = selectedItems.map(s => ({id: s.id, quantity: s.quantity, price: s.price, name: s.name, itemCode: s.itemCode}));
-        const newSimpleSelected = newSelected.map(s => ({id: s.id, quantity: s.quantity, price: s.price, name: s.name, itemCode: s.itemCode}));
-
-        if (JSON.stringify(currentSimpleSelected) !== JSON.stringify(newSimpleSelected)) {
-            setSelectedItems(newSelected);
-        }
-
-        const newServiceCharge = Number(data.serviceCharge) || 0;
-        if (newServiceCharge !== serviceCharge) {
-          setServiceCharge(newServiceCharge);
-        }
-        if (String(data.customerName || "") !== customerName) {
-          setCustomerName(String(data.customerName || ""));
-        }
-        if (String(data.customerPhoneNumber || "") !== customerPhoneNumber) {
-          setCustomerPhoneNumber(String(data.customerPhoneNumber || ""));
-        }
-        if (String(data.tableNumber || "") !== tableNumber) {
-          setTableNumber(String(data.tableNumber || ""));
-        }
-        if (String(data.notes || "") !== notes) {
-          setNotes(String(data.notes || ""));
-        }
-        if (String(data.tags?.join(", ") || "") !== tags) {
-          setTags(String(data.tags?.join(", ") || ""));
-        }
-
-        requestAnimationFrame(() => {
-            setIsUpdatingFromRTDBSync(false);
-        });
-
-      } else if (!data && activeSharedOrderNumber) {
-          console.warn(`RTDB data for ${activeSharedOrderNumber} became null on main page.`);
-      }
-    });
-
-    return () => {
-      console.log(`Main page unsubscribing from RTDB for order: ${activeSharedOrderNumber}`);
-      unsubscribe();
-    };
-  }, [activeSharedOrderNumber, items, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, tags, selectedItems, serviceCharge, orderNumber, isUpdatingRTDBFromMain]);
 
 
   const calculateTotal = () => {
@@ -414,7 +342,6 @@ function SalesPageContent() {
   };
 
   const handleItemIncrement = (item: Snack) => {
-    setIsLocalDirty(true);
     lastInteractedItemIdRef.current = item.id;
     setSelectedItems((prevSelected) => {
       const existingItemIndex = prevSelected.findIndex((s) => s.id === item.id);
@@ -432,7 +359,6 @@ function SalesPageContent() {
   };
 
   const handleItemDecrement = (item: SelectedItem) => {
-    setIsLocalDirty(true);
     lastInteractedItemIdRef.current = item.id;
     setSelectedItems((prevSelected) => {
       const currentItemIndex = prevSelected.findIndex((s) => s.id === item.id);
@@ -455,7 +381,6 @@ function SalesPageContent() {
     const newPrice = parseFloat(newPriceString);
     if (isNaN(newPrice) || newPrice < 0) return; 
 
-    setIsLocalDirty(true);
     lastInteractedItemIdRef.current = itemId;
     setSelectedItems(prevSelected =>
       prevSelected.map(item =>
@@ -771,15 +696,6 @@ function SalesPageContent() {
       const currentTotal = calculateTotal();
       if (isSavingBill) return;
 
-      if (editingBillId && !isLocalDirty && !resetFormAfterSave) {
-        toast({
-            variant: "default",
-            title: "No changes to update.",
-            description: "Please make a change before updating the bill."
-        });
-        return;
-      }
-
       if (!editingBillId && currentTotal <= 0 && selectedItems.length === 0 && !resetFormAfterSave) {
         toast({ variant: "default", title: "Cannot save an empty bill." });
         return;
@@ -821,20 +737,16 @@ function SalesPageContent() {
                 setTags("");
                 setOrderNumber(generateOrderNumber());
                 setSearchTerm("");
-                setActiveSharedOrderNumber(null);
                 setEditingBillId(null);
-                setShareUrl("");
-                setIsLocalDirty(false);
                 setItemsVisible(true);
 
-                if (searchParams.get('editOrder') || searchParams.get('editBillId')) {
+                if (searchParams.get('editBillId')) {
                   router.replace('/sales', { scroll: false });
                 }
               } else {
                 if (!editingBillId && result.billId) {
                   setEditingBillId(result.billId);
                 }
-                setIsLocalDirty(false);
                 if (itemsVisible) { 
                     setItemsVisible(false);
                 }
@@ -871,7 +783,6 @@ function SalesPageContent() {
 
 
   const handleServiceChargeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setIsLocalDirty(true);
     const value = e.target.value;
     setServiceChargeInput(value);
 
@@ -932,134 +843,10 @@ function SalesPageContent() {
       }
     }
   };
-
- const handleShareBill = useCallback(async (orderNumberToShare: string) => {
-    if (typeof window === "undefined") {
-        setShareUrl("");
-        setIsGeneratingShareUrl(false);
-        if (!editingBillId) { 
-            setActiveSharedOrderNumber(null);
-        }
-        return;
-    }
-    setIsGeneratingShareUrl(true);
-    setShareUrl("");
-
-    const itemsToShare: SharedOrderItem[] = selectedItems.map(s => ({
-      id: s.id,
-      name: s.name,
-      price: Number(s.price),
-      quantity: s.quantity,
-      itemCode: s.itemCode || '',
-    }));
-
-    const sharedOrderPayload: Omit<SharedOrderData, 'lastUpdatedAt' | 'orderNumber'> = {
-      items: itemsToShare,
-      serviceCharge: serviceCharge,
-      customerName: customerName,
-      customerPhoneNumber: customerPhoneNumber,
-      tableNumber: tableNumber,
-      notes: notes,
-      tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag),
-    };
-
-    try {
-      setActiveSharedOrderNumber(orderNumberToShare); 
-      await setSharedOrderInRTDB(orderNumberToShare, sharedOrderPayload);
-      const baseUrl = window.location.origin;
-      const fullUrl = `${baseUrl}/orders/${orderNumberToShare}`;
-      setShareUrl(fullUrl);
-
-    } catch (error) {
-      console.error("Failed to share bill to RTDB:", error);
-      toast({ variant: "destructive", title: "Sharing failed", description: "Could not update shared bill. Please try again." });
-      setShareUrl("");
-      if (!editingBillId) { 
-         setActiveSharedOrderNumber(null);
-      }
-    } finally {
-      setIsGeneratingShareUrl(false);
-    }
-  }, [selectedItems, serviceCharge, customerName, customerPhoneNumber, tableNumber, notes, tags, editingBillId, toast]);
-
-
-  useEffect(() => {
-    if (prevShowShareDialogRef.current !== true && showShareDialog === true) {
-      handleShareBill(orderNumber);
-    }
-    prevShowShareDialogRef.current = showShareDialog;
-  }, [showShareDialog, orderNumber, handleShareBill]);
-
-
-  useEffect(() => {
-    if (isUpdatingFromRTDBSync || !activeSharedOrderNumber || orderNumber !== activeSharedOrderNumber || isLoading || isUpdatingRTDBFromMain || !isLocalDirty) {
-      return;
-    }
-
-    if (mainDebounceTimer) {
-      clearTimeout(mainDebounceTimer);
-    }
-
-    const timer = setTimeout(async () => {
-      if (isUpdatingFromRTDBSync || orderNumber !== activeSharedOrderNumber || !activeSharedOrderNumber || !isLocalDirty) return;
-
-      console.log(`Main page pushing update to RTDB for ${activeSharedOrderNumber} (local is dirty)`);
-      setIsUpdatingRTDBFromMain(true);
-      const itemsToShare: SharedOrderItem[] = selectedItems.map(s => ({
-        id: s.id,
-        name: s.name,
-        price: Number(s.price),
-        quantity: s.quantity,
-        itemCode: s.itemCode || '',
-      }));
-
-      const currentOrderData: Omit<SharedOrderData, 'lastUpdatedAt' | 'orderNumber'> = {
-        items: itemsToShare,
-        serviceCharge: serviceCharge,
-        customerName: customerName,
-        customerPhoneNumber: customerPhoneNumber,
-        tableNumber: tableNumber,
-        notes: notes,
-        tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag),
-      };
-
-      try {
-        await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
-        setIsLocalDirty(false);
-      } catch (error) {
-        console.error("Failed to auto-update RTDB from main page:", error);
-         toast({ variant: "destructive", title: "Real-time Sync Error", description: "Failed to sync changes automatically." });
-      } finally {
-        setIsUpdatingRTDBFromMain(false);
-      }
-    }, 750);
-
-    setMainDebounceTimer(timer);
-
-    return () => {
-      if (timer) clearTimeout(timer);
-    };
-  }, [
-    selectedItems,
-    serviceCharge,
-    customerName,
-    customerPhoneNumber,
-    tableNumber,
-    notes,
-    tags,
-    orderNumber,
-    activeSharedOrderNumber,
-    isLoading,
-    isUpdatingRTDBFromMain,
-    isUpdatingFromRTDBSync,
-    isLocalDirty,
-    toast
-  ]);
-
+  
   const handleCustomerNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const name = e.target.value;
     setCustomerName(name);
-    setIsLocalDirty(true);
   
     if (name.trim() === "") {
       setCustomerSearchResults([]);
@@ -1083,26 +870,21 @@ function SalesPageContent() {
     setCustomerPhoneNumber(customer.phoneNumber || "");
     setSelectedBillCustomerId(customer.id);
     setShowCustomerSearchPopover(false);
-    setIsLocalDirty(true);
   };
 
   const handleCustomerPhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setIsLocalDirty(true);
     setCustomerPhoneNumber(e.target.value);
   };
 
   const handleTableNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setIsLocalDirty(true);
     setTableNumber(e.target.value);
   };
 
   const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setIsLocalDirty(true);
     setNotes(e.target.value);
   };
   
   const handleTagsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setIsLocalDirty(true);
     setTags(e.target.value);
   };
 
@@ -1163,49 +945,6 @@ function SalesPageContent() {
             >
                 <UserCog className="h-4 w-4" />
             </Button>
-            <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="icon" aria-label="Share Bill">
-                  <Share2 className="h-4 w-4" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Share Bill (Real-time)</DialogTitle>
-                  <DialogDescription>
-                    Scan the QR code or copy the link to share and edit this bill in real-time with another device.
-                    The order number for sharing is <strong>{activeSharedOrderNumber || orderNumber}</strong>.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="flex flex-col items-center gap-4 mt-4">
-                  {isGeneratingShareUrl ? (
-                    <p>Generating share link...</p>
-                  ) : shareUrl ? (
-                    <>
-                      <QRCodeCanvas value={shareUrl} size={160} level="H" className="rounded-md" data-ai-hint="sharing qr" />
-                      <div className="flex w-full items-center space-x-2">
-                        <Input value={shareUrl} readOnly className="flex-1" aria-label="Shareable link" />
-                        <Button onClick={() => {
-                          if (shareUrl) {
-                              navigator.clipboard.writeText(shareUrl);
-                              toast({ title: "Link copied to clipboard!" });
-                          }
-                        }}>
-                          Copy
-                        </Button>
-                      </div>
-                    </>
-                  ) : (
-                     <p className="text-destructive">Failed to generate share link. Check connection or try again.</p>
-                  )}
-                </div>
-                <DialogFooter className="mt-4">
-                  <Button type="button" variant="secondary" onClick={() => setShowShareDialog(false)}>
-                    Close
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
             <Badge variant="outline" className="text-sm whitespace-nowrap">
             Order: {orderNumber}
             </Badge>

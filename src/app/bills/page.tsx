@@ -14,7 +14,6 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Edit, Printer, Calendar as CalendarIcon, XCircle, BarChart3, Search as SearchIcon, Tag, X } from "lucide-react";
 import { format, isValid, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
-import { setSharedOrderInRTDB, SharedOrderItem } from "@/lib/rt_db";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import type { DateRange } from "react-day-picker";
@@ -33,6 +32,8 @@ import {
 } from "@/components/ui/dialog";
 
 const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
+const SESSION_STORAGE_EDIT_BILL_KEY = 'editBillData';
+
 
 // This helper is now more robust to handle different timestamp representations from Firebase.
 const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
@@ -179,43 +180,36 @@ export default function BillsPage() {
     return 'Invalid Date';
   };
 
-  const handleEditBill = async (bill: Bill) => {
+  const handleEditBill = (bill: Bill) => {
     try {
-      const itemsToShare: SharedOrderItem[] = bill.items.map((item: DbBillItem) => ({
-        id: item.itemId,
-        name: item.name,
-        price: Number(item.price),
-        quantity: item.quantity,
-        itemCode: item.itemCode || '',
-      }));
-
-      const billStateToShare = {
-        items: itemsToShare,
+      // Data to pass to the sales page
+      const billStateToStore = {
+        orderNumber: bill.orderNumber,
+        items: bill.items,
         serviceCharge: bill.serviceCharge || 0,
         customerName: bill.customerName || "",
         customerPhoneNumber: bill.customerPhoneNumber || "",
-        customerId: bill.customerId || undefined,
+        customerId: bill.customerId || null,
         tableNumber: bill.tableNumber || "",
         notes: bill.notes || "",
         tags: bill.tags || [],
       };
       
-      await setSharedOrderInRTDB(bill.orderNumber, billStateToShare);
+      // Use sessionStorage to pass the bill data
+      sessionStorage.setItem(SESSION_STORAGE_EDIT_BILL_KEY, JSON.stringify(billStateToStore));
 
-      // Explicitly set the admin view to null before navigating
-      try {
-          sessionStorage.setItem('adminActiveView', 'null');
-      } catch (e) {
-          console.warn("Session storage not available to reset admin view.");
-      }
+      // Explicitly set the admin view to null before navigating to ensure sales form is shown
+      sessionStorage.setItem('adminActiveView', 'null');
       
-      router.push(`/sales?editOrder=${bill.orderNumber}&editBillId=${bill.id}`);
+      // Navigate to the sales page with the bill ID to indicate editing mode
+      router.push(`/sales?editBillId=${bill.id}`);
+
     } catch (error: any) {
       console.error("Failed to stage bill for editing:", error);
       toast({
         variant: "destructive",
         title: "Editing Error",
-        description: "Could not prepare bill for editing. " + error.message,
+        description: "Could not prepare bill for editing. " + (error.message || "Please check session storage permissions."),
       });
     }
   };
