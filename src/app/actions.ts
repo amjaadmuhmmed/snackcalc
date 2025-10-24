@@ -98,6 +98,7 @@ export async function addItem(data: FormData) {
 
     if (result.success) {
       revalidatePath('/');
+      revalidatePath('/sales');
       revalidatePath('/bills');
       revalidatePath('/purchases/create'); 
       revalidatePath('/purchases/history');
@@ -158,6 +159,7 @@ export async function updateItem(id: string, data: FormData) {
 
     if (result.success) {
       revalidatePath('/');
+      revalidatePath('/sales');
       revalidatePath('/bills');
       revalidatePath('/purchases/create');
       revalidatePath('/purchases/history');
@@ -179,6 +181,7 @@ export async function deleteItem(id: string) {
 
     if (result.success) {
       revalidatePath('/');
+      revalidatePath('/sales');
       revalidatePath('/bills');
       revalidatePath('/purchases/create');
       revalidatePath('/purchases/history');
@@ -260,6 +263,7 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
             
             revalidatePath('/bills');
             revalidatePath('/'); 
+            revalidatePath('/sales');
             revalidatePath('/suppliers');
             revalidatePath('/customers');
             revalidatePath('/purchases/history'); 
@@ -302,11 +306,13 @@ export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpda
         const purchaseDateFromClient = purchaseData.purchaseDate;
         let finalPurchaseDateForSave: Timestamp;
 
+        // Standardize date handling
         if (purchaseDateFromClient instanceof Timestamp) {
             finalPurchaseDateForSave = purchaseDateFromClient;
         } else if (isValid(new Date(purchaseDateFromClient as any))) {
             const userSelectedDate = new Date(purchaseDateFromClient as any);
-            const now = new Date();
+            const now = new Date(); // Use current time
+            // Combine user's date with current time
             const finalDateTime = new Date(
                 userSelectedDate.getFullYear(),
                 userSelectedDate.getMonth(),
@@ -374,6 +380,7 @@ export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpda
             revalidatePath('/purchases/create');
             revalidatePath('/purchases/history');
             revalidatePath('/'); 
+            revalidatePath('/sales');
             revalidatePath('/suppliers');
             revalidatePath('/customers');
 
@@ -401,6 +408,7 @@ export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpda
             }
 
             revalidatePath('/'); 
+            revalidatePath('/sales');
             revalidatePath('/purchases/create');
             revalidatePath('/purchases/history');
             revalidatePath('/suppliers');
@@ -460,6 +468,7 @@ export async function addSupplier(data: FormData): Promise<{ success: boolean; i
             revalidatePath('/suppliers');
             revalidatePath('/customers');
             revalidatePath('/'); 
+            revalidatePath('/sales');
             return { success: true, message: 'Supplier added successfully!', id: result.id, supplier: result.supplier};
         } else {
             return { success: false, message: result.message || 'Failed to add supplier.' };
@@ -493,6 +502,7 @@ export async function updateSupplier(id: string, data: FormData): Promise<{ succ
             revalidatePath('/purchases/create'); 
             revalidatePath('/customers');
             revalidatePath('/');
+            revalidatePath('/sales');
             return { success: true, message: 'Supplier updated successfully!' };
         } else {
             return { success: false, message: result.message || 'Failed to update supplier.' };
@@ -527,6 +537,7 @@ export async function addCustomer(data: FormData): Promise<{ success: boolean; i
         if (result.success && result.id && result.customer) {
             revalidatePath('/customers'); 
             revalidatePath('/'); 
+            revalidatePath('/sales');
             return { success: true, message: 'Customer added successfully!', id: result.id, customer: result.customer};
         } else {
             return { success: false, message: result.message || 'Failed to add customer.' };
@@ -556,6 +567,7 @@ export async function updateCustomer(id: string, data: FormData): Promise<{ succ
         if (result.success) {
             revalidatePath('/customers');
             revalidatePath('/');
+            revalidatePath('/sales');
             return { success: true, message: 'Customer updated successfully!' };
         } else {
             return { success: false, message: result.message || 'Failed to update customer.' };
@@ -599,13 +611,21 @@ export async function addTransaction(data: FormData) {
       return { success: false, message: 'Amount must be a positive number.' };
     }
     
-    // This is the robust fix: Convert the ISO string directly to a Timestamp.
-    // The client sends an ISO string (e.g., from `date.toISOString()`).
-    // `Timestamp.fromDate(new Date(isoString))` correctly preserves the date part across timezones.
-    const transactionDate = Timestamp.fromDate(new Date(transactionDateString));
-    if (!isValid(transactionDate.toDate())) {
+    // Standardize date handling: User selected date + current time
+    const userSelectedDate = new Date(transactionDateString);
+    if (!isValid(userSelectedDate)) {
       return { success: false, message: 'Invalid transaction date format.' };
     }
+    const now = new Date();
+    const finalDateTime = new Date(
+        userSelectedDate.getFullYear(),
+        userSelectedDate.getMonth(),
+        userSelectedDate.getDate(),
+        now.getHours(),
+        now.getMinutes(),
+        now.getSeconds()
+    );
+    const transactionDate = Timestamp.fromDate(finalDateTime);
     
 
     const tags = tagsString ? tagsString.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
@@ -659,11 +679,11 @@ export async function updateTransaction(id: string, data: FormData) {
       return { success: false, message: 'Amount must be a positive number.' };
     }
     
+    // Standardize date handling: User selected date + current time
     const userSelectedDate = new Date(transactionDateString);
     if (!isValid(userSelectedDate)) {
         return { success: false, message: 'Invalid transaction date format.' };
     }
-    // Combine user's chosen date with the current time
     const now = new Date();
     const finalDateTime = new Date(
         userSelectedDate.getFullYear(),
@@ -673,7 +693,6 @@ export async function updateTransaction(id: string, data: FormData) {
         now.getMinutes(),
         now.getSeconds()
     );
-
     const transactionDate = Timestamp.fromDate(finalDateTime);
 
     const tags = tagsString ? tagsString.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
