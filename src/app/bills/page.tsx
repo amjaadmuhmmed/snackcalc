@@ -1,3 +1,4 @@
+
 // src/app/bills/page.tsx
 "use client";
 
@@ -79,10 +80,7 @@ export default function BillsPage() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { toast } = useToast();
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: startOfDay(new Date()),
-    to: endOfDay(new Date()),
-  });
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [textSearchTerm, setTextSearchTerm] = useState<string>("");
   const [tagSearchTerm, setTagSearchTerm] = useState<string>("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -196,12 +194,20 @@ export default function BillsPage() {
         serviceCharge: bill.serviceCharge || 0,
         customerName: bill.customerName || "",
         customerPhoneNumber: bill.customerPhoneNumber || "",
+        customerId: bill.customerId || undefined,
         tableNumber: bill.tableNumber || "",
         notes: bill.notes || "",
         tags: bill.tags || [],
       };
       
       await setSharedOrderInRTDB(bill.orderNumber, billStateToShare);
+
+      // Explicitly set the admin view to null before navigating
+      try {
+          sessionStorage.setItem('adminActiveView', 'null');
+      } catch (e) {
+          console.warn("Session storage not available to reset admin view.");
+      }
       
       router.push(`/sales?editOrder=${bill.orderNumber}&editBillId=${bill.id}`);
     } catch (error: any) {
@@ -498,9 +504,12 @@ export default function BillsPage() {
       <Card className="w-full max-w-5xl">
         <CardHeader>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-                <CardDescription>
-                    {getCardDescription()}
-                </CardDescription>
+                <div>
+                  <CardTitle>Sales Orders</CardTitle>
+                  <CardDescription>
+                      {getCardDescription()}
+                  </CardDescription>
+                </div>
                 <div className="flex flex-wrap gap-2 items-center">
                     <Popover>
                       <PopoverTrigger asChild>
