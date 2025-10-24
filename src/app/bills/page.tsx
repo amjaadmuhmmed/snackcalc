@@ -1,3 +1,4 @@
+
 // src/app/bills/page.tsx
 "use client";
 
@@ -37,23 +38,27 @@ const currencySymbol = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '₹';
 const convertFirestoreTimestampToDate = (timestamp: any): Date | null => {
   if (!timestamp) return null;
   try {
-    // Already a JS Date object
     if (timestamp instanceof Date) {
       return isValid(timestamp) ? timestamp : null;
     }
-    // Firebase client SDK Timestamp object
     if (timestamp.toDate && typeof timestamp.toDate === 'function') {
       const d = timestamp.toDate();
       return isValid(d) ? d : null;
     }
-    // Serialized timestamp from server actions (often happens with Next.js)
     if (typeof timestamp === 'object' && timestamp !== null && typeof timestamp.seconds === 'number') {
       const d = new Date(timestamp.seconds * 1000 + (timestamp.nanoseconds || 0) / 1000000);
       return isValid(d) ? d : null;
     }
-    // Fallback for Unix milliseconds or ISO string
-    const d = new Date(timestamp);
-    return isValid(d) ? d : null;
+    if (typeof timestamp === 'number') {
+      const d = new Date(timestamp);
+      return isValid(d) ? d : null;
+    }
+     if (typeof timestamp === 'string') {
+      const d = new Date(timestamp);
+      return isValid(d) ? d : null;
+    }
+    console.warn('Invalid or unsupported timestamp format for conversion:', typeof timestamp, timestamp);
+    return null;
   } catch (e) {
     console.error("Error converting timestamp to Date:", e, "Timestamp value:", timestamp);
     return null;

@@ -1,3 +1,4 @@
+
 // src/app/purchases/history/page.tsx
 "use client";
 
