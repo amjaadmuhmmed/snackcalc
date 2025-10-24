@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Edit, Printer, Calendar as CalendarIcon, XCircle, BarChart3, Search as SearchIcon, Tag, X } from "lucide-react";
 import { format, isValid, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
-import { setSharedOrderInRTDB, SharedOrderItem } from "@/lib/rt_db";
+import { updateBillInRTDB, type SharedBillState } from "@/lib/rt_db";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import type { DateRange } from "react-day-picker";
@@ -184,23 +184,24 @@ export default function BillsPage() {
 
   const handleEditBill = async (bill: Bill) => {
     try {
-      const itemsToShare: SharedOrderItem[] = bill.items.map((item: DbBillItem) => ({
-        id: item.itemId,
-        name: item.name,
-        price: Number(item.price),
-        quantity: item.quantity,
-        itemCode: item.itemCode || '',
-      }));
-
-      await setSharedOrderInRTDB(bill.orderNumber, {
-        items: itemsToShare,
+      const billStateToShare: SharedBillState = {
+        orderNumber: bill.orderNumber,
+        items: bill.items.map((item: DbBillItem) => ({
+          id: item.itemId,
+          name: item.name,
+          price: Number(item.price),
+          quantity: item.quantity,
+          itemCode: item.itemCode || '',
+        })),
         serviceCharge: bill.serviceCharge,
         customerName: bill.customerName || "",
         customerPhoneNumber: bill.customerPhoneNumber || "",
         tableNumber: bill.tableNumber || "",
         notes: bill.notes || "",
         tags: bill.tags || [],
-      });
+      };
+      
+      await updateBillInRTDB(bill.orderNumber, billStateToShare);
 
       router.push(`/sales?editOrder=${bill.orderNumber}&editBillId=${bill.id}`);
     } catch (error: any) {
