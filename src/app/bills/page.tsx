@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Edit, Printer, Calendar as CalendarIcon, XCircle, BarChart3, Search as SearchIcon, Tag, X } from "lucide-react";
 import { format, isValid, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
-import { updateBillInRTDB, type SharedBillState } from "@/lib/rt_db";
+import { setSharedOrderInRTDB, SharedOrderItem } from "@/lib/rt_db";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import type { DateRange } from "react-day-picker";
@@ -184,16 +184,17 @@ export default function BillsPage() {
 
   const handleEditBill = async (bill: Bill) => {
     try {
-      const billStateToShare: SharedBillState = {
-        orderNumber: bill.orderNumber,
-        items: bill.items.map((item: DbBillItem) => ({
-          id: item.itemId,
-          name: item.name,
-          price: Number(item.price),
-          quantity: item.quantity,
-          itemCode: item.itemCode || '',
-        })),
-        serviceCharge: bill.serviceCharge,
+      const itemsToShare: SharedOrderItem[] = bill.items.map((item: DbBillItem) => ({
+        id: item.itemId,
+        name: item.name,
+        price: Number(item.price),
+        quantity: item.quantity,
+        itemCode: item.itemCode || '',
+      }));
+
+      const billStateToShare = {
+        items: itemsToShare,
+        serviceCharge: bill.serviceCharge || 0,
         customerName: bill.customerName || "",
         customerPhoneNumber: bill.customerPhoneNumber || "",
         tableNumber: bill.tableNumber || "",
@@ -201,8 +202,8 @@ export default function BillsPage() {
         tags: bill.tags || [],
       };
       
-      await updateBillInRTDB(bill.orderNumber, billStateToShare);
-
+      await setSharedOrderInRTDB(bill.orderNumber, billStateToShare);
+      
       router.push(`/sales?editOrder=${bill.orderNumber}&editBillId=${bill.id}`);
     } catch (error: any) {
       console.error("Failed to stage bill for editing:", error);
@@ -214,14 +215,15 @@ export default function BillsPage() {
     }
   };
 
+
   const handlePrintBill = (bill: Bill) => {
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       const rawHeaderTitle = process.env.NEXT_PUBLIC_RECEIPT_HEADER_TITLE || "Snackulator";
       const rawFooterMessage = process.env.NEXT_PUBLIC_RECEIPT_FOOTER_MESSAGE || "Thank you for your order!";
 
-      const receiptHeaderTitle = rawHeaderTitle.replace(/\n/g, '<br>');
-      const receiptFooterMessage = rawFooterMessage.replace(/\n/g, '<br>');
+      const receiptHeaderTitle = rawHeaderTitle.replace(/\\n/g, '<br>');
+      const receiptFooterMessage = rawFooterMessage.replace(/\\n/g, '<br>');
 
       const formattedDate = formatFirestoreTimestampForDisplay(bill.createdAt);
       let itemsHtml = '';
@@ -302,7 +304,7 @@ export default function BillsPage() {
                   </tr>
                 </tbody>
               </table>
-              ${bill.notes ? `<div class="separator"></div><div class="notes"><p><strong>Notes:</strong> ${bill.notes.replace(/\n/g, '<br>')}</p></div>` : ''}
+              ${bill.notes ? `<div class="separator"></div><div class="notes"><p><strong>Notes:</strong> ${bill.notes.replace(/\\n/g, '<br>')}</p></div>` : ''}
               <div class="separator"></div>
               <div class="footer">
                 <p>${receiptFooterMessage}</p>
@@ -360,7 +362,7 @@ export default function BillsPage() {
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       const rawHeaderTitle = process.env.NEXT_PUBLIC_RECEIPT_HEADER_TITLE || "Snackulator";
-      const receiptHeaderTitle = rawHeaderTitle.replace(/\n/g, '<br>');
+      const receiptHeaderTitle = rawHeaderTitle.replace(/\\n/g, '<br>');
       let dateRangeString = "for All Transactions";
       if (dateRange?.from && !dateRange.to) {
         dateRangeString = `for ${format(dateRange.from, "LLL dd, yyyy")}`;
