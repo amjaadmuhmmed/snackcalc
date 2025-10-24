@@ -1,4 +1,3 @@
-
 // src/app/purchases/create/page.tsx
 "use client";
 
@@ -219,7 +218,7 @@ function CreatePurchasePageContent() {
       } else {
         const defaultPurchaseCost = item.cost !== undefined ? Number(item.cost) : 0;
         const newItemData: SelectedItemForPurchase = { ...item, quantity: 1, purchaseCost: defaultPurchaseCost };
-        return [newItemData, ...prevSelected];
+        return [newItemData, ...newSelected];
       }
     });
     setSearchTerm("");
@@ -417,7 +416,7 @@ function CreatePurchasePageContent() {
     <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-4 md:p-8">
       <div className="w-full max-w-2xl mb-4 flex justify-between items-center">
         <Button variant="outline" size="icon" asChild>
-          <Link href={editingPurchaseId ? "/purchases/history" : "/"} aria-label={editingPurchaseId ? "Back to Purchase History" : "Back to Main Page"}>
+          <Link href={editingPurchaseId ? "/purchases/history" : "/sales"} aria-label={editingPurchaseId ? "Back to Purchase History" : "Back to Sales Page"}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>

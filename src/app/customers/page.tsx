@@ -1,4 +1,3 @@
-
 // src/app/customers/page.tsx
 "use client";
 
@@ -157,7 +156,7 @@ export default function CustomersPage() {
     <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-4 md:p-8">
       <div className="w-full max-w-5xl mb-4 flex justify-between items-center">
         <Button variant="outline" size="icon" asChild>
-          <Link href="/" aria-label="Back to Main Page">
+          <Link href="/sales" aria-label="Back to Sales Page">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
@@ -318,5 +317,3 @@ export default function CustomersPage() {
     </div>
   );
 }
-
-        
