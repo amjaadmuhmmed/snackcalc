@@ -8,7 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Calendar as CalendarIcon, Search as SearchIcon, XCircle, Edit } from "lucide-react"; // Added Edit
+import { Label } from "@/components/ui/label";
+import { ArrowLeft, Calendar as CalendarIcon, Search as SearchIcon, XCircle, Edit, Tag, X } from "lucide-react"; // Added Edit
 import { getPurchases } from "@/app/actions";
 import type { Purchase } from "@/lib/db";
 import { format, isValid, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
@@ -69,7 +70,9 @@ export default function PurchaseHistoryPage() {
   const router = useRouter(); 
 
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [textSearchTerm, setTextSearchTerm] = useState<string>("");
+  const [tagSearchTerm, setTagSearchTerm] = useState<string>("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchPurchases = async () => {
@@ -105,6 +108,7 @@ export default function PurchaseHistoryPage() {
 
     let tempFiltered = [...allPurchases];
 
+    // Date Range Filter
     if (dateRange?.from) {
       const fromDate = startOfDay(dateRange.from);
       const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
@@ -120,12 +124,20 @@ export default function PurchaseHistoryPage() {
       });
     }
 
-    if (searchTerm.trim() !== "") {
-      const lowerSearchTerm = searchTerm.toLowerCase();
+    // Selected Tags Filter (AND logic)
+    if (selectedTags.length > 0) {
+        tempFiltered = tempFiltered.filter(purchase => {
+            const purchaseTags = (purchase.tags || []).map(t => t.toLowerCase());
+            return selectedTags.every(filterTag => purchaseTags.includes(filterTag.toLowerCase()));
+        });
+    }
+
+    // Text Search Term Filter
+    if (textSearchTerm.trim() !== "") {
+      const lowerSearchTerm = textSearchTerm.toLowerCase();
       tempFiltered = tempFiltered.filter(purchase =>
         purchase.purchaseOrderNumber.toLowerCase().includes(lowerSearchTerm) ||
         (purchase.supplierName && purchase.supplierName.toLowerCase().includes(lowerSearchTerm)) ||
-        (purchase.tags && purchase.tags.some(tag => tag.toLowerCase().includes(lowerSearchTerm))) ||
         (purchase.items && purchase.items.some(item =>
           item.name.toLowerCase().includes(lowerSearchTerm) ||
           (item.itemCode && item.itemCode.toLowerCase().includes(lowerSearchTerm))
@@ -134,7 +146,22 @@ export default function PurchaseHistoryPage() {
     }
     setFilteredPurchases(tempFiltered);
 
-  }, [allPurchases, dateRange, searchTerm, loading]);
+  }, [allPurchases, dateRange, textSearchTerm, selectedTags, loading]);
+
+  const handleTagSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && tagSearchTerm.trim() !== "") {
+        event.preventDefault();
+        const newTag = tagSearchTerm.trim();
+        if (!selectedTags.map(t => t.toLowerCase()).includes(newTag.toLowerCase())) {
+            setSelectedTags(prev => [...prev, newTag]);
+        }
+        setTagSearchTerm("");
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+      setSelectedTags(prev => prev.filter(tag => tag.toLowerCase() !== tagToRemove.toLowerCase()));
+  };
 
   const totalForFilteredPurchases = useMemo(() => {
     return filteredPurchases.reduce((sum, purchase) => sum + purchase.totalAmount, 0);
@@ -155,8 +182,11 @@ export default function PurchaseHistoryPage() {
     } else {
       description = "Showing all purchases";
     }
-    if (searchTerm) {
-      description += ` matching "${searchTerm}"`;
+    if (textSearchTerm) {
+      description += ` matching "${textSearchTerm}"`;
+    }
+    if (selectedTags.length > 0) {
+        description += ` tagged with: ${selectedTags.join(', ')}`;
     }
     description += ". Sorted by user-entered Purchase Date & Time (desc), then by Recorded At time (desc).";
     return description;
@@ -228,22 +258,62 @@ export default function PurchaseHistoryPage() {
                 )}
             </div>
           </div>
-           <div className="relative">
-              <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                  type="search"
-                  placeholder="Search PO#, supplier, items, tags..."
-                  value={searchTerm}
-                  onChange={(e) => {
-                    const newSearchTerm = e.target.value;
-                    setSearchTerm(newSearchTerm);
-                    if (newSearchTerm.trim() !== "" && dateRange !== undefined) {
-                      setDateRange(undefined);
-                    }
-                  }}
-                  className="pl-8 w-full sm:w-1/2 md:w-1/3 h-9"
-                  aria-label="Search purchases"
-              />
+            <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="relative">
+                        <Label htmlFor="text-search" className="sr-only">Search Text</Label>
+                        <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            id="text-search"
+                            type="search"
+                            placeholder="Search PO#, supplier, items..."
+                            value={textSearchTerm}
+                            onChange={(e) => setTextSearchTerm(e.target.value)}
+                            className="pl-8 w-full h-9"
+                            aria-label="Search purchases by text"
+                        />
+                    </div>
+                     <div className="relative">
+                        <Label htmlFor="tag-search" className="sr-only">Add Tag Filter</Label>
+                        <Tag className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            id="tag-search"
+                            type="search"
+                            placeholder="Add tag filter and press Enter..."
+                            value={tagSearchTerm}
+                            onChange={(e) => setTagSearchTerm(e.target.value)}
+                            onKeyDown={handleTagSearchKeyDown}
+                            className="pl-8 w-full h-9"
+                            aria-label="Add tag filter"
+                        />
+                    </div>
+                </div>
+                {selectedTags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 items-center">
+                        <span className="text-sm text-muted-foreground">Filtering by tags:</span>
+                        {selectedTags.map(tag => (
+                            <Badge key={tag} variant="secondary" className="pl-2 pr-1 py-0.5 text-sm">
+                                {tag}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="ml-1 h-4 w-4 rounded-full"
+                                    onClick={() => removeTag(tag)}
+                                >
+                                    <X className="h-3 w-3" />
+                                </Button>
+                            </Badge>
+                        ))}
+                         <Button
+                            variant="link"
+                            size="sm"
+                            className="text-xs text-muted-foreground h-auto p-0"
+                            onClick={() => setSelectedTags([])}
+                         >
+                            Clear All
+                         </Button>
+                    </div>
+                )}
             </div>
         </CardHeader>
         <CardContent>

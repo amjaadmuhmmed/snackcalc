@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Edit, Printer, Calendar as CalendarIcon, XCircle, BarChart3, Search as SearchIcon } from "lucide-react";
+import { ArrowLeft, Edit, Printer, Calendar as CalendarIcon, XCircle, BarChart3, Search as SearchIcon, Tag, X } from "lucide-react";
 import { format, isValid, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
 import { setSharedOrderInRTDB, SharedOrderItem } from "@/lib/rt_db";
@@ -19,6 +19,7 @@ import { Calendar } from "@/components/ui/calendar";
 import type { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -78,7 +79,9 @@ export default function BillsPage() {
     from: startOfDay(new Date()),
     to: endOfDay(new Date()),
   });
-  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [textSearchTerm, setTextSearchTerm] = useState<string>("");
+  const [tagSearchTerm, setTagSearchTerm] = useState<string>("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showSummaryDialog, setShowSummaryDialog] = useState(false);
 
   useEffect(() => {
@@ -123,16 +126,23 @@ export default function BillsPage() {
       });
     }
 
-    // Search Term Filter
-    if (searchTerm.trim() !== "") {
-      const lowerSearchTerm = searchTerm.toLowerCase();
+    // Selected Tags Filter (AND logic)
+    if (selectedTags.length > 0) {
+        tempFilteredBills = tempFilteredBills.filter(bill => {
+            const billTags = (bill.tags || []).map(t => t.toLowerCase());
+            return selectedTags.every(filterTag => billTags.includes(filterTag.toLowerCase()));
+        });
+    }
+
+    // Text Search Term Filter
+    if (textSearchTerm.trim() !== "") {
+      const lowerSearchTerm = textSearchTerm.toLowerCase();
       tempFilteredBills = tempFilteredBills.filter(bill =>
         (bill.orderNumber && bill.orderNumber.toLowerCase().includes(lowerSearchTerm)) ||
         (bill.customerName && bill.customerName.toLowerCase().includes(lowerSearchTerm)) ||
         (bill.customerPhoneNumber && bill.customerPhoneNumber.toLowerCase().includes(lowerSearchTerm)) ||
         (bill.tableNumber && bill.tableNumber.toLowerCase().includes(lowerSearchTerm)) ||
         (bill.notes && bill.notes.toLowerCase().includes(lowerSearchTerm)) ||
-        (bill.tags && bill.tags.some(tag => tag.toLowerCase().includes(lowerSearchTerm))) ||
         (bill.items && bill.items.some(item =>
           (item.name && item.name.toLowerCase().includes(lowerSearchTerm)) ||
           (item.itemCode && item.itemCode.toLowerCase().includes(lowerSearchTerm))
@@ -142,8 +152,22 @@ export default function BillsPage() {
 
     setFilteredBills(tempFilteredBills);
 
-  }, [allBills, dateRange, searchTerm, loading]);
+  }, [allBills, dateRange, textSearchTerm, selectedTags, loading]);
 
+  const handleTagSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && tagSearchTerm.trim() !== "") {
+        event.preventDefault();
+        const newTag = tagSearchTerm.trim();
+        if (!selectedTags.map(t => t.toLowerCase()).includes(newTag.toLowerCase())) {
+            setSelectedTags(prev => [...prev, newTag]);
+        }
+        setTagSearchTerm("");
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+      setSelectedTags(prev => prev.filter(tag => tag.toLowerCase() !== tagToRemove.toLowerCase()));
+  };
 
   const formatFirestoreTimestampForDisplay = (timestamp: any): string => {
     const date = convertFirestoreTimestampToDate(timestamp);
@@ -339,10 +363,17 @@ export default function BillsPage() {
       } else if (dateRange?.from && dateRange?.to) {
         dateRangeString = `from ${format(dateRange.from, "LLL dd, yyyy")} to ${format(dateRange.to, "LLL dd, yyyy")}`;
       }
-      if (searchTerm) {
-        dateRangeString += ` (Filtered by: "${searchTerm}")`;
+      
+      let filterDescription = '';
+      if (textSearchTerm) {
+        filterDescription += ` Text: "${textSearchTerm}"`;
       }
-
+      if (selectedTags.length > 0) {
+        filterDescription += ` Tags: ${selectedTags.join(', ')}`;
+      }
+      if (filterDescription) {
+        dateRangeString += ` (Filtered by: ${filterDescription.trim()})`;
+      }
 
       let itemsHtml = '';
       dailySummaryData.forEach(item => {
@@ -434,8 +465,11 @@ export default function BillsPage() {
       description = "Showing all transactions";
     }
 
-    if (searchTerm) {
-      description += ` matching "${searchTerm}"`;
+    if (textSearchTerm) {
+      description += ` matching "${textSearchTerm}"`;
+    }
+    if (selectedTags.length > 0) {
+        description += ` tagged with: ${selectedTags.join(', ')}`;
     }
     description += ".";
     return description;
@@ -557,22 +591,62 @@ export default function BillsPage() {
                     </Dialog>
                 </div>
             </div>
-            <div className="relative">
-              <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                  type="search"
-                  placeholder="Search orders, customers, items, tags, notes..."
-                  value={searchTerm}
-                  onChange={(e) => {
-                    const newSearchTerm = e.target.value;
-                    setSearchTerm(newSearchTerm);
-                    if (newSearchTerm.trim() !== "" && dateRange !== undefined) {
-                      setDateRange(undefined); // Clear date filter when search term is entered
-                    }
-                  }}
-                  className="pl-8 w-full sm:w-1/2 md:w-1/3 h-9"
-                  aria-label="Search transactions"
-              />
+            <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="relative">
+                        <Label htmlFor="text-search" className="sr-only">Search Text</Label>
+                        <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            id="text-search"
+                            type="search"
+                            placeholder="Search orders, customers, items, notes..."
+                            value={textSearchTerm}
+                            onChange={(e) => setTextSearchTerm(e.target.value)}
+                            className="pl-8 w-full h-9"
+                            aria-label="Search transactions by text"
+                        />
+                    </div>
+                     <div className="relative">
+                        <Label htmlFor="tag-search" className="sr-only">Add Tag Filter</Label>
+                        <Tag className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            id="tag-search"
+                            type="search"
+                            placeholder="Add tag filter and press Enter..."
+                            value={tagSearchTerm}
+                            onChange={(e) => setTagSearchTerm(e.target.value)}
+                            onKeyDown={handleTagSearchKeyDown}
+                            className="pl-8 w-full h-9"
+                            aria-label="Add tag filter"
+                        />
+                    </div>
+                </div>
+                {selectedTags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 items-center">
+                        <span className="text-sm text-muted-foreground">Filtering by tags:</span>
+                        {selectedTags.map(tag => (
+                            <Badge key={tag} variant="secondary" className="pl-2 pr-1 py-0.5 text-sm">
+                                {tag}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="ml-1 h-4 w-4 rounded-full"
+                                    onClick={() => removeTag(tag)}
+                                >
+                                    <X className="h-3 w-3" />
+                                </Button>
+                            </Badge>
+                        ))}
+                         <Button
+                            variant="link"
+                            size="sm"
+                            className="text-xs text-muted-foreground h-auto p-0"
+                            onClick={() => setSelectedTags([])}
+                         >
+                            Clear All
+                         </Button>
+                    </div>
+                )}
             </div>
         </CardHeader>
         <CardContent>
