@@ -344,8 +344,8 @@ function SalesPageContent() {
       if (isUpdatingRTDBFromMain) return;
 
       if (data && data.orderNumber === activeSharedOrderNumber) {
-         if (isLocalDirty && orderNumber === activeSharedOrderNumber && editingBillId) {
-            console.log(`Main page: Received RTDB update for ${activeSharedOrderNumber}, but local is dirty (and in FS edit mode). Ignoring direct state update to prevent overwriting local edits.`);
+         if (isLocalDirty && orderNumber === activeSharedOrderNumber) {
+            console.log(`Main page: Received RTDB update for ${activeSharedOrderNumber}, but local is dirty. Ignoring direct state update to prevent overwriting local edits.`);
             return;
         }
         console.log(`Main page received RTDB update for ${activeSharedOrderNumber}:`, data);
@@ -405,7 +405,7 @@ function SalesPageContent() {
       console.log(`Main page unsubscribing from RTDB for order: ${activeSharedOrderNumber}`);
       unsubscribe();
     };
-  }, [activeSharedOrderNumber, items, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, tags, selectedItems, serviceCharge, orderNumber, isUpdatingRTDBFromMain, editingBillId]);
+  }, [activeSharedOrderNumber, items, isLocalDirty, customerName, customerPhoneNumber, tableNumber, notes, tags, selectedItems, serviceCharge, orderNumber, isUpdatingRTDBFromMain]);
 
 
   const calculateTotal = () => {
@@ -1025,9 +1025,7 @@ function SalesPageContent() {
 
       try {
         await setSharedOrderInRTDB(activeSharedOrderNumber, currentOrderData);
-        if (!editingBillId) { 
-          setIsLocalDirty(false);
-        }
+        setIsLocalDirty(false);
       } catch (error) {
         console.error("Failed to auto-update RTDB from main page:", error);
          toast({ variant: "destructive", title: "Real-time Sync Error", description: "Failed to sync changes automatically." });
@@ -1055,7 +1053,6 @@ function SalesPageContent() {
     isUpdatingRTDBFromMain,
     isUpdatingFromRTDBSync,
     isLocalDirty,
-    editingBillId,
     toast
   ]);
 
