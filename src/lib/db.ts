@@ -354,13 +354,11 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
         purchasesQuery = query(
             purchasesCollection,
             where("supplierId", "==", supplierId),
-            orderBy('purchaseDate', 'desc'),
             orderBy('createdAt', 'desc')
         );
       } else {
         purchasesQuery = query(
             purchasesCollection,
-            orderBy('purchaseDate', 'desc'),
             orderBy('createdAt', 'desc')
         );
       }
@@ -732,7 +730,7 @@ export async function deleteTransactionFromDb(id: string): Promise<{ success: bo
 
 export async function getTransactionsFromDb(): Promise<Transaction[]> {
   try {
-      const transactionsQuery = query(transactionsCollection, orderBy('transactionDate', 'desc'));
+      const transactionsQuery = query(transactionsCollection, orderBy('createdAt', 'desc'));
       const transactionSnapshot = await getDocs(transactionsQuery);
       return transactionSnapshot.docs.map(docSnap => {
           const data = docSnap.data();
