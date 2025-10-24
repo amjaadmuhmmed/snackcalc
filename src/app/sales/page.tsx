@@ -1,4 +1,3 @@
-
 // src/app/sales/page.tsx (Formerly page.tsx)
 "use client";
 
@@ -763,9 +762,6 @@ function SalesPageContent() {
   };
 
   const total = calculateTotal();
-  const upiId = process.env.NEXT_PUBLIC_UPI_ID || "your-default-upi-id@paytm";
-  const upiLink = `upi://pay?pa=${upiId}&pn=Snackulator&am=${total.toFixed(2)}&cu=INR&tn=Order%20${orderNumber}`;
-
 
   const handleAdminLogout = () => {
     setIsAdmin(false);
@@ -1204,7 +1200,6 @@ function SalesPageContent() {
 
               {(total > 0 || selectedItems.length > 0 || editingBillId || !itemsVisible) && (
                   <div className="flex flex-col items-center gap-3 w-full">
-                      <QRCodeCanvas value={upiLink} size={128} level="H" data-ai-hint="payment qr" />
                        <div className="flex w-full gap-2">
                         <Button variant="default" onClick={handlePrimaryActionClick} disabled={primaryButtonDisabled} className="flex-1">
                            <PrimaryButtonIcon className="mr-2 h-4 w-4" /> {primaryButtonText}

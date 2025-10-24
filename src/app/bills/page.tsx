@@ -1,4 +1,3 @@
-
 // src/app/bills/page.tsx
 "use client";
 
