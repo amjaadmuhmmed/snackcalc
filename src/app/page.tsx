@@ -12,6 +12,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Landmark } from "lucide-react";
 
 const SESSION_STORAGE_ADMIN_LOGGED_IN_KEY = 'isAdminLoggedIn';
+const SESSION_STORAGE_ADMIN_VIEW_KEY = 'adminActiveView';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -47,6 +48,7 @@ export default function LoginPage() {
     if (password === adminPassword) {
       try {
         sessionStorage.setItem(SESSION_STORAGE_ADMIN_LOGGED_IN_KEY, 'true');
+        sessionStorage.setItem(SESSION_STORAGE_ADMIN_VIEW_KEY, 'items'); // Set default admin view
         router.push('/sales');
       } catch (error) {
          toast({
