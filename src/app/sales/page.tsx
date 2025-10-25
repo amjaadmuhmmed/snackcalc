@@ -284,39 +284,49 @@ function SalesPageContent() {
         return; // Stop execution if not logged in
       }
       setIsAdmin(true);
-
+  
       const editBillIdParam = searchParams.get('editBillId');
       const billDataString = sessionStorage.getItem(SESSION_STORAGE_EDIT_BILL_KEY);
-      
+  
       // 1. Prioritize Edit Session
       if (editBillIdParam && billDataString) {
         const billData = JSON.parse(billDataString);
-        
-        loadData().then(loadedItems => {
-          const itemsToSet = billData.items.map((item: DbBillItem) => {
-            const baseItem = loadedItems.find(i => i.id === item.itemId);
-            return { ...(baseItem || {}), ...item } as SelectedItem;
-          });
-
-          setEditingBillId(editBillIdParam);
-          setOrderNumber(billData.orderNumber);
-          setSelectedItems(itemsToSet);
-          setServiceCharge(billData.serviceCharge || 0);
-          setCustomerName(billData.customerName || "");
-          setCustomerPhoneNumber(billData.customerPhoneNumber || "");
-          setSelectedBillCustomerId(billData.customerId || null);
-          setTableNumber(billData.tableNumber || "");
-          setNotes(billData.notes || "");
-          setTags(billData.tags?.join(', ') || "");
+  
+        // Set state immediately from sessionStorage
+        const itemsToSet = billData.items.map((item: DbBillItem) => {
+          // Find base item info later or use what's available
+          const baseItem = items.find(i => i.id === item.itemId) || {};
+          return { ...baseItem, ...item } as SelectedItem;
         });
-
+  
+        setEditingBillId(editBillIdParam);
+        setOrderNumber(billData.orderNumber);
+        setSelectedItems(itemsToSet);
+        setServiceCharge(billData.serviceCharge || 0);
+        setCustomerName(billData.customerName || "");
+        setCustomerPhoneNumber(billData.customerPhoneNumber || "");
+        setSelectedBillCustomerId(billData.customerId || null);
+        setTableNumber(billData.tableNumber || "");
+        setNotes(billData.notes || "");
+        setTags(billData.tags?.join(', ') || "");
+        
         // Ensure sales form is visible and clean up
         setAdminActiveView(null);
         setItemsVisible(true);
-        sessionStorage.removeItem(SESSION_STORAGE_EDIT_BILL_KEY); // Clean up immediately after reading
+        sessionStorage.removeItem(SESSION_STORAGE_EDIT_BILL_KEY);
+        
+        // Load data in the background to get full item details
+        loadData().then(loadedItems => {
+             const updatedItemsToSet = billData.items.map((item: DbBillItem) => {
+                const baseItem = loadedItems.find(i => i.id === item.itemId);
+                return { ...(baseItem || {}), ...item } as SelectedItem;
+            });
+            setSelectedItems(updatedItemsToSet);
+        });
+        
         return; // IMPORTANT: Stop further execution to prevent override
       }
-
+  
       // 2. If not an edit session, determine admin or sales view
       loadData();
       const storedAdminView = sessionStorage.getItem(SESSION_STORAGE_ADMIN_VIEW_KEY) as AdminActiveView;
@@ -329,7 +339,7 @@ function SalesPageContent() {
         setAdminActiveView(null);
         setOrderNumber(generateOrderNumber());
       }
-
+  
     } catch (error) {
       console.warn("Session storage not available. Redirecting to login.");
       router.replace('/');
