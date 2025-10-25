@@ -278,25 +278,24 @@ function SalesPageContent() {
   // Main Effect for initialization
   useEffect(() => {
     try {
-      // 1. Authenticate user
       const adminLoggedIn = sessionStorage.getItem(SESSION_STORAGE_ADMIN_LOGGED_IN_KEY);
       if (adminLoggedIn !== 'true') {
         router.replace('/');
-        return;
+        return; // Stop execution if not logged in
       }
       setIsAdmin(true);
 
-      // 2. Check for an "Edit Bill" session
       const editBillIdParam = searchParams.get('editBillId');
       const billDataString = sessionStorage.getItem(SESSION_STORAGE_EDIT_BILL_KEY);
-
+      
+      // 1. Prioritize Edit Session
       if (editBillIdParam && billDataString) {
         const billData = JSON.parse(billDataString);
         
         loadData().then(loadedItems => {
           const itemsToSet = billData.items.map((item: DbBillItem) => {
             const baseItem = loadedItems.find(i => i.id === item.itemId);
-            return { ...baseItem, ...item } as SelectedItem;
+            return { ...(baseItem || {}), ...item } as SelectedItem;
           });
 
           setEditingBillId(editBillIdParam);
@@ -311,14 +310,14 @@ function SalesPageContent() {
           setTags(billData.tags?.join(', ') || "");
         });
 
-        // This is an edit session, so ensure the sales form is visible
+        // Ensure sales form is visible and clean up
         setAdminActiveView(null);
         setItemsVisible(true);
-        sessionStorage.removeItem(SESSION_STORAGE_EDIT_BILL_KEY); // Clean up
-        return; // IMPORTANT: Stop further execution
+        sessionStorage.removeItem(SESSION_STORAGE_EDIT_BILL_KEY); // Clean up immediately after reading
+        return; // IMPORTANT: Stop further execution to prevent override
       }
 
-      // 3. If not an edit session, determine whether to show admin or sales form
+      // 2. If not an edit session, determine admin or sales view
       loadData();
       const storedAdminView = sessionStorage.getItem(SESSION_STORAGE_ADMIN_VIEW_KEY) as AdminActiveView;
       if (storedAdminView && storedAdminView !== 'null') {
@@ -330,12 +329,13 @@ function SalesPageContent() {
         setAdminActiveView(null);
         setOrderNumber(generateOrderNumber());
       }
+
     } catch (error) {
       console.warn("Session storage not available. Redirecting to login.");
       router.replace('/');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, []); // Only run once on mount
 
 
   useEffect(() => {
@@ -1301,9 +1301,9 @@ function SalesPageContent() {
                                         </span>
                                     </div>
                                     <div className="flex space-x-1">
-                                        <Button variant="outline" size="sm" asChild>
+                                        <Button variant="outline" size="icon" asChild>
                                            <Link href={`/reports/stock/${item.id}?name=${encodeURIComponent(item.name)}`}>
-                                            <BookOpen className="h-3 w-3 mr-1" /> Register
+                                            <BookOpen className="h-4 w-4" />
                                            </Link>
                                         </Button>
                                         <Button variant="outline" size="icon" onClick={() => handleEditItem(item)} aria-label={`Edit ${item.name}`}>
