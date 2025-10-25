@@ -15,8 +15,8 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { useToast } from "@/hooks/use-toast";
 import { Toaster } from "@/components/ui/toaster";
 import { Plus, Minus, Search, ArrowLeft, FileText, ShoppingBag, Calendar as CalendarIconLucide, AlertCircle, Info, Loader2, Edit, Tag } from "lucide-react";
-import { getItems, savePurchase, getSuppliers, addSupplier, getPurchaseById } from "@/app/actions";
-import type { Snack, PurchaseInput, PurchaseItem as DbPurchaseItem, Supplier, Purchase } from "@/lib/db";
+import { getItems, savePurchase, getSuppliers, addSupplier, getPurchaseById, scanReceipt } from "@/app/actions";
+import type { Snack, PurchaseInput, PurchaseItem as DbPurchaseItem, Supplier, Purchase, ReceiptData } from "@/lib/db";
 import { Timestamp } from "firebase/firestore";
 import {
   Dialog,
@@ -71,6 +71,9 @@ function CreatePurchasePageContent() {
 
   const listRefs = useRef<Record<string, HTMLLIElement | null>>({});
   const lastInteractedItemIdRef = useRef<string | null>(null);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isScanning, setIsScanning] = useState(false);
 
   useEffect(() => {
     const editId = searchParams.get("editPurchaseId");
@@ -91,6 +94,8 @@ function CreatePurchasePageContent() {
                 initialDate = purchaseToEdit.purchaseDate.toDate();
             } else if (purchaseToEdit.purchaseDate instanceof Date) {
                 initialDate = purchaseToEdit.purchaseDate;
+            } else if (typeof purchaseToEdit.purchaseDate === 'string') {
+                initialDate = new Date(purchaseToEdit.purchaseDate);
             }
             setPurchaseDate(initialDate);
 
@@ -218,7 +223,7 @@ function CreatePurchasePageContent() {
       } else {
         const defaultPurchaseCost = item.cost !== undefined ? Number(item.cost) : 0;
         const newItemData: SelectedItemForPurchase = { ...item, quantity: 1, purchaseCost: defaultPurchaseCost };
-        return [newItemData, ...newSelected];
+        return [newItemData, ...prevSelected];
       }
     });
     setSearchTerm("");
@@ -251,6 +256,84 @@ function CreatePurchasePageContent() {
       )
     );
   };
+  
+  const handleReceiptScan = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsScanning(true);
+    toast({ title: "Scanning Receipt...", description: "Please wait while we analyze the receipt image." });
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onloadend = async () => {
+      try {
+        const base64Photo = reader.result as string;
+        const result = await scanReceipt(base64Photo);
+
+        if (result.success && result.data) {
+          processScannedData(result.data);
+          toast({ title: "Receipt Scanned!", description: "Items have been added to the purchase order. Please review purchase costs." });
+        } else {
+          throw new Error(result.message || "Failed to get data from receipt.");
+        }
+      } catch (error: any) {
+        toast({ variant: "destructive", title: "Scan Failed", description: error.message || "Could not process the receipt image." });
+      } finally {
+        setIsScanning(false);
+        // Reset file input value to allow re-uploading the same file
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+    };
+  };
+  
+  const processScannedData = (data: ReceiptData) => {
+    if (data.companyName) {
+        setSupplierNameInput(data.companyName);
+        const foundSupplier = allSuppliers.find(s => s.name.toLowerCase() === data.companyName!.toLowerCase());
+        if (foundSupplier) {
+            setSelectedSupplier(foundSupplier);
+        }
+    }
+    
+    const newSelectedItems: SelectedItemForPurchase[] = [...selectedItems];
+    const scannedItemNames = new Set<string>();
+
+    data.items.forEach(scannedItem => {
+        const itemNameLower = scannedItem.name.toLowerCase();
+        scannedItemNames.add(itemNameLower);
+
+        // Try to find a matching item in the database
+        const dbItem = allItems.find(item => item.name.toLowerCase() === itemNameLower);
+        
+        if (dbItem) {
+            const existingIndex = newSelectedItems.findIndex(si => si.id === dbItem.id);
+            if (existingIndex > -1) {
+                // Update quantity if item already in the list
+                newSelectedItems[existingIndex].quantity += scannedItem.quantity;
+            } else {
+                // Add new item to the list
+                newSelectedItems.push({
+                    ...dbItem,
+                    quantity: scannedItem.quantity,
+                    purchaseCost: scannedItem.price,
+                });
+            }
+        } else {
+            // Handle items not in the database - for now, we just toast and ignore
+            toast({
+                variant: "default",
+                title: "Unrecognized Item",
+                description: `Item "${scannedItem.name}" is not in your item list and was not added. Please add it manually if needed.`
+            });
+        }
+    });
+
+    setSelectedItems(newSelectedItems);
+  };
+
 
   const getItemQuantity = (itemId: string) => {
     const selected = selectedItems.find((s) => s.id === itemId);
@@ -297,6 +380,8 @@ function CreatePurchasePageContent() {
       totalAmount: calculateTotal,
       notes: notes,
       tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag),
+      tax: 0, // Placeholder
+      serviceCharge: 0, // Placeholder
     };
 
     try {
@@ -420,10 +505,20 @@ function CreatePurchasePageContent() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <h1 className="text-2xl font-semibold">
+        <h1 className="text-2xl font-semibold text-center">
             {editingPurchaseId ? `Edit Purchase Order: ${editingPurchaseOrderNumber || purchaseOrderNumber}` : "Create Purchase Order"}
         </h1>
-        <div style={{ width: '36px' }}></div> {/* Spacer */}
+        <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={isScanning}>
+            {isScanning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
+            Scan Receipt
+        </Button>
+        <Input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleReceiptScan} 
+            className="hidden" 
+            accept="image/*"
+        />
       </div>
 
       <Card className="w-full max-w-2xl">
@@ -432,7 +527,7 @@ function CreatePurchasePageContent() {
           <CardDescription>
             {editingPurchaseId 
                 ? "Modify the details of this purchase order." 
-                : "Add items received from suppliers to update stock levels."}
+                : "Add items received from suppliers to update stock levels. You can also scan a receipt."}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6">
@@ -564,7 +659,11 @@ function CreatePurchasePageContent() {
                           <Minus className="h-3 w-3" />
                         </Button>
                         <Badge variant="outline" className="text-xs px-2 py-1 border-none tabular-nums">{item.quantity}</Badge>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleItemIncrement(item)}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                            const originalItem = allItems.find(i => i.id === item.id);
+                            if (originalItem) handleItemIncrement(originalItem);
+                          }}
+                        >
                           <Plus className="h-3 w-3" />
                         </Button>
                       </div>
