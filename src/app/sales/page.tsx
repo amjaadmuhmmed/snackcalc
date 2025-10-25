@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building, Landmark, Tag, PiggyBank, Bot, Mic, MicOff, Square, BookOpen } from "lucide-react";
+import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building, Landmark, Tag, PiggyBank, Bot, Mic, MicOff, Square, BookOpen, ArrowLeft } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
 import { addItem, getItems, updateItem, deleteItem, saveBill, addSupplier, addCustomer, getCustomers, addTransaction, parseTransactionFromText, parseTransactionFromAudio } from "../actions";
 import type { Snack, BillInput, BillItem as DbBillItem, SupplierInput, Customer, CustomerInput, TransactionInput } from "@/lib/db"; 
@@ -292,6 +292,7 @@ function SalesPageContent() {
     if (searchParams.get('editBillId')) {
       router.replace('/sales', { scroll: false });
     }
+    sessionStorage.setItem(SESSION_STORAGE_ADMIN_VIEW_KEY, 'null');
   }, [router, searchParams]);
 
 
@@ -946,7 +947,19 @@ function SalesPageContent() {
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-secondary p-4 md:p-8">
       <div className="w-full max-w-md mb-4 flex justify-between items-center">
-        <CardTitle className="text-lg">Snackulator</CardTitle>
+        {adminActiveView === null ? (
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => handleAdminViewChange('items')}
+              aria-label="Back to Admin Panel"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          ) : (
+            <CardTitle className="text-lg">Snackulator</CardTitle>
+          )
+        }
         <div className="flex items-center gap-2">
             <Button
                 variant="outline"
@@ -956,9 +969,11 @@ function SalesPageContent() {
             >
                 <UserCog className="h-4 w-4" />
             </Button>
-            <Badge variant="outline" className="text-sm whitespace-nowrap">
-            Order: {orderNumber}
-            </Badge>
+            {adminActiveView === null && (
+                <Badge variant="outline" className="text-sm whitespace-nowrap">
+                    Order: {orderNumber}
+                </Badge>
+            )}
         </div>
       </div>
 
