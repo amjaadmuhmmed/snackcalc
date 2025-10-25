@@ -327,7 +327,7 @@ export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpda
         }
 
 
-        const finalPurchaseData = {
+        const finalPurchaseData: PurchaseInput = {
           ...purchaseData,
           totalAmount: finalTotalAmount,
           purchaseDate: finalPurchaseDateForSave,

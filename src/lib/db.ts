@@ -4,6 +4,22 @@
 import {db} from './firebase';
 import {collection, addDoc, getDocs, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, Timestamp, runTransaction, DocumentReference, writeBatch, getDoc as firestoreGetDoc, where} from 'firebase/firestore';
 
+// Helper function to safely convert a Firestore Timestamp or any date representation to an ISO string.
+const toISOStringSafe = (date: any): string | null => {
+    if (!date) return null;
+    try {
+        if (date.toDate && typeof date.toDate === 'function') {
+            return date.toDate().toISOString();
+        }
+        const d = new Date(date);
+        if (isNaN(d.getTime())) return null;
+        return d.toISOString();
+    } catch (e) {
+        return null;
+    }
+};
+
+
 // --- Items (formerly Snacks) ---
 
 export interface Snack { // Internal interface name remains Snack for now
@@ -167,8 +183,8 @@ export interface Bill {
     items: BillItem[];
     serviceCharge: number;
     totalAmount: number;
-    createdAt: Timestamp | Date;
-    lastUpdatedAt?: Timestamp | Date;
+    createdAt: string; // Changed to string
+    lastUpdatedAt?: string; // Changed to string
 }
 
 export interface BillInput extends Omit<Bill, 'id' | 'createdAt' | 'lastUpdatedAt'> {}
@@ -240,8 +256,8 @@ export async function getBillsFromDb(): Promise<Bill[]> {
           items: itemsWithCode,
           serviceCharge: data.serviceCharge,
           totalAmount: data.totalAmount,
-          createdAt: data.createdAt,
-          lastUpdatedAt: data.lastUpdatedAt,
+          createdAt: toISOStringSafe(data.createdAt) || new Date().toISOString(),
+          lastUpdatedAt: toISOStringSafe(data.lastUpdatedAt),
         } as Bill;
       })
     } catch (e: any) {
@@ -265,18 +281,20 @@ export interface Purchase {
     purchaseOrderNumber: string;
     supplierName?: string;
     supplierId?: string;
-    purchaseDate: Timestamp | Date; 
+    purchaseDate: string; // Changed to string
     items: PurchaseItem[];
     tax?: number;
     serviceCharge?: number;
     totalAmount: number;
     notes?: string;
     tags?: string[];
-    createdAt: Timestamp | Date; 
-    lastUpdatedAt?: Timestamp | Date;
+    createdAt: string; // Changed to string
+    lastUpdatedAt?: string; // Changed to string
 }
 
-export interface PurchaseInput extends Omit<Purchase, 'id' | 'createdAt' | 'lastUpdatedAt'> {}
+export interface PurchaseInput extends Omit<Purchase, 'id' | 'createdAt' | 'lastUpdatedAt'> {
+    purchaseDate: Date | Timestamp; // Allow Date or Timestamp for input
+}
 
 const purchasesCollection = collection(db, 'purchases');
 
@@ -383,15 +401,15 @@ export async function getPurchasesFromDb(supplierId?: string): Promise<Purchase[
           purchaseOrderNumber: data.purchaseOrderNumber,
           supplierName: data.supplierName || '',
           supplierId: data.supplierId || '',
-          purchaseDate: data.purchaseDate,
+          purchaseDate: toISOStringSafe(data.purchaseDate) || new Date().toISOString(),
           items: items,
           tax: data.tax || 0,
           serviceCharge: data.serviceCharge || 0,
           totalAmount: data.totalAmount,
           notes: data.notes || '',
           tags: data.tags || [],
-          createdAt: data.createdAt,
-          lastUpdatedAt: data.lastUpdatedAt,
+          createdAt: toISOStringSafe(data.createdAt) || new Date().toISOString(),
+          lastUpdatedAt: toISOStringSafe(data.lastUpdatedAt),
         } as Purchase;
       });
     } catch (e: any) {
@@ -424,15 +442,15 @@ export async function getPurchaseByIdFromDb(id: string): Promise<Purchase | null
             purchaseOrderNumber: data.purchaseOrderNumber,
             supplierName: data.supplierName || '',
             supplierId: data.supplierId || '',
-            purchaseDate: data.purchaseDate,
+            purchaseDate: toISOStringSafe(data.purchaseDate) || new Date().toISOString(),
             items: items,
             tax: data.tax || 0,
             serviceCharge: data.serviceCharge || 0,
             totalAmount: data.totalAmount,
             notes: data.notes || '',
             tags: data.tags || [],
-            createdAt: data.createdAt,
-            lastUpdatedAt: data.lastUpdatedAt,
+            createdAt: toISOStringSafe(data.createdAt) || new Date().toISOString(),
+            lastUpdatedAt: toISOStringSafe(data.lastUpdatedAt),
         } as Purchase;
 
     } catch (e: any) {
@@ -451,8 +469,8 @@ export interface Supplier {
   email?: string;
   address?: string;
   gstNumber?: string;
-  createdAt?: Timestamp | Date;
-  updatedAt?: Timestamp | Date;
+  createdAt?: string; // Changed to string
+  updatedAt?: string; // Changed to string
 }
 export interface SupplierInput extends Omit<Supplier, 'id' | 'createdAt' | 'updatedAt'> {}
 
@@ -490,7 +508,7 @@ export async function addSupplierToDb(supplier: SupplierInput): Promise<{ succes
              email: createdSupplierData?.email,
              address: createdSupplierData?.address,
              gstNumber: createdSupplierData?.gstNumber,
-             createdAt: createdSupplierData?.createdAt ? (createdSupplierData.createdAt as Timestamp).toDate() : new Date()
+             createdAt: toISOStringSafe(createdSupplierData?.createdAt) || new Date().toISOString()
         };
         return { success: true, id: docRef.id, supplier: createdSupplier };
     } catch (e: any) {
@@ -539,8 +557,8 @@ export async function getSuppliersFromDb(): Promise<Supplier[]> {
                 email: data.email || '',
                 address: data.address || '',
                 gstNumber: data.gstNumber || '',
-                createdAt: data.createdAt,
-                updatedAt: data.updatedAt,
+                createdAt: toISOStringSafe(data.createdAt),
+                updatedAt: toISOStringSafe(data.updatedAt),
             } as Supplier;
         });
     } catch (e: any) {
@@ -556,8 +574,8 @@ export interface Customer {
   phoneNumber?: string;
   email?: string;
   address?: string;
-  createdAt?: Timestamp | Date;
-  updatedAt?: Timestamp | Date;
+  createdAt?: string; // Changed to string
+  updatedAt?: string; // Changed to string
 }
 export interface CustomerInput extends Omit<Customer, 'id' | 'createdAt' | 'updatedAt'> {}
 
@@ -591,7 +609,7 @@ export async function addCustomerToDb(customer: CustomerInput): Promise<{ succes
              phoneNumber: createdCustomerData?.phoneNumber,
              email: createdCustomerData?.email,
              address: createdCustomerData?.address,
-             createdAt: createdCustomerData?.createdAt ? (createdCustomerData.createdAt as Timestamp).toDate() : new Date()
+             createdAt: toISOStringSafe(createdCustomerData?.createdAt) || new Date().toISOString()
         };
         return { success: true, id: docRef.id, customer: newCustomer };
     } catch (e: any) {
@@ -635,8 +653,8 @@ export async function getCustomersFromDb(): Promise<Customer[]> {
                 phoneNumber: data.phoneNumber || '',
                 email: data.email || '',
                 address: data.address || '',
-                createdAt: data.createdAt,
-                updatedAt: data.updatedAt,
+                createdAt: toISOStringSafe(data.createdAt),
+                updatedAt: toISOStringSafe(data.updatedAt),
             } as Customer;
         });
     } catch (e: any) {
@@ -652,14 +670,16 @@ export interface Transaction {
   category: string;
   amount: number;
   source?: string;
-  transactionDate: Timestamp | Date; // User-selected date + system time
+  transactionDate: string; // Changed to string
   notes?: string;
   tags?: string[];
-  createdAt: Timestamp | Date;
-  updatedAt?: Timestamp | Date;
+  createdAt: string; // Changed to string
+  updatedAt?: string; // Changed to string
 }
 
-export interface TransactionInput extends Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> {}
+export interface TransactionInput extends Omit<Transaction, 'id' | 'createdAt' | 'updatedAt' | 'transactionDate'> {
+    transactionDate: Date | Timestamp;
+}
 
 const transactionsCollection = collection(db, 'transactions');
 
@@ -740,10 +760,10 @@ export async function getTransactionsFromDb(): Promise<Transaction[]> {
               category: data.category,
               amount: Number(data.amount) || 0,
               source: data.source || '',
-              transactionDate: data.transactionDate,
+              transactionDate: toISOStringSafe(data.transactionDate) || new Date().toISOString(),
               notes: data.notes || '',
               tags: data.tags || [],
-              createdAt: data.createdAt,
+              createdAt: toISOStringSafe(data.createdAt) || new Date().toISOString(),
           } as Transaction;
       });
   } catch (e: any) {
