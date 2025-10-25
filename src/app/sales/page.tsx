@@ -274,6 +274,26 @@ function SalesPageContent() {
         setIsLoading(false);
     }
   }, [toast]);
+  
+  const startNewOrder = useCallback(() => {
+    setSelectedItems([]);
+    setServiceCharge(0);
+    setCustomerName("");
+    setCustomerPhoneNumber("");
+    setSelectedBillCustomerId(null);
+    setTableNumber("");
+    setNotes("");
+    setTags("");
+    setOrderNumber(generateOrderNumber());
+    setSearchTerm("");
+    setEditingBillId(null);
+    setItemsVisible(true);
+    setAdminActiveView(null);
+    if (searchParams.get('editBillId')) {
+      router.replace('/sales', { scroll: false });
+    }
+  }, [router, searchParams]);
+
 
   // Main Effect for initialization
   useEffect(() => {
@@ -281,27 +301,27 @@ function SalesPageContent() {
       const adminLoggedIn = sessionStorage.getItem(SESSION_STORAGE_ADMIN_LOGGED_IN_KEY);
       if (adminLoggedIn !== 'true') {
         router.replace('/');
-        return; // Stop execution if not logged in
+        return; 
       }
       setIsAdmin(true);
-  
+
       const editBillIdParam = searchParams.get('editBillId');
       const billDataString = sessionStorage.getItem(SESSION_STORAGE_EDIT_BILL_KEY);
-  
+
       // 1. Prioritize Edit Session
       if (editBillIdParam && billDataString) {
         const billData = JSON.parse(billDataString);
-  
-        // Set state immediately from sessionStorage
-        const itemsToSet = billData.items.map((item: DbBillItem) => {
-          // Find base item info later or use what's available
-          const baseItem = items.find(i => i.id === item.itemId) || {};
-          return { ...baseItem, ...item } as SelectedItem;
+        
+        loadData().then(loadedItems => {
+          const itemsToSet = billData.items.map((item: DbBillItem) => {
+            const baseItem = loadedItems.find(i => i.id === item.itemId);
+            return { ...(baseItem || {}), ...item } as SelectedItem;
+          });
+          setSelectedItems(itemsToSet);
         });
-  
+
         setEditingBillId(editBillIdParam);
         setOrderNumber(billData.orderNumber);
-        setSelectedItems(itemsToSet);
         setServiceCharge(billData.serviceCharge || 0);
         setCustomerName(billData.customerName || "");
         setCustomerPhoneNumber(billData.customerPhoneNumber || "");
@@ -310,23 +330,13 @@ function SalesPageContent() {
         setNotes(billData.notes || "");
         setTags(billData.tags?.join(', ') || "");
         
-        // Ensure sales form is visible and clean up
         setAdminActiveView(null);
         setItemsVisible(true);
         sessionStorage.removeItem(SESSION_STORAGE_EDIT_BILL_KEY);
         
-        // Load data in the background to get full item details
-        loadData().then(loadedItems => {
-             const updatedItemsToSet = billData.items.map((item: DbBillItem) => {
-                const baseItem = loadedItems.find(i => i.id === item.itemId);
-                return { ...(baseItem || {}), ...item } as SelectedItem;
-            });
-            setSelectedItems(updatedItemsToSet);
-        });
-        
-        return; // IMPORTANT: Stop further execution to prevent override
+        return; 
       }
-  
+      
       // 2. If not an edit session, determine admin or sales view
       loadData();
       const storedAdminView = sessionStorage.getItem(SESSION_STORAGE_ADMIN_VIEW_KEY) as AdminActiveView;
@@ -746,22 +756,7 @@ function SalesPageContent() {
           if (result.success) {
               await loadData(); 
               if (resetFormAfterSave) {
-                setSelectedItems([]);
-                setServiceCharge(0);
-                setCustomerName("");
-                setCustomerPhoneNumber("");
-                setSelectedBillCustomerId(null);
-                setTableNumber("");
-                setNotes("");
-                setTags("");
-                setOrderNumber(generateOrderNumber());
-                setSearchTerm("");
-                setEditingBillId(null);
-                setItemsVisible(true);
-
-                if (searchParams.get('editBillId')) {
-                  router.replace('/sales', { scroll: false });
-                }
+                startNewOrder();
               } else {
                 if (!editingBillId && result.billId) {
                   setEditingBillId(result.billId);
@@ -1434,7 +1429,7 @@ function SalesPageContent() {
                         <Button variant="outline" className="w-full justify-start" onClick={handleOpenAddCustomerDialog}>
                            <PlusCircle className="mr-2 h-4 w-4" /> Add New Customer
                         </Button>
-                        <Button variant="outline" className="w-full justify-start" onClick={() => setAdminActiveView(null)}>
+                        <Button variant="outline" className="w-full justify-start" onClick={startNewOrder}>
                            <Newspaper className="mr-2 h-4 w-4" /> New Sales Order
                         </Button>
                         <Link href="/customers" passHref>
