@@ -19,7 +19,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building, Landmark, Tag, PiggyBank, Bot, Mic, MicOff, Square, BookOpen, ArrowLeft } from "lucide-react";
-import { QRCodeCanvas } from 'qrcode.react';
 import { addItem, getItems, updateItem, deleteItem, saveBill, addSupplier, addCustomer, getCustomers, addTransaction, parseTransactionFromText, parseTransactionFromAudio } from "../actions";
 import type { Snack, BillInput, BillItem as DbBillItem, SupplierInput, Customer, CustomerInput, TransactionInput } from "@/lib/db"; 
 import Link from "next/link";
@@ -110,6 +109,7 @@ type IncomeExpenseSubView = 'income' | 'expense' | null;
 
 const SESSION_STORAGE_ADMIN_LOGGED_IN_KEY = 'isAdminLoggedIn';
 const SESSION_STORAGE_ADMIN_VIEW_KEY = 'adminActiveView';
+const SESSION_STORAGE_LAST_ADMIN_VIEW_KEY = 'lastAdminActiveView';
 const SESSION_STORAGE_EDIT_BILL_KEY = 'editBillData';
 const LOCAL_STORAGE_LAST_TRANSACTION_SOURCE = 'lastTransactionSource';
 
@@ -275,6 +275,19 @@ function SalesPageContent() {
     }
   }, [toast]);
   
+  const handleAdminViewChange = (view: AdminActiveView) => {
+    setAdminActiveView(view);
+    if (view) {
+        sessionStorage.setItem(SESSION_STORAGE_ADMIN_VIEW_KEY, view);
+        sessionStorage.setItem(SESSION_STORAGE_LAST_ADMIN_VIEW_KEY, view);
+    } else {
+        sessionStorage.setItem(SESSION_STORAGE_ADMIN_VIEW_KEY, 'null');
+    }
+    if (view !== 'incomeExpense') {
+      setIncomeExpenseSubView(null);
+    }
+  };
+
   const startNewOrder = useCallback(() => {
     setSelectedItems([]);
     setServiceCharge(0);
@@ -288,11 +301,10 @@ function SalesPageContent() {
     setSearchTerm("");
     setEditingBillId(null);
     setItemsVisible(true);
-    setAdminActiveView(null);
+    handleAdminViewChange(null);
     if (searchParams.get('editBillId')) {
       router.replace('/sales', { scroll: false });
     }
-    sessionStorage.setItem(SESSION_STORAGE_ADMIN_VIEW_KEY, 'null');
   }, [router, searchParams]);
 
 
@@ -331,9 +343,9 @@ function SalesPageContent() {
         setNotes(billData.notes || "");
         setTags(billData.tags?.join(', ') || "");
         
-        setAdminActiveView(null);
+        handleAdminViewChange(null); // Explicitly set to sales view
         setItemsVisible(true);
-        sessionStorage.removeItem(SESSION_STORAGE_EDIT_BILL_KEY);
+        sessionStorage.removeItem(SESSION_STORAGE_EDIT_BILL_KEY); // Clean up
         
         return; 
       }
@@ -342,12 +354,12 @@ function SalesPageContent() {
       loadData();
       const storedAdminView = sessionStorage.getItem(SESSION_STORAGE_ADMIN_VIEW_KEY) as AdminActiveView;
       if (storedAdminView && storedAdminView !== 'null') {
-        setAdminActiveView(storedAdminView);
+        handleAdminViewChange(storedAdminView);
         if (storedAdminView !== 'incomeExpense') {
             setIncomeExpenseSubView(null);
         }
       } else {
-        setAdminActiveView(null);
+        handleAdminViewChange(null);
         setOrderNumber(generateOrderNumber());
       }
   
@@ -786,12 +798,18 @@ function SalesPageContent() {
     try {
         sessionStorage.removeItem(SESSION_STORAGE_ADMIN_LOGGED_IN_KEY);
         sessionStorage.removeItem(SESSION_STORAGE_ADMIN_VIEW_KEY);
+        sessionStorage.removeItem(SESSION_STORAGE_LAST_ADMIN_VIEW_KEY);
     } catch(e) {
         console.warn("Could not clear session storage.");
     }
     setIncomeExpenseSubView(null);
     router.push('/');
   };
+
+  const handleBackToAdmin = () => {
+      const lastView = sessionStorage.getItem(SESSION_STORAGE_LAST_ADMIN_VIEW_KEY) as AdminActiveView;
+      handleAdminViewChange(lastView || 'items');
+  }
 
 
   const handleServiceChargeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -924,18 +942,6 @@ function SalesPageContent() {
     );
   }, [items, adminItemSearchTerm]);
 
-  const handleAdminViewChange = (view: AdminActiveView) => {
-    setAdminActiveView(view);
-    if (view) {
-        sessionStorage.setItem(SESSION_STORAGE_ADMIN_VIEW_KEY, view);
-    } else {
-        sessionStorage.setItem(SESSION_STORAGE_ADMIN_VIEW_KEY, 'null');
-    }
-    if (view !== 'incomeExpense') {
-      setIncomeExpenseSubView(null);
-    }
-  };
-
   if (isLoading || !isAdmin) {
       return (
           <div className="flex flex-col items-center justify-center min-h-screen bg-secondary p-4 md:p-8">
@@ -951,30 +957,30 @@ function SalesPageContent() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => handleAdminViewChange('items')}
+              onClick={handleBackToAdmin}
               aria-label="Back to Admin Panel"
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
           ) : (
-            <CardTitle className="text-lg">Snackulator</CardTitle>
+            <div style={{width: '40px'}}></div> // Spacer
           )
         }
         <div className="flex items-center gap-2">
-            <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setAdminActiveView(adminActiveView ? null : 'items')}
-                aria-label="Toggle Admin Panel"
-            >
-                <UserCog className="h-4 w-4" />
-            </Button>
             {adminActiveView === null && (
                 <Badge variant="outline" className="text-sm whitespace-nowrap">
                     Order: {orderNumber}
                 </Badge>
             )}
         </div>
+        <Button
+            variant="outline"
+            size="icon"
+            onClick={() => handleAdminViewChange(adminActiveView ? null : 'items')}
+            aria-label="Toggle Admin Panel"
+        >
+            <UserCog className="h-4 w-4" />
+        </Button>
       </div>
 
       {adminActiveView === null && (
@@ -1321,17 +1327,17 @@ function SalesPageContent() {
                                         </span>
                                     </div>
                                     <div className="flex space-x-1">
-                                        <Button variant="outline" size="icon" asChild>
+                                        <Button variant="outline" size="icon" className="h-8 w-8" asChild>
                                            <Link href={`/reports/stock/${item.id}?name=${encodeURIComponent(item.name)}`}>
                                             <BookOpen className="h-4 w-4" />
                                            </Link>
                                         </Button>
-                                        <Button variant="outline" size="icon" onClick={() => handleEditItem(item)} aria-label={`Edit ${item.name}`}>
+                                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleEditItem(item)} aria-label={`Edit ${item.name}`}>
                                           <Edit className="h-4 w-4" />
                                         </Button>
                                         <Dialog>
                                         <DialogTrigger asChild>
-                                            <Button variant="destructive" size="icon" aria-label={`Delete ${item.name}`}>
+                                            <Button variant="destructive" size="icon" className="h-8 w-8" aria-label={`Delete ${item.name}`}>
                                             <Trash2 className="h-4 w-4" />
                                             </Button>
                                         </DialogTrigger>
