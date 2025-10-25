@@ -277,6 +277,7 @@ function SalesPageContent() {
 
   // Main Effect for initialization
   useEffect(() => {
+    let isEditSession = false;
     try {
       const adminLoggedIn = sessionStorage.getItem(SESSION_STORAGE_ADMIN_LOGGED_IN_KEY);
       if (adminLoggedIn !== 'true') {
@@ -285,47 +286,55 @@ function SalesPageContent() {
       }
       setIsAdmin(true);
 
-      const storedAdminView = sessionStorage.getItem(SESSION_STORAGE_ADMIN_VIEW_KEY) as AdminActiveView;
-      setAdminActiveView(storedAdminView || null);
-      if (storedAdminView !== 'incomeExpense') {
-          setIncomeExpenseSubView(null);
-      }
-      
       const editBillIdParam = searchParams.get('editBillId');
       if (editBillIdParam) {
         const billDataString = sessionStorage.getItem(SESSION_STORAGE_EDIT_BILL_KEY);
         if (billDataString) {
+          isEditSession = true;
           const billData = JSON.parse(billDataString);
           loadData().then(loadedItems => {
-              const itemsToSet = billData.items.map((item: DbBillItem) => {
-                  const baseItem = loadedItems.find(i => i.id === item.itemId);
-                  return { ...baseItem, ...item } as SelectedItem;
-              });
+            const itemsToSet = billData.items.map((item: DbBillItem) => {
+              const baseItem = loadedItems.find(i => i.id === item.itemId);
+              return { ...baseItem, ...item } as SelectedItem;
+            });
 
-              setEditingBillId(editBillIdParam);
-              setOrderNumber(billData.orderNumber);
-              setSelectedItems(itemsToSet);
-              setServiceCharge(billData.serviceCharge || 0);
-              setCustomerName(billData.customerName || "");
-              setCustomerPhoneNumber(billData.customerPhoneNumber || "");
-              setSelectedBillCustomerId(billData.customerId || null);
-              setTableNumber(billData.tableNumber || "");
-              setNotes(billData.notes || "");
-              setTags(billData.tags?.join(', ') || "");
-              setItemsVisible(true); // Ensure form is visible
+            setEditingBillId(editBillIdParam);
+            setOrderNumber(billData.orderNumber);
+            setSelectedItems(itemsToSet);
+            setServiceCharge(billData.serviceCharge || 0);
+            setCustomerName(billData.customerName || "");
+            setCustomerPhoneNumber(billData.customerPhoneNumber || "");
+            setSelectedBillCustomerId(billData.customerId || null);
+            setTableNumber(billData.tableNumber || "");
+            setNotes(billData.notes || "");
+            setTags(billData.tags?.join(', ') || "");
+            setItemsVisible(true);
+            setAdminActiveView(null);
           });
           sessionStorage.removeItem(SESSION_STORAGE_EDIT_BILL_KEY);
         }
-      } else {
+      }
+
+      // This part now only runs if it's NOT an edit session
+      if (!isEditSession) {
         loadData();
-        setOrderNumber(generateOrderNumber());
+        const storedAdminView = sessionStorage.getItem(SESSION_STORAGE_ADMIN_VIEW_KEY) as AdminActiveView;
+        if (storedAdminView && storedAdminView !== 'null') {
+          setAdminActiveView(storedAdminView);
+          if (storedAdminView !== 'incomeExpense') {
+            setIncomeExpenseSubView(null);
+          }
+        } else {
+          setAdminActiveView(null);
+          setOrderNumber(generateOrderNumber());
+        }
       }
     } catch (error) {
-        console.warn("Session storage not available. Redirecting to login.");
-        router.replace('/');
+      console.warn("Session storage not available. Redirecting to login.");
+      router.replace('/');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, router, loadData]);
+  }, [searchParams, router]);
 
 
   useEffect(() => {
