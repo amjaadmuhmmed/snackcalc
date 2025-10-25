@@ -1,3 +1,4 @@
+
 // src/app/reports/stock/[id]/page.tsx
 "use client";
 
@@ -20,6 +21,7 @@ type StockMovement = {
   date: Date;
   type: 'Opening Stock' | 'Sale' | 'Purchase';
   referenceId: string; // Bill ID or Purchase ID
+  orderNumber?: string; // Bill orderNumber or Purchase purchaseOrderNumber
   purchaseQty?: number;
   purchaseAmount?: number;
   saleQty?: number;
@@ -82,6 +84,7 @@ function StockRegisterContent() {
               date: parseISO(bill.createdAt),
               type: 'Sale',
               referenceId: bill.id,
+              orderNumber: bill.orderNumber,
               saleQty: relevantItem.quantity,
               saleAmount: relevantItem.price,
               closingStock: 0, // Will be calculated later
@@ -98,6 +101,7 @@ function StockRegisterContent() {
               date: parseISO(purchase.purchaseDate),
               type: 'Purchase',
               referenceId: purchase.id,
+              orderNumber: purchase.purchaseOrderNumber,
               purchaseQty: relevantItem.quantity,
               purchaseAmount: relevantItem.purchaseCost,
               closingStock: 0, // Will be calculated later
@@ -202,6 +206,7 @@ function StockRegisterContent() {
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Transaction Type</TableHead>
+                  <TableHead>Order #</TableHead>
                   <TableHead className="text-right">Purchase Qty / Price</TableHead>
                   <TableHead className="text-right">Sale Qty / Price</TableHead>
                   <TableHead className="text-right">Closing Stock</TableHead>
@@ -219,6 +224,7 @@ function StockRegisterContent() {
                         {move.type}
                       </Badge>
                     </TableCell>
+                    <TableCell className="text-xs font-mono">{move.orderNumber || '-'}</TableCell>
                     <TableCell className="text-right">
                       {move.purchaseQty ? (
                         <span>
@@ -268,3 +274,5 @@ export default function StockRegisterPage() {
       </Suspense>
     )
   }
+
+    
