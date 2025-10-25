@@ -277,8 +277,8 @@ function SalesPageContent() {
 
   // Main Effect for initialization
   useEffect(() => {
-    let isEditSession = false;
     try {
+      // 1. Authenticate user
       const adminLoggedIn = sessionStorage.getItem(SESSION_STORAGE_ADMIN_LOGGED_IN_KEY);
       if (adminLoggedIn !== 'true') {
         router.replace('/');
@@ -286,12 +286,11 @@ function SalesPageContent() {
       }
       setIsAdmin(true);
 
+      // 2. Check for an "Edit Bill" session
       const editBillIdParam = searchParams.get('editBillId');
       const billDataString = sessionStorage.getItem(SESSION_STORAGE_EDIT_BILL_KEY);
 
       if (editBillIdParam && billDataString) {
-        isEditSession = true;
-        setAdminActiveView(null); // Ensure admin panel is not shown
         const billData = JSON.parse(billDataString);
         
         loadData().then(loadedItems => {
@@ -310,28 +309,33 @@ function SalesPageContent() {
           setTableNumber(billData.tableNumber || "");
           setNotes(billData.notes || "");
           setTags(billData.tags?.join(', ') || "");
-          setItemsVisible(true);
         });
-        sessionStorage.removeItem(SESSION_STORAGE_EDIT_BILL_KEY);
-      } else {
-        loadData();
-        const storedAdminView = sessionStorage.getItem(SESSION_STORAGE_ADMIN_VIEW_KEY) as AdminActiveView;
-        if (storedAdminView && storedAdminView !== 'null') {
-          setAdminActiveView(storedAdminView);
-          if (storedAdminView !== 'incomeExpense') {
+
+        // This is an edit session, so ensure the sales form is visible
+        setAdminActiveView(null);
+        setItemsVisible(true);
+        sessionStorage.removeItem(SESSION_STORAGE_EDIT_BILL_KEY); // Clean up
+        return; // IMPORTANT: Stop further execution
+      }
+
+      // 3. If not an edit session, determine whether to show admin or sales form
+      loadData();
+      const storedAdminView = sessionStorage.getItem(SESSION_STORAGE_ADMIN_VIEW_KEY) as AdminActiveView;
+      if (storedAdminView && storedAdminView !== 'null') {
+        setAdminActiveView(storedAdminView);
+        if (storedAdminView !== 'incomeExpense') {
             setIncomeExpenseSubView(null);
-          }
-        } else {
-          setAdminActiveView(null);
-          setOrderNumber(generateOrderNumber());
         }
+      } else {
+        setAdminActiveView(null);
+        setOrderNumber(generateOrderNumber());
       }
     } catch (error) {
       console.warn("Session storage not available. Redirecting to login.");
       router.replace('/');
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
 
   useEffect(() => {

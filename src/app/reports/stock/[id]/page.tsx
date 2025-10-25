@@ -7,8 +7,8 @@ import { useParams, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Loader2 } from "lucide-react";
-import { getItemsFromDb, getBillsFromDb, getPurchasesFromDb } from "@/app/actions";
+import { ArrowLeft, Loader2, BookOpen } from "lucide-react";
+import { getItems, getBills, getPurchases } from "@/app/actions";
 import type { Snack, Bill, Purchase } from "@/lib/db";
 import { format, isValid, parseISO } from 'date-fns';
 import { Toaster } from "@/components/ui/toaster";
@@ -62,9 +62,9 @@ function StockRegisterContent() {
       try {
         setLoading(true);
         const [allItems, allBills, allPurchases] = await Promise.all([
-          getItemsFromDb(),
-          getBillsFromDb(),
-          getPurchasesFromDb(),
+          getItems(),
+          getBills(),
+          getPurchases(),
         ]);
 
         const currentItem = allItems.find(i => i.id === itemId);
