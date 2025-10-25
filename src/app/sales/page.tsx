@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/toaster";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DatePicker } from "@/components/ui/date-picker";
-import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building, Landmark, Tag, PiggyBank, Bot, Mic, MicOff, Square } from "lucide-react";
+import { Plus, Minus, Edit, Trash2, Search, User as UserIcon, Phone, Share2, Hash, FileText, UserCog, Save, PlusCircle, ShoppingCart, History, ListChecks, Package, Settings, ShoppingBag, ClipboardList, Loader2, Users, Newspaper, Building, Landmark, Tag, PiggyBank, Bot, Mic, MicOff, Square, BookOpen } from "lucide-react";
 import { QRCodeCanvas } from 'qrcode.react';
 import { addItem, getItems, updateItem, deleteItem, saveBill, addSupplier, addCustomer, getCustomers, addTransaction, parseTransactionFromText, parseTransactionFromAudio } from "../actions";
 import type { Snack, BillInput, BillItem as DbBillItem, SupplierInput, Customer, CustomerInput, TransactionInput } from "@/lib/db"; 
@@ -287,36 +287,33 @@ function SalesPageContent() {
       setIsAdmin(true);
 
       const editBillIdParam = searchParams.get('editBillId');
-      if (editBillIdParam) {
-        const billDataString = sessionStorage.getItem(SESSION_STORAGE_EDIT_BILL_KEY);
-        if (billDataString) {
-          isEditSession = true;
-          const billData = JSON.parse(billDataString);
-          loadData().then(loadedItems => {
-            const itemsToSet = billData.items.map((item: DbBillItem) => {
-              const baseItem = loadedItems.find(i => i.id === item.itemId);
-              return { ...baseItem, ...item } as SelectedItem;
-            });
+      const billDataString = sessionStorage.getItem(SESSION_STORAGE_EDIT_BILL_KEY);
 
-            setEditingBillId(editBillIdParam);
-            setOrderNumber(billData.orderNumber);
-            setSelectedItems(itemsToSet);
-            setServiceCharge(billData.serviceCharge || 0);
-            setCustomerName(billData.customerName || "");
-            setCustomerPhoneNumber(billData.customerPhoneNumber || "");
-            setSelectedBillCustomerId(billData.customerId || null);
-            setTableNumber(billData.tableNumber || "");
-            setNotes(billData.notes || "");
-            setTags(billData.tags?.join(', ') || "");
-            setItemsVisible(true);
-            setAdminActiveView(null);
+      if (editBillIdParam && billDataString) {
+        isEditSession = true;
+        setAdminActiveView(null); // Ensure admin panel is not shown
+        const billData = JSON.parse(billDataString);
+        
+        loadData().then(loadedItems => {
+          const itemsToSet = billData.items.map((item: DbBillItem) => {
+            const baseItem = loadedItems.find(i => i.id === item.itemId);
+            return { ...baseItem, ...item } as SelectedItem;
           });
-          sessionStorage.removeItem(SESSION_STORAGE_EDIT_BILL_KEY);
-        }
-      }
 
-      // This part now only runs if it's NOT an edit session
-      if (!isEditSession) {
+          setEditingBillId(editBillIdParam);
+          setOrderNumber(billData.orderNumber);
+          setSelectedItems(itemsToSet);
+          setServiceCharge(billData.serviceCharge || 0);
+          setCustomerName(billData.customerName || "");
+          setCustomerPhoneNumber(billData.customerPhoneNumber || "");
+          setSelectedBillCustomerId(billData.customerId || null);
+          setTableNumber(billData.tableNumber || "");
+          setNotes(billData.notes || "");
+          setTags(billData.tags?.join(', ') || "");
+          setItemsVisible(true);
+        });
+        sessionStorage.removeItem(SESSION_STORAGE_EDIT_BILL_KEY);
+      } else {
         loadData();
         const storedAdminView = sessionStorage.getItem(SESSION_STORAGE_ADMIN_VIEW_KEY) as AdminActiveView;
         if (storedAdminView && storedAdminView !== 'null') {
@@ -922,7 +919,7 @@ function SalesPageContent() {
     if (view) {
         sessionStorage.setItem(SESSION_STORAGE_ADMIN_VIEW_KEY, view);
     } else {
-        sessionStorage.removeItem(SESSION_STORAGE_ADMIN_VIEW_KEY);
+        sessionStorage.setItem(SESSION_STORAGE_ADMIN_VIEW_KEY, 'null');
     }
     if (view !== 'incomeExpense') {
       setIncomeExpenseSubView(null);
@@ -1299,9 +1296,14 @@ function SalesPageContent() {
                                         Sell: {currencySymbol}{price} {cost !== 'N/A' ? `| Cost: ${currencySymbol}${cost}` : ''} {item.itemCode ? `| Code: ${item.itemCode}` : ''} | Stock: {stock !== undefined ? stock : 'N/A'} - {item.category}
                                         </span>
                                     </div>
-                                    <div className="flex space-x-2">
+                                    <div className="flex space-x-1">
+                                        <Button variant="outline" size="sm" asChild>
+                                           <Link href={`/reports/stock/${item.id}?name=${encodeURIComponent(item.name)}`}>
+                                            <BookOpen className="h-3 w-3 mr-1" /> Register
+                                           </Link>
+                                        </Button>
                                         <Button variant="outline" size="icon" onClick={() => handleEditItem(item)} aria-label={`Edit ${item.name}`}>
-                                        <Edit className="h-4 w-4" />
+                                          <Edit className="h-4 w-4" />
                                         </Button>
                                         <Dialog>
                                         <DialogTrigger asChild>

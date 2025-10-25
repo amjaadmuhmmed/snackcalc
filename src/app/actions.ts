@@ -104,6 +104,7 @@ export async function addItem(data: FormData) {
       revalidatePath('/purchases/history');
       revalidatePath('/suppliers');
       revalidatePath('/customers');
+      revalidatePath('/reports/stock');
       return {success: true, message: 'Item added successfully!', id: result.id};
     } else {
       return {success: false, message: result.message || 'Failed to add item.'};
@@ -165,6 +166,7 @@ export async function updateItem(id: string, data: FormData) {
       revalidatePath('/purchases/history');
       revalidatePath('/suppliers');
       revalidatePath('/customers');
+      revalidatePath('/reports/stock');
       return {success: true, message: 'Item updated successfully!'};
     } else {
       return {success: false, message: result.message || 'Failed to update item.'};
@@ -187,6 +189,7 @@ export async function deleteItem(id: string) {
       revalidatePath('/purchases/history');
       revalidatePath('/suppliers');
       revalidatePath('/customers');
+      revalidatePath('/reports/stock');
       return {success: true, message: 'Item deleted successfully!'};
     } else {
       return {success: false, message: result.message || 'Failed to delete item.'};
@@ -267,6 +270,7 @@ export async function saveBill(billData: BillInput, billIdToUpdate?: string) {
             revalidatePath('/suppliers');
             revalidatePath('/customers');
             revalidatePath('/purchases/history'); 
+            revalidatePath('/reports/stock');
             
             let finalMessage = billIdToUpdate ? 'Bill updated successfully!' : 'Bill saved successfully!';
             if (stockUpdateResultMessage) {
@@ -383,6 +387,7 @@ export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpda
             revalidatePath('/sales');
             revalidatePath('/suppliers');
             revalidatePath('/customers');
+            revalidatePath('/reports/stock');
 
             return {
                 success: true,
@@ -413,6 +418,7 @@ export async function savePurchase(purchaseData: PurchaseInput, purchaseIdToUpda
             revalidatePath('/purchases/history');
             revalidatePath('/suppliers');
             revalidatePath('/customers');
+            revalidatePath('/reports/stock');
 
             return {
                 success: true,
