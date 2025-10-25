@@ -1,3 +1,4 @@
+
 // src/app/bills/page.tsx
 "use client";
 
@@ -80,7 +81,10 @@ export default function BillsPage() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const { toast } = useToast();
-  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: startOfDay(new Date()),
+    to: endOfDay(new Date()),
+  });
   const [textSearchTerm, setTextSearchTerm] = useState<string>("");
   const [tagSearchTerm, setTagSearchTerm] = useState<string>("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
